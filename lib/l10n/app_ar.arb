@@ -1,0 +1,14 @@
+{
+  "@@locale": "ar",
+  "appTitle": "الرابط العجيب",
+  "startGame": "ابدأ اللعبة",
+  "linkStart": "الكلمة الأولى",
+  "linkEnd": "الكلمة الأخيرة",
+  "yourLink": "كيف ربطت بينهم؟",
+  "submit": "اربط!",
+  "loading": "جاري التحقق...",
+  "winMessage": "مذهل! لقد وجدت الرابط!",
+  "loseMessage": "حاول مرة أخرى!",
+  "steps": "خطوات",
+  "changeLanguage": "English"
+}

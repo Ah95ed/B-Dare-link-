@@ -1,0 +1,241 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../controllers/game_provider.dart';
+import '../../controllers/locale_provider.dart';
+import 'dart:math';
+
+class GridPathGameWidget extends StatefulWidget {
+  const GridPathGameWidget({super.key});
+
+  @override
+  State<GridPathGameWidget> createState() => _GridPathGameWidgetState();
+}
+
+class _GridPathGameWidgetState extends State<GridPathGameWidget> {
+  // Grid State
+  List<String> _gridWords = [];
+  int _gridSize = 3; // 3x3 grid
+  final List<int> _selectedIndices = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _generateGrid();
+  }
+
+  @override
+  void didUpdateWidget(covariant GridPathGameWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // React to puzzle changes might be needed if the parent rebuilds us
+    // But since state is local, we might need to reset if provider puzzle changed.
+    final provider = Provider.of<GameProvider>(context, listen: false);
+    // For now simple check: if selected indices is part way through but puzzle changed?
+    // We'll reset in _showPuzzleCompleteDialog completion callback usually.
+  }
+
+  void _generateGrid() {
+    final provider = Provider.of<GameProvider>(context, listen: false);
+    final puzzle = provider.currentPuzzle;
+    if (puzzle == null) return;
+
+    final isArabic =
+        Provider.of<LocaleProvider>(
+          context,
+          listen: false,
+        ).locale.languageCode ==
+        'ar';
+    final solution = isArabic ? puzzle.solutionStepsAr : puzzle.solutionStepsEn;
+    final start = isArabic ? puzzle.startWordAr : puzzle.startWordEn;
+    final end = isArabic ? puzzle.endWordAr : puzzle.endWordEn;
+
+    // Full path: Start -> ...Steps... -> End
+    List<String> fullPath = [start, ...solution, end];
+
+    // Determine grid size based on path length (at least ensure path fits)
+    int requiredCells = fullPath.length;
+    _gridSize = sqrt(requiredCells).ceil();
+    if (_gridSize < 3) _gridSize = 3; // Minimum 3x3
+
+    int totalCells = _gridSize * _gridSize;
+
+    // Fill grid with random words first
+    List<String> randomWords = isArabic
+        ? [
+            "ماء",
+            "هواء",
+            "تراب",
+            "نار",
+            "شجر",
+            "حجر",
+            "فضاء",
+            "كوكب",
+            "نجوم",
+            "قمر",
+          ]
+        : [
+            "Water",
+            "Air",
+            "Earth",
+            "Fire",
+            "Tree",
+            "Stone",
+            "Space",
+            "Planet",
+            "Star",
+            "Moon",
+          ];
+
+    _gridWords = List.generate(
+      totalCells,
+      (_) => randomWords[Random().nextInt(randomWords.length)],
+    );
+
+    Set<int> usedIndices = {};
+
+    // Place Start/Steps/End
+    for (var word in fullPath) {
+      int idx;
+      do {
+        idx = Random().nextInt(totalCells);
+      } while (usedIndices.contains(idx));
+
+      _gridWords[idx] = word;
+      usedIndices.add(idx);
+    }
+  }
+
+  void _handleTap(int index) {
+    if (_selectedIndices.contains(index)) return; // Already selected
+
+    final provider = Provider.of<GameProvider>(context, listen: false);
+    final puzzle = provider.currentPuzzle!;
+    final isArabic =
+        Provider.of<LocaleProvider>(
+          context,
+          listen: false,
+        ).locale.languageCode ==
+        'ar';
+    final solution = isArabic ? puzzle.solutionStepsAr : puzzle.solutionStepsEn;
+    final start = isArabic ? puzzle.startWordAr : puzzle.startWordEn;
+    final end = isArabic ? puzzle.endWordAr : puzzle.endWordEn;
+
+    List<String> fullPath = [start, ...solution, end];
+
+    // Check if the tapped word is the NEXT expected word
+    // Expected index in path = _selectedIndices.length
+    String tappedWord = _gridWords[index];
+    String expectedWord = fullPath[_selectedIndices.length];
+
+    if (tappedWord == expectedWord) {
+      provider.incrementScore(10);
+      setState(() {
+        _selectedIndices.add(index);
+      });
+
+      if (_selectedIndices.length == fullPath.length) {
+        provider.incrementScore(50);
+        _showPuzzleCompleteDialog(context, isArabic);
+      }
+    } else {
+      // Wrong tap
+      provider.decrementLives();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Wrong choice! Follow the chain."),
+          backgroundColor: Colors.red,
+          duration: Duration(milliseconds: 500),
+        ),
+      );
+    }
+  }
+
+  void _showPuzzleCompleteDialog(BuildContext context, bool isArabic) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text("🎉"),
+        content: Text(
+          isArabic ? "مذهل! لقد وجدت الطريق." : "Amazing! Path Found.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              final provider = Provider.of<GameProvider>(
+                context,
+                listen: false,
+              );
+              provider.advancePuzzle().then((_) {
+                setState(() {
+                  _selectedIndices.clear();
+                });
+                _generateGrid();
+              });
+            },
+            child: const Text("Next"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<GameProvider>(context);
+    final isArabic =
+        Provider.of<LocaleProvider>(context).locale.languageCode == 'ar';
+    final puzzle = provider.currentPuzzle;
+
+    if (puzzle == null) return const Center(child: Text("Level Complete"));
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            isArabic
+                ? "اضغط على الكلمات بالترتيب: ${puzzle.startWordAr} -> ... -> ${puzzle.endWordAr}"
+                : "Tap words in order: ${puzzle.startWordEn} -> ... -> ${puzzle.endWordEn}",
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(20),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: _gridSize,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+            ),
+            itemCount: _gridWords.length,
+            itemBuilder: (context, index) {
+              bool isSelected = _selectedIndices.contains(index);
+              return GestureDetector(
+                onTap: () => _handleTap(index),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.green : Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    _gridWords[index],
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : Colors.black87,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}

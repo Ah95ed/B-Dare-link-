@@ -1,0 +1,14 @@
+{
+  "@@locale": "en",
+  "appTitle": "Wonder Link",
+  "startGame": "Start Game",
+  "linkStart": "Start Word",
+  "linkEnd": "End Word",
+  "yourLink": "Your Connection",
+  "submit": "Link It!",
+  "loading": "Checking Link...",
+  "winMessage": "Amazing! You found the link!",
+  "loseMessage": "Not quite right. Try again!",
+  "steps": "Steps",
+  "changeLanguage": "اللغة العربية"
+}
