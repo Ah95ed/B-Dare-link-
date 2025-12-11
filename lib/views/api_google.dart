@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:developer';
 
-import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -99,6 +98,7 @@ class GroqAI {
         ],
       }),
     );
+    log('message11111 ==== ${response.body}');
 
     final data = jsonDecode(response.body);
 

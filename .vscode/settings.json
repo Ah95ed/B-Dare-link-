@@ -1,3 +1,15 @@
 {
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.format.settings.url": "https://raw.githubusercontent.com/google/styleguide/gh-pages/eclipse-java-google-style.xml",
+    "java.format.settings.profile": "GoogleStyle",
+    "java.import.gradle.enabled": true,
+    "java.import.gradle.wrapper.enabled": true,
+    "java.import.maven.enabled": true,
+    "java.import.maven.downloadSources": true,
+    "java.import.maven.wrapper.enabled": true,
+    "java.checkstyle.configuration": "https://raw.githubusercontent.com/checkstyle/checkstyle/master/src/main/resources/google_checks.xml",
+    "java.checkstyle.enabled": true,
+    "java.checkstyle.suppressions": "",
+    "java.checkstyle.autoFix": true,
+    "java.debug.settings.onBuildFailureProceed": true
 }
