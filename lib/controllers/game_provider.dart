@@ -5,11 +5,23 @@ import '../models/game_level.dart';
 import '../models/game_puzzle.dart';
 import '../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../providers/auth_provider.dart';
 
 enum GameMode { multipleChoice, gridPath, dragDrop, fillBlank }
 
 class GameProvider extends ChangeNotifier {
   final CloudflareApiService _apiService = CloudflareApiService();
+  AuthProvider? _authProvider;
+
+  void updateAuthProvider(AuthProvider auth) {
+    _authProvider = auth;
+    // Load progress from cloud if logged in
+    if (auth.isAuthenticated) {
+      // We might want to merge or overwrite local progress
+      // For now, let's just fetch cloud progress
+    }
+  }
+
   GameRound? _currentRound;
   bool _isLoading = false;
   String? _errorMessage;
@@ -72,6 +84,16 @@ class GameProvider extends ChangeNotifier {
       _unlockedLevelId = levelId;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('unlockedLevelId', _unlockedLevelId);
+
+      // Sync with cloud
+      if (_authProvider != null && _authProvider!.isAuthenticated) {
+        await _authProvider!.syncProgress(
+          _unlockedLevelId,
+          _score,
+          0,
+        ); // stars not yet tracked
+      }
+
       notifyListeners();
     }
   }

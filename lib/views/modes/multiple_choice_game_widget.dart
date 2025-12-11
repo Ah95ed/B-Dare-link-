@@ -143,8 +143,36 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     final provider = Provider.of<GameProvider>(context);
     final puzzle = provider.currentPuzzle;
 
-    // If no puzzle (level complete), show nothing or loading
-    if (puzzle == null) return Center(child: Text("Level Complete!"));
+    // If no puzzle, check if it's an error or actually complete
+    if (puzzle == null) {
+      if (provider.errorMessage != null) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                provider.errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.red),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Go Back"),
+              ),
+            ],
+          ),
+        );
+      }
+      return const Center(
+        child: Text(
+          "Level Complete!",
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+      );
+    }
 
     final isArabic =
         Provider.of<LocaleProvider>(context).locale.languageCode == 'ar';

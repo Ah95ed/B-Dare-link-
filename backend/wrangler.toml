@@ -1,3 +1,12 @@
 name = "wonder-link-backend"
 main = "src/index.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wonder-link-db"
+
+[vars]
+JWT_SECRET = "4ce5261903852d08596e8426f5bbf5044fb8b4c13b9ce9c978817b3cf77c76f6"
+

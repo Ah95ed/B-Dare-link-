@@ -4,6 +4,9 @@ import '../controllers/locale_provider.dart';
 import '../l10n/app_localizations.dart';
 
 import 'levels_view.dart';
+import '../providers/auth_provider.dart';
+import 'auth/login_screen.dart';
+import 'profile/profile_screen.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
@@ -69,33 +72,63 @@ class HomeView extends StatelessWidget {
                   SizedBox(height: 60),
 
                   // Levels Button
-                  OutlinedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LevelsView()),
+                  Consumer<AuthProvider>(
+                    builder: (context, auth, _) {
+                      return OutlinedButton(
+                        onPressed: () {
+                          if (auth.isAuthenticated) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LevelsView(),
+                              ),
+                            );
+                          } else {
+                            // Show login prompt
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  isArabic
+                                      ? "يجب تسجيل الدخول أولاً للعب"
+                                      : "Please login to play",
+                                ),
+                                action: SnackBarAction(
+                                  label: isArabic ? "تسجيل الدخول" : "Login",
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const LoginScreen(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 40,
+                            vertical: 15,
+                          ),
+                          side: BorderSide(
+                            color: Theme.of(context).primaryColor,
+                            width: 2,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: Text(
+                          isArabic ? "المراحل" : "Levels",
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
                       );
                     },
-                    style: OutlinedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 40,
-                        vertical: 15,
-                      ),
-                      side: BorderSide(
-                        color: Theme.of(context).primaryColor,
-                        width: 2,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    child: Text(
-                      isArabic ? "المراحل" : "Levels",
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -112,6 +145,38 @@ class HomeView extends StatelessWidget {
                   onPressed: () => provider.toggleLocale(),
                   icon: const Icon(Icons.language),
                   label: Text(l10n.changeLanguage),
+                );
+              },
+            ),
+          ),
+
+          // Profile / Login Button
+          Positioned(
+            top: 50,
+            right: 20,
+            child: Consumer<AuthProvider>(
+              builder: (context, auth, _) {
+                return IconButton(
+                  onPressed: () {
+                    if (auth.isAuthenticated) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ProfileScreen(),
+                        ),
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      );
+                    }
+                  },
+                  icon: Icon(
+                    auth.isAuthenticated ? Icons.account_circle : Icons.login,
+                    size: 30,
+                    color: Theme.of(context).primaryColor,
+                  ),
                 );
               },
             ),
