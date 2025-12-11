@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:developer';
+
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 // ⚠️ ملاحظة: لا تضع المفتاح مباشرة في ملف Dart للمنتجات النهائية!
 const String _apiKey = "AIzaSyBoAP_hZwOJY4rRIwxRJ8sgwWFE1WYGLlM";
@@ -12,34 +16,31 @@ class GeminiRequestExample extends StatefulWidget {
 }
 
 class _GeminiRequestExampleState extends State<GeminiRequestExample> {
-  String _response = "الاستجابة ستظهر هنا...";
-  final String _prompt = "اكتب ثلاثة حقائق مدهشة عن المحيط الهادئ.";
+  late GroqAI ai;
+  List<Map<String, dynamic>> questions = [];
+  bool loading = false;
 
-  // 1. إنشاء النموذج (Generative Model)
-  final model = GenerativeModel(
-    model: 'gemini-1.5-flash', // النموذج الذي اخترته
-    apiKey: _apiKey,
-  );
+  Future<void> loadQuestions() async {
+    setState(() => loading = true);
 
-  Future<void> generateText() async {
+    final result = await ai.generateQuestions(
+      subject: "الرياضيات",
+      level: "سهل",
+      count: 5,
+    );
+
     setState(() {
-      _response = "جاري الاتصال بـ Gemini...";
+      questions = result;
+      loading = false;
+      print('object === $result');
     });
+  }
 
-    try {
-      // 2. إرسال طلب (Request)
-      final content = [Content.text(_prompt)];
-      final response = await model.generateContent(content);
-
-      // 3. عرض الاستجابة
-      setState(() {
-        _response = response.text ?? "لم يتم تلقي نص استجابة.";
-      });
-    } catch (e) {
-      setState(() {
-        _response = "حدث خطأ: $e";
-      });
-    }
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    ai = GroqAI("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");
   }
 
   @override
@@ -51,16 +52,13 @@ class _GeminiRequestExampleState extends State<GeminiRequestExample> {
         child: Column(
           children: [
             ElevatedButton(
-              onPressed: generateText,
+              onPressed: loadQuestions,
               child: Text('اطلب من Gemini'),
             ),
             SizedBox(height: 20),
-            Text(
-              'سؤالك: $_prompt',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            Text('سؤالك: ', style: TextStyle(fontWeight: FontWeight.bold)),
             Divider(),
-            Expanded(child: SingleChildScrollView(child: Text(_response))),
+            Expanded(child: SingleChildScrollView(child: Text('ششششششش'))),
           ],
         ),
       ),
@@ -68,7 +66,55 @@ class _GeminiRequestExampleState extends State<GeminiRequestExample> {
   }
 }
 
-// لإطلاق التطبيق في main.dart
-// void main() {
-//   runApp(MaterialApp(home: GeminiRequestExample()));
-// }
+class GroqAI {
+  final String apiKey;
+
+  GroqAI(this.apiKey);
+
+  Future<List<Map<String, dynamic>>> generateQuestions({
+    required String subject,
+    required String level,
+    required int count,
+  }) async {
+    final prompt =
+        """
+اكتب $count اسئلة عن موضوع: $subject
+المستوى: $level
+الصيغة يجب ان تكون JSON هكذا:
+[
+  { "question": "?", "answer": "?" }
+]
+""";
+
+    final response = await http.post(
+      Uri.parse("https://api.groq.com/openai/v1/chat/completions"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $apiKey",
+      },
+      body: jsonEncode({
+        "model": "llama-3.1-70b-versatile",
+        "messages": [
+          {"role": "user", "content": prompt},
+        ],
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+
+    final content = data["choices"][0]["message"]["content"];
+
+    // حاول نحلل JSON حتى لو AI رجع نص إضافي
+    try {
+      final cleanJson = jsonDecode(content);
+      log('message ==message ==== $cleanJson');
+      print('message ==== $cleanJson');
+      return List<Map<String, dynamic>>.from(cleanJson);
+    } catch (_) {
+      // fallback: إرجاع نص خام
+      return [
+        {"question": "Error parsing AI response", "answer": content},
+      ];
+    }
+  }
+}

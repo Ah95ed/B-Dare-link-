@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'package:wonder_link_game/views/api_google.dart';
 import 'package:wonder_link_game/views/home_view.dart';
 import 'core/app_theme.dart';
 import 'controllers/game_provider.dart';
 import 'controllers/locale_provider.dart';
 import 'l10n/app_localizations.dart';
-import 'views/api_google.dart';
 
 void main() {
   runApp(const WonderLinkApp());
@@ -39,7 +39,7 @@ class WonderLinkApp extends StatelessWidget {
             builder: (context, child) {
               return child!;
             },
-            home: const HomeView(),
+            home: const GeminiRequestExample(),
           );
         },
       ),
