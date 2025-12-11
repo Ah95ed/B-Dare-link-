@@ -44,7 +44,8 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
           listen: false,
         ).locale.languageCode ==
         'ar';
-    final solution = isArabic ? puzzle.solutionStepsAr : puzzle.solutionStepsEn;
+    final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
+    final solution = steps.map((s) => s.word).toList();
     final start = isArabic ? puzzle.startWordAr : puzzle.startWordEn;
     final end = isArabic ? puzzle.endWordAr : puzzle.endWordEn;
 
@@ -115,7 +116,8 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
           listen: false,
         ).locale.languageCode ==
         'ar';
-    final solution = isArabic ? puzzle.solutionStepsAr : puzzle.solutionStepsEn;
+    final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
+    final solution = steps.map((s) => s.word).toList();
     final start = isArabic ? puzzle.startWordAr : puzzle.startWordEn;
     final end = isArabic ? puzzle.endWordAr : puzzle.endWordEn;
 
@@ -127,13 +129,13 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
     String expectedWord = fullPath[_selectedIndices.length];
 
     if (tappedWord == expectedWord) {
-      provider.incrementScore(10);
+      provider.incrementScore(1);
       setState(() {
         _selectedIndices.add(index);
       });
 
       if (_selectedIndices.length == fullPath.length) {
-        provider.incrementScore(50);
+        provider.incrementScore(5);
         _showPuzzleCompleteDialog(context, isArabic);
       }
     } else {

@@ -31,7 +31,8 @@ class _DragDropGameWidgetState extends State<DragDropGameWidget> {
           listen: false,
         ).locale.languageCode ==
         'ar';
-    final solution = isArabic ? puzzle.solutionStepsAr : puzzle.solutionStepsEn;
+    final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
+    final solution = steps.map((s) => s.word).toList();
 
     // Create a copy and shuffle
     _shuffledSteps = List.from(solution);
@@ -48,7 +49,8 @@ class _DragDropGameWidgetState extends State<DragDropGameWidget> {
           listen: false,
         ).locale.languageCode ==
         'ar';
-    final solution = isArabic ? puzzle.solutionStepsAr : puzzle.solutionStepsEn;
+    final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
+    final solution = steps.map((s) => s.word).toList();
 
     bool isCorrect = true;
     for (int i = 0; i < solution.length; i++) {

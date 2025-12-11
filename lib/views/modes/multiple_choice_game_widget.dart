@@ -39,26 +39,30 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
           listen: false,
         ).locale.languageCode ==
         'ar';
-    final solution = isArabic ? puzzle.solutionStepsAr : puzzle.solutionStepsEn;
+    final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
 
-    if (_currentStepIndex >= solution.length) {
+    if (_currentStepIndex >= steps.length) {
       // Should trigger next puzzle
       return;
     }
 
-    final correctWord = solution[_currentStepIndex];
+    // Get options directly from the puzzle data
+    List<String> options = List.from(steps[_currentStepIndex].options);
+    String correctWord = steps[_currentStepIndex].word;
 
-    // Mock distractors
-    List<String> distractors = isArabic
-        ? ["جبل", "سماء", "نار", "صخرة"]
-        : ["Mountain", "Sky", "Fire", "Rock"];
-
-    distractors.shuffle();
-    final options = [correctWord, distractors[0], distractors[1]];
-    options.shuffle();
+    // Safety check: Ensure correct word is in options
+    bool found = options.any(
+      (o) => o.trim().toLowerCase() == correctWord.trim().toLowerCase(),
+    );
+    if (!found) {
+      if (options.isNotEmpty) options.removeLast(); // Make space
+      options.add(correctWord);
+    }
 
     setState(() {
       _currentOptions = options;
+      // Options are already shuffled by backend, but we can shuffle again to be safe
+      _currentOptions.shuffle();
     });
   }
 
@@ -73,19 +77,17 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
 
     if (provider.checkStep(selectedWord, _currentStepIndex, isArabic)) {
       // Correct
-      provider.incrementScore(10); // Reward
+      provider.incrementScore(1); // Reward
       setState(() {
         _currentStepIndex++;
       });
 
       final puzzle = provider.currentPuzzle!;
-      final solution = isArabic
-          ? puzzle.solutionStepsAr
-          : puzzle.solutionStepsEn;
+      final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
 
-      if (_currentStepIndex >= solution.length) {
+      if (_currentStepIndex >= steps.length) {
         // Win Condition for this puzzle
-        provider.incrementScore(50); // Completion Bonus
+        provider.incrementScore(5); // Completion Bonus
         _showPuzzleCompleteDialog(context, isArabic);
       } else {
         // Next step
@@ -146,10 +148,10 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
 
     final isArabic =
         Provider.of<LocaleProvider>(context).locale.languageCode == 'ar';
-    final solution = isArabic ? puzzle.solutionStepsAr : puzzle.solutionStepsEn;
+    final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
 
     // Safety check if we switched puzzles and index is out of bounds
-    if (_currentStepIndex > solution.length) _currentStepIndex = 0;
+    if (_currentStepIndex > steps.length) _currentStepIndex = 0;
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -163,9 +165,9 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
                 isArabic ? puzzle.startWordAr : puzzle.startWordEn,
                 true,
               ),
-              ...List.generate(solution.length, (index) {
+              ...List.generate(steps.length, (index) {
                 String text = (index < _currentStepIndex)
-                    ? solution[index]
+                    ? steps[index].word
                     : "?";
                 bool isSolved = index < _currentStepIndex;
                 bool isCurrent = index == _currentStepIndex;
@@ -182,7 +184,7 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
                       Expanded(
                         child: Divider(
                           thickness: 2,
-                          color: (index == solution.length - 1 && isSolved)
+                          color: (index == steps.length - 1 && isSolved)
                               ? Colors.green
                               : Colors.grey,
                         ),
@@ -198,30 +200,50 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
           const Spacer(),
 
           // Questions Area
-          if (_currentStepIndex < solution.length &&
+          if (_currentStepIndex < steps.length &&
               _currentOptions.isNotEmpty) ...[
             Text(
               isArabic ? "اختر الخطوة القادمة:" : "Choose the next step:",
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
-            Wrap(
-              spacing: 15,
-              runSpacing: 15,
-              alignment: WrapAlignment.center,
-              children: _currentOptions.map((word) {
-                return ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 30,
-                      vertical: 15,
+
+            // Using GridView for better organization "خطأ تنظيمي"
+            SizedBox(
+              height: 250, // Fixed height for options area
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2, // 2 items per row = clean layout
+                  childAspectRatio: 2.5, // rectangular buttons
+                  crossAxisSpacing: 15,
+                  mainAxisSpacing: 15,
+                ),
+                itemCount: _currentOptions.length,
+                itemBuilder: (context, index) {
+                  final word = _currentOptions[index];
+                  return ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    textStyle: const TextStyle(fontSize: 18),
-                  ),
-                  onPressed: () => _handleOptionSelected(word),
-                  child: Text(word),
-                );
-              }).toList(),
+                    onPressed: () => _handleOptionSelected(word),
+                    child: Text(
+                      word,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                },
+              ),
             ),
           ],
 

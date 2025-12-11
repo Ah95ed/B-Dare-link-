@@ -43,9 +43,10 @@ class LevelsView extends StatelessWidget {
               mainAxisSpacing: 15,
               childAspectRatio: 1.1,
             ),
-            itemCount: LevelData.levels.length,
+            itemCount: LevelData.totalLevels,
             itemBuilder: (context, index) {
-              final level = LevelData.levels[index];
+              final levelId = index + 1;
+              final level = LevelData.getLevelShell(levelId);
               return _buildLevelCard(
                 context,
                 level,
@@ -71,6 +72,7 @@ class LevelsView extends StatelessWidget {
       onTap: isLocked
           ? null
           : () {
+              // Ensure we don't listen here since it's a callback
               Provider.of<GameProvider>(
                 context,
                 listen: false,

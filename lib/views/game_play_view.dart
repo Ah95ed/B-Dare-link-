@@ -7,17 +7,41 @@ import 'modes/grid_path_game_widget.dart';
 import 'modes/drag_drop_game_widget.dart';
 import '../controllers/locale_provider.dart';
 
-class GamePlayView extends StatelessWidget {
+class GamePlayView extends StatefulWidget {
   const GamePlayView({super.key});
+
+  @override
+  State<GamePlayView> createState() => _GamePlayViewState();
+}
+
+class _GamePlayViewState extends State<GamePlayView> {
+  bool _isDialogShown = false;
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<GameProvider>(context);
+
+    if (provider.isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text("Generating Puzzles..."),
+            ],
+          ),
+        ),
+      );
+    }
+
     final mode = provider.selectedMode;
     final isGameOver = provider.isGameOver;
 
     // Show Game Over Dialog if needed
-    if (isGameOver) {
+    if (isGameOver && !_isDialogShown) {
+      _isDialogShown = true; // Mark as shown immediately
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showDialog(
           context: context,
@@ -30,6 +54,7 @@ class GamePlayView extends StatelessWidget {
                 onPressed: () {
                   Navigator.pop(context); // Close dialog
                   Navigator.pop(context); // Go back to levels
+                  // No need to reset flag as we are leaving
                 },
                 child: const Text("Exit"),
               ),
@@ -37,8 +62,6 @@ class GamePlayView extends StatelessWidget {
                 onPressed: () {
                   // Retry
                   final level = provider.currentLevel;
-                  // We need isArabic here, but it's not easily accessible in this build context
-                  // without Provider lookup again or passing it.
                   final isArabic =
                       Provider.of<LocaleProvider>(
                         context,
@@ -46,6 +69,7 @@ class GamePlayView extends StatelessWidget {
                       ).locale.languageCode ==
                       'ar';
                   Navigator.pop(context);
+                  _isDialogShown = false; // Reset flag for next time
                   if (level != null) provider.loadLevel(level, isArabic);
                 },
                 child: const Text("Retry"),
@@ -72,6 +96,22 @@ class GamePlayView extends StatelessWidget {
                   color: Colors.red,
                 ),
               ),
+            ),
+
+            // Timer
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: provider.timeLeft / 60,
+                  color: provider.timeLeft < 10 ? Colors.red : Colors.green,
+                  backgroundColor: Colors.grey.shade300,
+                ),
+                Text(
+                  "${provider.timeLeft}",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
             ),
 
             // Puzzle Progress
