@@ -92,6 +92,17 @@ class AuthService {
     await logout();
   }
 
+  Future<void> resetPassword(String email, String newPassword) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/auth/reset'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'newPassword': newPassword}),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Reset failed: ${response.body}');
+    }
+  }
+
   // --- Progress Sync ---
 
   Future<void> saveProgress(int level, int score, int stars) async {

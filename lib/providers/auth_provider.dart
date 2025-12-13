@@ -64,6 +64,19 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> resetPassword(String email, String newPassword) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _authService.resetPassword(email, newPassword);
+    } catch (e) {
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // Progress helpers
   Future<void> syncProgress(int level, int score, int stars) async {
     if (!isAuthenticated) return;
