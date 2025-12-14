@@ -29,9 +29,10 @@ class GameProvider extends ChangeNotifier {
   // Timer State
   int _timeLeft = 60;
   int get timeLeft => _timeLeft;
+  int _timeLimit = 60;
+  int get timeLimit => _timeLimit;
   bool _isTimerRunning = false;
-  // We need to import dart:async for Timer, but I'll assume it's available or add import if needed.
-  // Actually, I should check imports first. 'dart:async' is often auto-imported or core, but better safe.
+  bool get isTimerRunning => _isTimerRunning;
 
   GameRound? get currentRound => _currentRound;
   bool get isLoading => _isLoading;
@@ -49,6 +50,8 @@ class GameProvider extends ChangeNotifier {
   // Level & Puzzle State
   GameLevel? _currentLevel;
   GameLevel? get currentLevel => _currentLevel;
+  bool _isLevelComplete = false;
+  bool get isLevelComplete => _isLevelComplete;
 
   // Puzzle Tracking
   int _currentPuzzleIndex = 0;
@@ -65,6 +68,57 @@ class GameProvider extends ChangeNotifier {
 
   bool _isArabic = false;
 
+  static final Set<String> _bannedMetaWordsAr = {
+    'بداية',
+    'نهاية',
+    'كلمة',
+    'خطوة',
+    'لغز',
+    'سؤال',
+    'جواب',
+    'إجابة',
+    'رابط',
+    'سلسلة',
+    'مستوى',
+    'مرحلة',
+  };
+
+  static final Set<String> _bannedMetaWordsEn = {
+    'start',
+    'end',
+    'word',
+    'step',
+    'puzzle',
+    'question',
+    'answer',
+    'chain',
+    'level',
+    'stage',
+    'new',
+  };
+
+  bool _isMetaWord(String w) {
+    final word = w.trim();
+    if (word.isEmpty) return true;
+    final lower = word.toLowerCase();
+    return _bannedMetaWordsAr.contains(word) || _bannedMetaWordsEn.contains(lower);
+  }
+
+  bool _isValidPuzzle(GamePuzzle p) {
+    final start = _isArabic ? p.startWordAr : p.startWordEn;
+    final end = _isArabic ? p.endWordAr : p.endWordEn;
+    if (_isMetaWord(start) || _isMetaWord(end)) return false;
+    if (start.trim() == end.trim()) return false;
+    final steps = _isArabic ? p.stepsAr : p.stepsEn;
+    if (steps.isEmpty) return false;
+    for (final s in steps) {
+      if (_isMetaWord(s.word)) return false;
+      if (s.options.length != 3) return false;
+      if (!s.options.contains(s.word)) return false;
+    }
+    return true;
+  }
+
   // Persistence
   int _unlockedLevelId = 1;
   int get unlockedLevelId => _unlockedLevelId;
@@ -79,19 +133,35 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _saveProgress(int levelId) async {
+  Future<void> _saveProgress(
+    int levelId, {
+    int? completedLevelId,
+    int starsEarned = 0,
+  }) async {
     if (levelId > _unlockedLevelId) {
       _unlockedLevelId = levelId;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('unlockedLevelId', _unlockedLevelId);
 
+      if (completedLevelId != null) {
+        final key = 'stars_level_$completedLevelId';
+        final prev = prefs.getInt(key) ?? 0;
+        if (starsEarned > prev) {
+          await prefs.setInt(key, starsEarned);
+        }
+      }
+
       // Sync with cloud
       if (_authProvider != null && _authProvider!.isAuthenticated) {
+        final syncLevel = completedLevelId ?? (levelId - 1);
+        final starsToSync = completedLevelId == null
+            ? starsEarned
+            : (prefs.getInt('stars_level_$completedLevelId') ?? starsEarned);
         await _authProvider!.syncProgress(
-          _unlockedLevelId,
+          syncLevel,
           _score,
-          0,
-        ); // stars not yet tracked
+          starsToSync,
+        );
       }
 
       notifyListeners();
@@ -103,9 +173,40 @@ class GameProvider extends ChangeNotifier {
   int _score = 0;
   bool _isGameOver = false;
 
+  // Level scoring (simple stars system)
+  int _mistakesThisLevel = 0;
+  int _puzzlesSolvedThisLevel = 0;
+
   int get lives => _lives;
   int get score => _score;
   bool get isGameOver => _isGameOver;
+
+  int _timeLimitForLevel(int levelId) {
+    final tier = ((levelId - 1) % 100) ~/ 10 + 1; // 1..10
+    switch (tier) {
+      case 1:
+        return 60;
+      case 2:
+        return 55;
+      case 3:
+        return 50;
+      case 4:
+        return 45;
+      case 5:
+        return 40;
+      case 6:
+        return 35;
+      case 7:
+        return 30;
+      default:
+        return 25;
+    }
+  }
+
+  int _desiredPuzzlesForLevel(int levelId) {
+    final tier = ((levelId - 1) % 100) ~/ 10 + 1;
+    return tier <= 3 ? 3 : 5;
+  }
 
   void startNewGame(String start, String end) {
     // Legacy support or specific mode
@@ -163,43 +264,50 @@ class GameProvider extends ChangeNotifier {
   Future<void> loadLevel(GameLevel level, bool isArabic) async {
     _isLoading = true;
     _isArabic = isArabic;
+    _isLevelComplete = false;
+    _mistakesThisLevel = 0;
+    _puzzlesSolvedThisLevel = 0;
     notifyListeners();
 
     // If level has no puzzles, we must generate them
     if (level.puzzles.isEmpty) {
       debugPrint("Fetching puzzles for Level ${level.id}...");
       List<GamePuzzle> generatedPuzzles = [];
-      // Generate up to 5 unique puzzles for the level, avoid duplicates from backend
-      const int desiredCount = 5;
-      const int maxAttempts = 25; // allow extra attempts to avoid duplicates
+      // Fetch a small number quickly; backend will return cached puzzles when available.
+      final int desiredCount = _desiredPuzzlesForLevel(level.id);
+      const int maxAttempts = 8; // keep loading fast
       int attempts = 0;
       final seenKeys = <String>{};
 
       while (generatedPuzzles.length < desiredCount && attempts < maxAttempts) {
+        final remaining = desiredCount - generatedPuzzles.length;
+        final batchSize = remaining >= 3 ? 3 : remaining;
         attempts++;
-        final newLevelData = await _apiService.generateLevel(
-          isArabic,
-          level.id,
+
+        final futures = List.generate(
+          batchSize,
+          (_) => _apiService.generateLevel(isArabic, level.id),
         );
-        if (newLevelData == null || newLevelData.puzzles.isEmpty) continue;
 
-        final p = newLevelData.puzzles.first;
-        // Prefer backend-provided puzzleId for deduplication when available
-        final key = (p.puzzleId != null && p.puzzleId!.isNotEmpty)
-            ? p.puzzleId!
-            : (isArabic
-                  ? '${p.startWordAr}|${p.endWordAr}|${p.stepsAr.map((s) => s.word).join(',')}'
-                  : '${p.startWordEn}|${p.endWordEn}|${p.stepsEn.map((s) => s.word).join(',')}');
+        final results = await Future.wait(futures);
+        for (final newLevelData in results) {
+          if (newLevelData == null || newLevelData.puzzles.isEmpty) continue;
 
-        if (seenKeys.contains(key)) {
-          debugPrint(
-            'Duplicate puzzle received (attempt $attempts), skipping.',
-          );
-          continue;
+          final p = newLevelData.puzzles.first;
+          if (!_isValidPuzzle(p)) continue;
+
+          final key = (p.puzzleId != null && p.puzzleId!.isNotEmpty)
+              ? p.puzzleId!
+              : (isArabic
+                    ? '${p.startWordAr}|${p.endWordAr}|${p.stepsAr.map((s) => s.word).join(',')}'
+                    : '${p.startWordEn}|${p.endWordEn}|${p.stepsEn.map((s) => s.word).join(',')}');
+
+          if (seenKeys.add(key)) {
+            generatedPuzzles.add(p);
+          }
+
+          if (generatedPuzzles.length >= desiredCount) break;
         }
-
-        seenKeys.add(key);
-        generatedPuzzles.add(p);
       }
 
       if (generatedPuzzles.isEmpty) {
@@ -221,6 +329,8 @@ class GameProvider extends ChangeNotifier {
     _score = 0;
     _isGameOver = false;
     _errorMessage = null;
+    _isLevelComplete = false;
+    _timeLimit = _timeLimitForLevel(level.id);
 
     _isLoading = false;
     notifyListeners();
@@ -229,6 +339,7 @@ class GameProvider extends ChangeNotifier {
   void _loadPuzzle() {
     final puzzle = currentPuzzle;
     if (puzzle != null) {
+      _timeLimit = _timeLimitForLevel(_currentLevel?.id ?? 1);
       _currentRound = GameRound(
         startWord: _isArabic ? puzzle.startWordAr : puzzle.startWordEn,
         endWord: _isArabic ? puzzle.endWordAr : puzzle.endWordEn,
@@ -239,6 +350,7 @@ class GameProvider extends ChangeNotifier {
 
   void decrementLives() {
     if (_lives > 0) {
+      _mistakesThisLevel++;
       _lives--;
       if (_lives == 0) {
         _isGameOver = true;
@@ -256,19 +368,31 @@ class GameProvider extends ChangeNotifier {
     if (_currentLevel == null) return;
 
     if (_currentPuzzleIndex < _currentLevel!.puzzles.length - 1) {
+      _puzzlesSolvedThisLevel++;
       _currentPuzzleIndex++;
       _loadPuzzle();
       notifyListeners();
     } else {
       // Level Complete
+      _puzzlesSolvedThisLevel++;
       incrementScore(500);
       _stopTimer();
-      await _saveProgress(_currentLevel!.id + 1);
-      // Reset round to show completion state or just clear it
+      final starsEarned = _calculateStarsForLevel();
+      await _saveProgress(_currentLevel!.id + 1, completedLevelId: _currentLevel!.id, starsEarned: starsEarned);
+      // Mark completion and move index past the last puzzle so currentPuzzle becomes null.
+      _isLevelComplete = true;
+      _currentPuzzleIndex = _currentLevel!.puzzles.length;
       _currentRound = null;
-      _errorMessage = "Level Complete!";
+      _errorMessage = null;
       notifyListeners();
     }
+  }
+
+  int _calculateStarsForLevel() {
+    if (_puzzlesSolvedThisLevel <= 0) return 1;
+    if (_mistakesThisLevel == 0) return 3;
+    if (_mistakesThisLevel <= 2) return 2;
+    return 1;
   }
 
   // Validates user input
@@ -347,7 +471,7 @@ class GameProvider extends ChangeNotifier {
 
   void _startTimer() {
     _timer?.cancel();
-    _timeLeft = 60; // 60 seconds per puzzle
+    _timeLeft = _timeLimit;
     _isTimerRunning = true;
     notifyListeners();
 

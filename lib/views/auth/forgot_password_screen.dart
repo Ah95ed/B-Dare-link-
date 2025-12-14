@@ -15,7 +15,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final TextEditingController _otpController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
   bool _sent = false;
-  bool _verified = false;
   bool _loading = false;
 
   @override
@@ -60,9 +59,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           context,
           listen: false,
         ).resetPassword(_emailController.text.trim(), newPass);
-        setState(() {
-          _verified = true;
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Password reset successful')),
         );

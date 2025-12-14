@@ -8,7 +8,7 @@ class CloudflareApiService {
   // TODO: Replace with your deployed Worker URL
   final String _workerUrl = 'https://wonder-link-backend.amhmeed31.workers.dev';
 
-  Future<GameLevel?> generateLevel(bool isArabic, int levelId) async {
+  Future<GameLevel?> generateLevel(bool isArabic, int levelId, {bool fresh = false}) async {
     try {
       final response = await http.post(
         Uri.parse('$_workerUrl/generate-level'),
@@ -16,13 +16,29 @@ class CloudflareApiService {
         body: jsonEncode({
           'language': isArabic ? 'ar' : 'en',
           'level': levelId,
+          'fresh': fresh,
         }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        if (data is! Map) {
+          debugPrint("Worker Error: unexpected response shape");
+          return _getFallbackLevelSafe(levelId, isArabic);
+        }
+        if (data['error'] != null) {
+          debugPrint("Worker Error Payload: ${data['error']} - ${data['reason']}");
+          return _getFallbackLevelSafe(levelId, isArabic);
+        }
 
-        // Defensive normalization: ensure each step has 4 options and includes the correct word
+        final startWord = data['startWord']?.toString().trim() ?? '';
+        final endWord = data['endWord']?.toString().trim() ?? '';
+        if (startWord.isEmpty || endWord.isEmpty || startWord == endWord) {
+          debugPrint("Worker Error: invalid start/end words");
+          return _getFallbackLevelSafe(levelId, isArabic);
+        }
+
+        // Defensive normalization: ensure each step has 3 options and includes the correct word
         List<PuzzleStep> steps = [];
         if (data['steps'] != null && data['steps'] is List) {
           // Prepare a global pool of candidate distractors
@@ -47,7 +63,7 @@ class CloudflareApiService {
 
               // Ensure the correct word is present
               if (!options.contains(word)) {
-                if (options.length >= 4) {
+                if (options.length >= 3) {
                   options[options.length - 1] = word;
                 } else {
                   options.add(word);
@@ -62,16 +78,16 @@ class CloudflareApiService {
                 return true;
               }).toList();
 
-              // Fill up to 4 using globalPool (excluding the correct word)
+              // Fill up to 3 using globalPool (excluding the correct word)
               for (final candidate in globalPool) {
-                if (options.length >= 4) break;
+                if (options.length >= 3) break;
                 if (candidate != word && !options.contains(candidate)) {
                   options.add(candidate);
                 }
               }
 
               // If still short, append placeholder variants
-              while (options.length < 4) {
+              while (options.length < 3) {
                 options.add('${word}_opt');
               }
 
@@ -106,14 +122,52 @@ class CloudflareApiService {
         );
       } else {
         debugPrint("Worker Error: ${response.statusCode} - ${response.body}");
-        return _getFallbackLevel(levelId, isArabic);
+        return _getFallbackLevelSafe(levelId, isArabic);
       }
     } catch (e) {
       debugPrint("Error generating level: $e");
-      return _getFallbackLevel(levelId, isArabic);
+      return _getFallbackLevelSafe(levelId, isArabic);
     }
   }
 
+  GameLevel _getFallbackLevelSafe(int levelId, bool isArabic) {
+    final steps = isArabic
+        ? [
+            PuzzleStep(
+              word: "تفاحة",
+              options: ["تفاحة", "موز", "برتقال"]..shuffle(),
+            ),
+            PuzzleStep(
+              word: "أحمر",
+              options: ["أحمر", "أزرق", "أخضر"]..shuffle(),
+            ),
+          ]
+        : [
+            PuzzleStep(
+              word: "Apple",
+              options: ["Apple", "Banana", "Grape"]..shuffle(),
+            ),
+            PuzzleStep(
+              word: "Red",
+              options: ["Red", "Blue", "Green"]..shuffle(),
+            ),
+          ];
+
+    final puzzle = GamePuzzle(
+      startWordAr: "فاكهة",
+      endWordAr: "لون",
+      stepsAr: isArabic ? steps : [],
+      startWordEn: "Fruit",
+      endWordEn: "Color",
+      stepsEn: isArabic ? [] : steps,
+      hintAr: "فكّر في مثال بسيط يربط بين الشيء وصفته.",
+      hintEn: "Think of a simple object and its attribute.",
+    );
+
+    return GameLevel(id: levelId, puzzles: [puzzle]);
+  }
+
+  // ignore: unused_element
   GameLevel _getFallbackLevel(int levelId, bool isArabic) {
     // Basic fallback puzzle to ensure playable state
     final steps = isArabic

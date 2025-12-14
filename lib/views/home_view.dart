@@ -76,36 +76,36 @@ class HomeView extends StatelessWidget {
                     builder: (context, auth, _) {
                       return OutlinedButton(
                         onPressed: () {
-                          if (auth.isAuthenticated) {
+                          // if (auth.isAuthenticated) {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => const LevelsView(),
                               ),
                             );
-                          } else {
+                          // } else {
                             // Show login prompt
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  isArabic
-                                      ? "يجب تسجيل الدخول أولاً للعب"
-                                      : "Please login to play",
-                                ),
-                                action: SnackBarAction(
-                                  label: isArabic ? "تسجيل الدخول" : "Login",
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => const LoginScreen(),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            );
-                          }
+                          //   ScaffoldMessenger.of(context).showSnackBar(
+                          //     SnackBar(
+                          //       content: Text(
+                          //         isArabic
+                          //             ? "يجب تسجيل الدخول أولاً للعب"
+                          //             : "Please login to play",
+                          //       ),
+                          //       action: SnackBarAction(
+                          //         label: isArabic ? "تسجيل الدخول" : "Login",
+                          //         onPressed: () {
+                          //           Navigator.push(
+                          //             context,
+                          //             MaterialPageRoute(
+                          //               builder: (_) => const LoginScreen(),
+                          //             ),
+                          //           );
+                          //         },
+                          //       ),
+                          //     ),
+                          //   );
+                          // }
                         },
                         style: OutlinedButton.styleFrom(
                           padding: EdgeInsets.symmetric(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/game_provider.dart';
 import '../../controllers/locale_provider.dart';
+import '../../models/game_puzzle.dart';
 import 'dart:math';
 
 class GridPathGameWidget extends StatefulWidget {
@@ -16,6 +17,7 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
   List<String> _gridWords = [];
   int _gridSize = 3; // 3x3 grid
   final List<int> _selectedIndices = [];
+  String? _puzzleKey;
 
   @override
   void initState() {
@@ -26,17 +28,33 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
   @override
   void didUpdateWidget(covariant GridPathGameWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // React to puzzle changes might be needed if the parent rebuilds us
-    // But since state is local, we might need to reset if provider puzzle changed.
     final provider = Provider.of<GameProvider>(context, listen: false);
-    // For now simple check: if selected indices is part way through but puzzle changed?
-    // We'll reset in _showPuzzleCompleteDialog completion callback usually.
+    final puzzle = provider.currentPuzzle;
+    if (puzzle == null) return;
+
+    final nextKey = _puzzleKeyFor(puzzle);
+    if (_puzzleKey != nextKey) {
+      setState(() {
+        _selectedIndices.clear();
+        _puzzleKey = nextKey;
+        _generateGrid();
+      });
+    }
+  }
+
+  String _puzzleKeyFor(GamePuzzle puzzle) {
+    final id = puzzle.puzzleId;
+    if (id != null && id.isNotEmpty) return id;
+
+    return '${puzzle.startWordEn}|${puzzle.endWordEn}|${puzzle.startWordAr}|${puzzle.endWordAr}|${puzzle.stepsEn.length}|${puzzle.stepsAr.length}';
   }
 
   void _generateGrid() {
     final provider = Provider.of<GameProvider>(context, listen: false);
     final puzzle = provider.currentPuzzle;
     if (puzzle == null) return;
+
+    _puzzleKey = _puzzleKeyFor(puzzle);
 
     final isArabic =
         Provider.of<LocaleProvider>(
@@ -171,8 +189,8 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
               provider.advancePuzzle().then((_) {
                 setState(() {
                   _selectedIndices.clear();
+                  _generateGrid();
                 });
-                _generateGrid();
               });
             },
             child: const Text("Next"),

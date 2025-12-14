@@ -1,158 +1,123 @@
-// prompt.js – Gemini system prompts for puzzle generation
+// prompt.js - prompts for puzzle generation
 
-export const systemPrompt =` أنت محرك ألغاز لعبة "الرابط العجيب". مهمتك توليد ألغاز ربط كلمات بالعربية **منطقية قابلة للشرح** مع **تشيك ذاتي صارم** قبل الإخراج، لتقليل الأخطاء/الهلوسة.
+function difficultyLabel(level) {
+  const n = Number(level) || 1;
+  return n <= 3 ? 'Easy' : n <= 6 ? 'Medium' : 'Hard';
+}
 
-المستوى: ${level}
-الصعوبة: ${level <= 3 ? "سهل" : level <= 6 ? "متوسط" : "صعب"}
+function stepsMinMax(level) {
+  const n = Number(level) || 1;
+  // User-facing design: 2-5 steps total, increasing with level.
+  if (n <= 3) return { min: 2, max: 3 };
+  if (n <= 6) return { min: 3, max: 4 };
+  return { min: 4, max: 5 };
+}
 
-هدفك:
-- توليد startWord و endWord + خطوات وسيطة steps (حسب المستوى) تربطهما بمنطق واضح.
-- لكل خطوة: 4 خيارات (1 صحيح + 3 مشتتات مقنعة لكن خاطئة).
-- ثم تنفيذ "تشيك ذاتي" داخلي قبل الإخراج (بدون طباعة التشيك).
+export function buildSystemPrompt({ language = 'en', level = 1 } = {}) {
+  const isArabic = language === 'ar';
+  const difficulty = difficultyLabel(level);
+  const { min, max } = stepsMinMax(level);
 
-قاعدة مضاد-هلوسة (إلزامي):
-- لا تكتب أي خطوة لا تستطيع تبريرها كـ"معرفة عامة شائعة" بجملة واحدة.
-- ممنوع كلمات التردد داخل المنطق: (قد/ربما/يمكن/يُحتمل).
-- إذا فشلت في إنتاج لغز عالي الثقة، أرجِع JSON خطأ فقط:
-  {"error":"NO_SAFE_PUZZLE","reason":"..."}  ولا شيء غيره.
+  if (isArabic) {
+    // Keep prompts in English to avoid encoding issues, but require Arabic content.
+    return `You generate puzzles for the game "Wonder Link" in ARABIC.
 
-قيود الكلمات:
-- العربية الفصحى المبسطة.
-- كل كلمة = كلمة واحدة فقط (بدون مسافات/شرطات/أرقام/رموز).
-- تجنب الأعلام/الأسماء النادرة/حقائق متخصصة.
-- تجنب الترادف المباشر: لا تجعل البداية والنهاية نفس المعنى أو قريبتين جدًا.
+Puzzle goal: connect two semantically distant Arabic words via a chain of clear, logical intermediate steps.
 
-تعريف الرابط المنطقي (مسموح فقط بهذه العلاقات):
-كل انتقال يجب أن يندرج تحت نوع واحد واضح من:
-1) سبب→نتيجة
-2) يؤدي_إلى (عملية/تحوّل/تدرّج)
-3) يُنتج
-4) يحتاج_إلى
-5) جزء_من
-6) ينتمي_إلى_فئة (نوع/تصنيف)
-7) يُستخدم_في
-8) مكان/بيئة
+Level: ${level}
+Difficulty: ${difficulty}
+Steps (steps.length): ${min}-${max}
 
-عدد الخطوات (steps.length):
-- سهل: 3-4
-- متوسط: 4-5
-- صعب: 5-7
+Hard constraints:
+- All words must be Arabic (Modern Standard Arabic), common and readable.
+- startWord/endWord must be real concepts/objects, not UI/meta words.
+- Do NOT use any of these words anywhere: "بداية", "نهاية", "كلمة", "خطوة", "لغز", "سؤال", "جواب", "إجابة", "رابط", "سلسلة", "مستوى", "مرحلة".
+- Each step must relate to BOTH the previous and next step (meaning/cause/use/part-whole/shared domain).
+- Avoid trivial links (pure synonym-only, single-letter changes, overly generic words like "شيء/حاجة/مفهوم").
+- Avoid proper nouns and sensitive topics.
 
-قواعد الخيارات لكل خطوة:
-- options طولها 4 بالضبط: [الصحيح + 3 مشتتات]
-- كل خيار كلمة واحدة وفريدة (بدون تكرار).
-- المشتتات من نفس المجال/الفئة اللغوية قدر الإمكان، لكنها لا تصنع انتقالًا صحيحًا.
-- ممنوع أن يكون أي مشتت هو إجابة صحيحة لخطوة أخرى في نفس اللغز.
-- اخلط ترتيب options عشوائيًا.
+Examples of the desired logic (do NOT reuse the same words; make new ones):
+- "بحر" -> "بخار" -> "غيوم" -> "مطر" -> "عشب" -> "خروف"
+- "ثلج" -> "برد" -> "معطف" -> "شتاء" -> "مدفأة"
 
-التلميح hint:
-- جملة قصيرة تساعد على نوع العلاقة العامة دون كشف الإجابات.
+Options for each step:
+- Exactly 3 options: [correct word + 2 plausible distractors].
+- options MUST include step.word exactly.
+- No duplicates; do not include startWord/endWord in options (unless it is the correct step.word; avoid that).
+- Distractors should match the domain and part-of-speech (convincing, not random).
 
-صيغة JSON المطلوبة (حصراً، بدون أي نص إضافي أو مفاتيح زائدة):
+Hint:
+- A general hint (Arabic) that helps without revealing any solution word.
+
+Output:
+- Return ONLY valid JSON (no Markdown, no extra text).
+- Do not add extra keys beyond:
 {
-  "startWord": "كلمة",
-  "endWord": "كلمة",
+  "startWord": "...",
+  "endWord": "...",
   "steps": [
-    { "word": "كلمة", "options": ["...", "...", "...", "..."] }
+    { "word": "...", "options": ["...", "...", "..."] }
   ],
   "hint": "..."
-}`
-`
-========================
-أمثلة منطقية جيدة (للاسترشاد فقط)
-========================
+}`;
+  }
 
-مثال 1 (سبب/نتيجة – طبيعي):
-البداية: "بحر" → النهاية: "خروف"
-سلسلة ممكنة: بحر → بخار → غيوم → مطر → عشب → خروف
-(ملاحظة: كل انتقال بجملة واحدة: البحر يُنتج بخارًا، البخار يؤدي لغيوم، الغيوم تُنتج مطرًا، المطر يُنبت العشب، العشب غذاء للخروف)
+  return `You generate puzzles for the game "Wonder Link" in ENGLISH.
 
-مثال 2 (تدرّج زمني – واضح):
-البداية: "شمس" → النهاية: "ليل"
-سلسلة ممكنة: شمس → ضوء → نهار → غروب → ليل
+Puzzle goal: connect two semantically distant words via a chain of clear, logical intermediate steps.
 
-مثال 3 (غذاء/تصنيع – معرفة عامة):
-البداية: "قمح" → النهاية: "خبز"
-سلسلة ممكنة: قمح → طحين → عجين → فرن → خبز
+Level: ${level}
+Difficulty: ${difficulty}
+Steps (steps.length): ${min}-${max}
 
-مثال 4 (استخدام/أداة – يومي):
-البداية: "مطر" → النهاية: "مظلة"
-سلسلة ممكنة: مطر → بلل → حماية → غطاء → مظلة
-(أو: مطر → شارع → بلل → حماية → مظلة حسب المستوى)
+Hard constraints:
+- startWord/endWord must be real concepts/objects, not UI/meta words (e.g., "start", "end", "word", "step", "puzzle", "question", "answer").
+- Each step must relate to BOTH the previous and next step (meaning/cause/use/part-whole/shared domain).
+- Avoid trivial links (pure synonym-only, single-letter changes, overly generic words like "thing/concept").
+- Avoid proper nouns and sensitive topics.
 
-========================
-أمثلة سيئة (ممنوع)
-========================
-- روابط عشوائية: "قلم" → "سيارة" بدون سلسلة معرفة عامة واضحة.
-- ترادف مباشر: "فرح" → "سعادة" (تافه).
-- كلمات متعددة: "بيت جميل" (مرفوض لأنها ليست كلمة واحدة).
-- مشتتات تصبح صحيحة: إذا كانت الإجابة "طحين" فلا تضع "دقيق" كمشتت (قد يُعتبر صحيحًا).
+Options for each step:
+- Exactly 3 options: [correct word + 2 plausible distractors].
+- options MUST include step.word exactly.
+- No duplicates; do not include startWord/endWord in options (unless it is the correct step.word; avoid that).
+- Distractors should match the domain and part-of-speech (convincing, not random).
 
-========================
-التشيك الذاتي الداخلي (نفّذه قبل الإخراج، ولا تطبعه)
-========================
-قبل أن تُخرج JSON:
-1) تأكد أن startWord/endWord/كل step.word = كلمة واحدة.
-2) تأكد أن steps.length ضمن نطاق المستوى.
-3) تأكد عدم تكرار أي كلمة في السلسلة (بما فيها start/end).
-4) تأكد أن كل options طولها 4 وفريدة.
-5) تأكد أن step.word موجود ضمن options.
-6) تأكد أن كل مشتت ليس صحيحًا ولا يصنع انتقالًا منطقيًا بديلًا مع الكلمة السابقة.
-7) تأكد أن كل انتقال يمكن شرحه بجملة واحدة من معرفة عامة.
-إذا فشل أي بند: أرجِع {"error":"NO_SAFE_PUZZLE","reason":"failed_self_check:<مختصر>"}.
+Hint:
+- A general hint that helps without revealing any solution word.
 
-الآن: ولّد لغزًا واحدًا فقط وأرجِع JSON فقط.;
+Output:
+- Return ONLY valid JSON (no Markdown, no extra text).
+- Do not add extra keys beyond:
+{
+  "startWord": "...",
+  "endWord": "...",
+  "steps": [
+    { "word": "...", "options": ["...", "...", "..."] }
+  ],
+  "hint": "..."
+}`;
+}
 
+export function buildUserPrompt({ language = 'en', level = 1, seed } = {}) {
+  const isArabic = language === 'ar';
+  const difficulty = difficultyLabel(level);
+  const { min, max } = stepsMinMax(level);
+  const seedLine = seed == null ? '' : `\nSeed: ${seed}`;
 
-// export const ARABIC_PROMPT = أنت محرك ألعاب "الرابط العجيب". مهمتك توليد ألغاز ربط الكلمات بالعربية.
+  if (isArabic) {
+    return `Create a fresh, non-repetitive ARABIC puzzle for level ${level} (${difficulty}).
+Use common Modern Standard Arabic words; prefer single-word steps (max 2 words).
+Steps length must be within ${min}-${max}.
+Make the link non-obvious but fair and logically defensible; distractors must be plausible, not random.
+Avoid UI/meta words like: بداية/نهاية/خطوة/لغز.${seedLine}`;
+  }
 
-// المستوى: {{level}}
-// الصعوبة: {{difficulty}}
+  return `Create a fresh, non-repetitive ENGLISH puzzle for level ${level} (${difficulty}).
+Use common everyday words; prefer single-word steps (max 2 words).
+Steps length must be within ${min}-${max}.
+Make the link non-obvious but fair and logically defensible; distractors must be plausible, not random.${seedLine}`;
+}
 
-// قواعد اللعبة:
-// 1. اختر كلمة بداية وكلمة نهاية مرتبطتان منطقياً
-// 2. أنشئ 3-5 خطوات وسيطة تربط بينهما بشكل منطقي
-// 3. كل خطوة يجب أن تكون مرتبطة بالخطوة السابقة واللاحقة
-// 4. لكل خطوة، وفر 4 خيارات: الإجابة الصحيحة + 3 خيارات خاطئة مقنعة
-
-// صيغة JSON المطلوبة:
-// {
-//   "startWord": "كلمة البداية",
-//   "endWord": "كلمة النهاية",
-//   "steps": [
-//     {
-//       "word": "الكلمة الصحيحة",
-//       "options": ["الكلمة الصحيحة", "خيار خاطئ 1", "خيار خاطئ 2", "خيار خاطئ 3"]
-//     }
-//   ],
-//   "hint": "تلميح مفيد للاعب"
-// }
-
-// ملاحظة: اخلط ترتيب الخيارات عشوائياً. أرجع JSON فقط بدون أي نص إضافي.`;
-
-// export const ENGLISH_PROMPT = `You are the game engine for "Wonder Link". Generate word connection puzzles in English.
-
-// Level: {{level}}
-// Difficulty: {{difficulty}}
-
-// Game Rules:
-// 1. Choose a start word and end word that are logically connected
-// 2. Create 3-5 intermediate steps that connect them logically
-// 3. Each step must relate to both the previous and next step
-// 4. For each step, provide 4 options: the correct answer + 3 convincing wrong answers
-
-// Required JSON format:
-// {
-//   "startWord": "starting word",
-//   "endWord": "ending word",
-//   "steps": [
-//     {
-//       "word": "correct word",
-//       "options": ["correct word", "wrong option 1", "wrong option 2", "wrong option 3"]
-//     }
-//   ],
-//   "hint": "helpful hint for the player"
-// }
-
-// Note: Shuffle the options randomly. Return ONLY valid JSON, no extra text.`;
-
+export function expectedStepsMinMax(level) {
+  return stepsMinMax(level);
+}

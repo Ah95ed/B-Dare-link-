@@ -3,10 +3,15 @@ main = "src/index.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+[ai]
+binding = "AI"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "wonder-link-db"
 
 [vars]
 JWT_SECRET = "4ce5261903852d08596e8426f5bbf5044fb8b4c13b9ce9c978817b3cf77c76f6"
-
+AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+OPENAI_MODEL = "gpt-4o-mini"
+PUZZLE_BANK_MIN = "30"

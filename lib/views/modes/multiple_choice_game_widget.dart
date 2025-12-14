@@ -176,6 +176,9 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
                   _currentStepIndex = 0;
                 });
                 _generateOptions();
+                if (mounted && provider.isLevelComplete) {
+                  _showLevelCompleteDialog(context, isArabic);
+                }
               });
             },
             child: const Text("Next"),
@@ -185,13 +188,63 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     );
   }
 
+  void _showLevelCompleteDialog(BuildContext context, bool isArabic) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text("✅"),
+        content: Text(
+          isArabic
+              ? "تم إكمال المرحلة! تم فتح المرحلة التالية."
+              : "Level complete! The next level is unlocked.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              // Close dialog, then pop GamePlayView and GameModeSelectionView back to LevelsView.
+              Navigator.of(context)
+                ..pop()
+                ..pop()
+                ..pop();
+            },
+            child: Text(isArabic ? "العودة للمراحل" : "Back to levels"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<GameProvider>(context);
+    final isArabic =
+        Provider.of<LocaleProvider>(context).locale.languageCode == 'ar';
     final puzzle = provider.currentPuzzle;
 
     // If no puzzle, check if it's an error or actually complete
     if (puzzle == null) {
+      if (provider.isLevelComplete) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                isArabic ? "تم إكمال المرحلة!" : "Level Complete!",
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => _showLevelCompleteDialog(context, isArabic),
+                child: Text(isArabic ? "متابعة" : "Continue"),
+              ),
+            ],
+          ),
+        );
+      }
+
       if (provider.errorMessage != null) {
         return Center(
           child: Column(
@@ -221,8 +274,6 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
       );
     }
 
-    final isArabic =
-        Provider.of<LocaleProvider>(context).locale.languageCode == 'ar';
     final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
 
     // Safety check if we switched puzzles and index is out of bounds

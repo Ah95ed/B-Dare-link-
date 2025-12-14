@@ -103,7 +103,9 @@ class _GamePlayViewState extends State<GamePlayView> {
               alignment: Alignment.center,
               children: [
                 CircularProgressIndicator(
-                  value: provider.timeLeft / 60,
+                  value: provider.timeLimit > 0
+                      ? (provider.timeLeft / provider.timeLimit)
+                      : 0,
                   color: provider.timeLeft < 10 ? Colors.red : Colors.green,
                   backgroundColor: Colors.grey.shade300,
                 ),
