@@ -145,7 +145,7 @@ class GameProvider extends ChangeNotifier {
           final p = level.puzzles.first;
           final steps = isArabic ? p.stepsAr : p.stepsEn;
           debugPrint(
-            "Puzzle #${i + 1}: ${isArabic ? p.startWordAr : p.startWordEn} -> ${isArabic ? p.endWordAr : p.endWordEn} [Steps: ${steps.length}]",
+            "Puzzle #${i + 1}: ${isArabic ? p.startWordAr : p.startWordEn} -> ${isArabic ? p.endWordAr : p.endWordEn} [Steps: ${steps.length}] (id: ${p.puzzleId})",
           );
         } else {
           debugPrint("Puzzle #${i + 1}: FAILED");
@@ -169,15 +169,37 @@ class GameProvider extends ChangeNotifier {
     if (level.puzzles.isEmpty) {
       debugPrint("Fetching puzzles for Level ${level.id}...");
       List<GamePuzzle> generatedPuzzles = [];
-      // Generate 5 puzzles for the level
-      for (int i = 0; i < 5; i++) {
+      // Generate up to 5 unique puzzles for the level, avoid duplicates from backend
+      const int desiredCount = 5;
+      const int maxAttempts = 25; // allow extra attempts to avoid duplicates
+      int attempts = 0;
+      final seenKeys = <String>{};
+
+      while (generatedPuzzles.length < desiredCount && attempts < maxAttempts) {
+        attempts++;
         final newLevelData = await _apiService.generateLevel(
           isArabic,
           level.id,
         );
-        if (newLevelData != null && newLevelData.puzzles.isNotEmpty) {
-          generatedPuzzles.add(newLevelData.puzzles.first);
+        if (newLevelData == null || newLevelData.puzzles.isEmpty) continue;
+
+        final p = newLevelData.puzzles.first;
+        // Prefer backend-provided puzzleId for deduplication when available
+        final key = (p.puzzleId != null && p.puzzleId!.isNotEmpty)
+            ? p.puzzleId!
+            : (isArabic
+                  ? '${p.startWordAr}|${p.endWordAr}|${p.stepsAr.map((s) => s.word).join(',')}'
+                  : '${p.startWordEn}|${p.endWordEn}|${p.stepsEn.map((s) => s.word).join(',')}');
+
+        if (seenKeys.contains(key)) {
+          debugPrint(
+            'Duplicate puzzle received (attempt $attempts), skipping.',
+          );
+          continue;
         }
+
+        seenKeys.add(key);
+        generatedPuzzles.add(p);
       }
 
       if (generatedPuzzles.isEmpty) {

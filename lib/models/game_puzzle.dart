@@ -2,6 +2,7 @@ class GamePuzzle {
   final String startWordAr;
   final String endWordAr;
   final List<PuzzleStep> stepsAr;
+  final String? puzzleId;
 
   final String startWordEn;
   final String endWordEn;
@@ -11,6 +12,7 @@ class GamePuzzle {
   final String hintEn;
 
   GamePuzzle({
+    this.puzzleId,
     required this.startWordAr,
     required this.endWordAr,
     required this.stepsAr,

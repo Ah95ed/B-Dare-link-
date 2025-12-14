@@ -87,6 +87,7 @@ class CloudflareApiService {
         }
 
         final puzzle = GamePuzzle(
+          puzzleId: data['puzzleId']?.toString(),
           startWordAr: isArabic ? (data['startWord'] ?? '') : "مرحلة",
           endWordAr: isArabic ? (data['endWord'] ?? '') : "جديدة",
           stepsAr: isArabic ? steps : [],

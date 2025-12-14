@@ -15,17 +15,64 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
   // Track current step index user is solving
   int _currentStepIndex = 0;
   List<String> _currentOptions = [];
+  // Track provider and last puzzle key to detect changes
+  late final GameProvider? _provider;
+  String? _lastPuzzleKey;
 
   @override
   void initState() {
     super.initState();
     _generateOptions();
+    // Listen to provider changes so we can regenerate options
+    // when the backend returns a new puzzle
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _provider = Provider.of<GameProvider>(context, listen: false);
+      _provider?.addListener(_onProviderChanged);
+    });
   }
 
   @override
   void didUpdateWidget(covariant MultipleChoiceGameWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     _generateOptions();
+  }
+
+  @override
+  void dispose() {
+    // Clean up provider listener
+    try {
+      _provider?.removeListener(_onProviderChanged);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  void _onProviderChanged() {
+    if (!mounted) return;
+    final provider =
+        _provider ?? Provider.of<GameProvider>(context, listen: false);
+    final puzzle = provider.currentPuzzle;
+    if (puzzle == null) return;
+
+    // Build a simple key to detect puzzle identity changes
+    final isArabic =
+        Provider.of<LocaleProvider>(
+          context,
+          listen: false,
+        ).locale.languageCode ==
+        'ar';
+    final start = isArabic ? puzzle.startWordAr : puzzle.startWordEn;
+    final end = isArabic ? puzzle.endWordAr : puzzle.endWordEn;
+    final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
+    final key =
+        '$start|$end|${steps.length}|${steps.map((s) => s.word).join(',')}';
+
+    if (key != _lastPuzzleKey) {
+      _lastPuzzleKey = key;
+      setState(() {
+        _currentStepIndex = 0;
+      });
+      _generateOptions();
+    }
   }
 
   void _generateOptions() {

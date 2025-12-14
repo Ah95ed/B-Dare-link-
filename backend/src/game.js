@@ -8,18 +8,9 @@ export async function generateLevel(request, env, headers) {
   const apiKey = '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'; // Demo key – replace in prod
   const model = 'llama-3.1-8b-instant';
 
-  // Try cached puzzle first (need at least 3 cached variants)
-  if (env.DB) {
-    const cached = await env.DB.prepare(
-      'SELECT * FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT 1'
-    ).bind(level, language).first();
-    const count = await env.DB.prepare(
-      'SELECT COUNT(*) as total FROM puzzles WHERE level = ? AND lang = ?'
-    ).bind(level, language).first();
-    if (cached && count && count.total >= 3) {
-      return new Response(cached.json, { headers: { ...headers, 'Content-Type': 'application/json' } });
-    }
-  }
+  // Always generate a fresh puzzle via the model and persist it to the DB.
+  // Previously we returned a random cached puzzle when the DB had >=3 entries;
+  // to ensure uniqueness and server-side ownership we now always generate and store.
 
   const systemPrompt = isArabic
     ? `أنت محرك ألعاب "الرابط العجيب". مهمتك توليد ألغاز ربط الكلمات بالعربية.
@@ -93,33 +84,59 @@ Note: Shuffle the options randomly. Return ONLY valid JSON, no extra text.`;
   const data = await response.json();
   const content = data.choices[0].message.content;
   const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
+  // Ensure the generated JSON includes a stable puzzleId before caching/returning
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    // If the model returned invalid JSON, forward as-is (fallback handler will catch it)
+    parsed = null;
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    if (!parsed.puzzleId) {
+      // Create a reasonably unique id: timestamp-rand
+      parsed.puzzleId = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+    }
+  }
+
+  const finalJson = parsed ? JSON.stringify(parsed) : jsonStr;
 
   // Cache the generated puzzle (allow multiple per level)
   if (env.DB) {
     try {
       await env.DB.prepare('INSERT INTO puzzles (level, lang, json) VALUES (?, ?, ?)')
-        .bind(level, language, jsonStr)
+        .bind(level, language, finalJson)
         .run();
     } catch (e) {
       console.log('Cache insert failed:', e);
     }
   }
 
-  return new Response(jsonStr, { headers: { ...headers, 'Content-Type': 'application/json' } });
+  return new Response(finalJson, { headers: { ...headers, 'Content-Type': 'application/json' } });
 }
 
 /** Validate a submitted solution against stored puzzle */
 export async function submitSolution(request, env, headers) {
   // Expected payload: { language: 'ar'|'en', level: number, steps: [{word:string}] }
-  const { language = 'ar', level = 1, steps } = await request.json();
+  const body = await request.json();
+  const { language = 'ar', level = 1, steps, puzzleId } = body;
   if (!Array.isArray(steps) || steps.length === 0) {
     return errorResponse('Missing or invalid steps', 400);
   }
 
-  // Retrieve stored puzzle JSON
-  const row = await env.DB.prepare('SELECT json FROM puzzles WHERE level = ? AND lang = ? LIMIT 1')
-    .bind(Number(level), language)
-    .first();
+  // Retrieve stored puzzle JSON. Prefer lookup by puzzleId if provided.
+  let row;
+  if (puzzleId) {
+    row = await env.DB.prepare('SELECT json FROM puzzles WHERE level = ? AND lang = ? AND json LIKE ? LIMIT 1')
+      .bind(Number(level), language, `%\"puzzleId\":\"${puzzleId}\"%`)
+      .first();
+  }
+  if (!row) {
+    row = await env.DB.prepare('SELECT json FROM puzzles WHERE level = ? AND lang = ? ORDER BY created_at DESC LIMIT 1')
+      .bind(Number(level), language)
+      .first();
+  }
   if (!row) {
     return errorResponse('Puzzle not found', 404);
   }
