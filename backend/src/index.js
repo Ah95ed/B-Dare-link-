@@ -1,6 +1,6 @@
 // index.js – Cloudflare Worker entry point (modularized)
 import { CORS_HEADERS, errorResponse } from './utils.js';
-import { register, login, getUserFromRequest, updateProfile, deleteAccount } from './auth.js';
+import { register, login, getUserFromRequest, updateProfile, deleteAccount, resetPassword } from './auth.js';
 import { getProgress, saveProgress } from './progress.js';
 import { generateLevel, submitSolution } from './game.js';
 
