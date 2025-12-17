@@ -1,13 +1,18 @@
 // auth.js – authentication related handlers for the Worker
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { CORS_HEADERS, jsonResponse, errorResponse } from './utils.js';
+import { CORS_HEADERS, jsonResponse, errorResponse, JWT_SECRET } from './utils.js';
 
 /** Register a new user */
 export async function register(request, env) {
   const { username, email, password } = await request.json();
   if (!username || !email || !password) {
     return errorResponse('Missing fields', 400);
+  }
+
+  if (!env || !env.DB) {
+    console.error('Register handler: DB binding is not configured (env.DB is missing)');
+    return errorResponse('Server misconfiguration: database not available', 500);
   }
 
   const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?')
@@ -26,21 +31,36 @@ export async function register(request, env) {
     const token = jwt.sign({ id: newUser.id, email: newUser.email }, env.JWT_SECRET || JWT_SECRET, { expiresIn: '30d' });
     return jsonResponse({ token, user: { id: newUser.id, username: newUser.username, email: newUser.email } }, 201);
   } catch (e) {
-    return errorResponse(e.message, 500);
+    console.error('Register handler error:', e);
+    return errorResponse(e.message || 'Internal Server Error', 500);
   }
 }
 
 /** Login existing user */
 export async function login(request, env) {
-  const { email, password } = await request.json();
-  const user = await env.DB.prepare('SELECT * FROM users WHERE email = ?')
-    .bind(email)
-    .first();
-  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-    return errorResponse('Invalid credentials', 401);
+  try {
+    if (!env || !env.DB) {
+      console.error('Login handler: DB binding is not configured (env.DB is missing)');
+      return errorResponse('Server misconfiguration: database not available', 500);
+    }
+    const { email, password } = await request.json();
+    if (!email || !password) return errorResponse('Missing fields', 400);
+
+    const user = await env.DB.prepare('SELECT * FROM users WHERE email = ?')
+      .bind(email)
+      .first();
+
+    if (!user) return errorResponse('Invalid credentials', 401);
+
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) return errorResponse('Invalid credentials', 401);
+
+    const token = jwt.sign({ id: user.id, email: user.email }, env.JWT_SECRET || JWT_SECRET, { expiresIn: '30d' });
+    return jsonResponse({ token, user: { id: user.id, username: user.username, email: user.email, total_score: user.total_score } });
+  } catch (e) {
+    console.error('Login handler error:', e);
+    return errorResponse(e.message || 'Internal Server Error', 500);
   }
-  const token = jwt.sign({ id: user.id, email: user.email }, env.JWT_SECRET || JWT_SECRET, { expiresIn: '30d' });
-  return jsonResponse({ token, user: { id: user.id, username: user.username, email: user.email, total_score: user.total_score } });
 }
 
 /** Extract user from Authorization header */
@@ -49,11 +69,16 @@ export async function getUserFromRequest(request, env) {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   const token = authHeader.split(' ')[1];
   try {
+    if (!env || !env.DB) {
+      console.error('getUserFromRequest: DB binding missing');
+      return null;
+    }
     const decoded = jwt.verify(token, env.JWT_SECRET || JWT_SECRET);
     return await env.DB.prepare('SELECT id, username, email, total_score, current_level_id FROM users WHERE id = ?')
       .bind(decoded.id)
       .first();
   } catch (e) {
+    console.error('getUserFromRequest jwt verify error:', e);
     return null;
   }
 }

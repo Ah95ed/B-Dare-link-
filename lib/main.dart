@@ -6,6 +6,7 @@ import 'core/app_theme.dart';
 import 'controllers/game_provider.dart';
 import 'controllers/locale_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/competition_provider.dart';
 import 'l10n/app_localizations.dart';
 
 void main() {
@@ -24,6 +25,10 @@ class WonderLinkApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, GameProvider>(
           create: (_) => GameProvider(),
           update: (_, auth, game) => game!..updateAuthProvider(auth),
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, CompetitionProvider>(
+          create: (_) => CompetitionProvider(),
+          update: (_, auth, competition) => competition!..setAuthProvider(auth),
         ),
       ],
       child: Consumer<LocaleProvider>(

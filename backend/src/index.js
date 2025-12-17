@@ -3,6 +3,18 @@ import { CORS_HEADERS, errorResponse } from './utils.js';
 import { register, login, getUserFromRequest, updateProfile, deleteAccount, resetPassword } from './auth.js';
 import { getProgress, saveProgress } from './progress.js';
 import { generateLevel, submitSolution } from './game.js';
+import { listPuzzles, deletePuzzle, regeneratePuzzle, generateBulkPuzzles } from './admin.js';
+import {
+  createRoom,
+  joinRoom,
+  getRoomStatus,
+  setReady,
+  submitAnswer,
+  getLeaderboard,
+  createCompetition,
+  joinCompetition,
+  getActiveCompetitions,
+} from './competitions.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -57,6 +69,49 @@ export default {
       }
       if ((path === '/submit-solution' || path === '/api/submit') && request.method === 'POST') {
         return await submitSolution(request, env, CORS_HEADERS);
+      }
+
+      // ---------- Admin ----------
+      if (path.startsWith('/admin/puzzles')) {
+        if (request.method === 'GET') return await listPuzzles(request, env);
+        if (request.method === 'DELETE') return await deletePuzzle(request, env);
+      }
+      if (path === '/admin/puzzles/regenerate' && request.method === 'POST') {
+        return await regeneratePuzzle(request, env, CORS_HEADERS);
+      }
+      if (path === '/admin/puzzles/generate-bulk' && request.method === 'POST') {
+        return await generateBulkPuzzles(request, env, CORS_HEADERS);
+      }
+
+      // ---------- Competitions & Rooms ----------
+      if (path === '/competitions' && request.method === 'GET') {
+        return await getActiveCompetitions(request, env);
+      }
+      if (path === '/competitions' && request.method === 'POST') {
+        return await createCompetition(request, env);
+      }
+      if (path === '/competitions/join' && request.method === 'POST') {
+        return await joinCompetition(request, env);
+      }
+
+      // Rooms
+      if (path === '/rooms' && request.method === 'POST') {
+        return await createRoom(request, env);
+      }
+      if (path === '/rooms/join' && request.method === 'POST') {
+        return await joinRoom(request, env);
+      }
+      if (path === '/rooms/status' && request.method === 'GET') {
+        return await getRoomStatus(request, env);
+      }
+      if (path === '/rooms/ready' && request.method === 'POST') {
+        return await setReady(request, env);
+      }
+      if (path === '/rooms/answer' && request.method === 'POST') {
+        return await submitAnswer(request, env);
+      }
+      if (path === '/rooms/leaderboard' && request.method === 'GET') {
+        return await getLeaderboard(request, env);
       }
 
       // No route matched

@@ -7,6 +7,8 @@ import 'levels_view.dart';
 import '../providers/auth_provider.dart';
 import 'auth/login_screen.dart';
 import 'profile/profile_screen.dart';
+import 'admin/admin_page.dart';
+import 'competitions/competitions_view.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
@@ -74,61 +76,76 @@ class HomeView extends StatelessWidget {
                   // Levels Button
                   Consumer<AuthProvider>(
                     builder: (context, auth, _) {
-                      return OutlinedButton(
-                        onPressed: () {
-                          // if (auth.isAuthenticated) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LevelsView(),
+                      return Column(
+                        children: [
+                          OutlinedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const LevelsView(),
+                                ),
+                              );
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 40,
+                                vertical: 15,
                               ),
-                            );
-                          // } else {
-                            // Show login prompt
-                          //   ScaffoldMessenger.of(context).showSnackBar(
-                          //     SnackBar(
-                          //       content: Text(
-                          //         isArabic
-                          //             ? "يجب تسجيل الدخول أولاً للعب"
-                          //             : "Please login to play",
-                          //       ),
-                          //       action: SnackBarAction(
-                          //         label: isArabic ? "تسجيل الدخول" : "Login",
-                          //         onPressed: () {
-                          //           Navigator.push(
-                          //             context,
-                          //             MaterialPageRoute(
-                          //               builder: (_) => const LoginScreen(),
-                          //             ),
-                          //           );
-                          //         },
-                          //       ),
-                          //     ),
-                          //   );
-                          // }
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 40,
-                            vertical: 15,
+                              side: BorderSide(
+                                color: Theme.of(context).primaryColor,
+                                width: 2,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                            child: Text(
+                              isArabic ? "المراحل" : "Levels",
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                            ),
                           ),
-                          side: BorderSide(
-                            color: Theme.of(context).primaryColor,
-                            width: 2,
+                          SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const CompetitionsView(),
+                                ),
+                              );
+                            },
+                            icon: Icon(Icons.emoji_events),
+                            label: Text(
+                              isArabic ? "المسابقات" : "Competitions",
+                              style: TextStyle(fontSize: 18),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 40,
+                                vertical: 15,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                        child: Text(
-                          isArabic ? "المراحل" : "Levels",
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Theme.of(context).primaryColor,
-                          ),
-                        ),
+                        ],
                       );
                     },
+                  ),
+                  SizedBox(height: 16),
+                  MaterialButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AdminPage()),
+                      );
+                    },
+                    child: Text('Admin'),
                   ),
                 ],
               ),
@@ -175,6 +192,30 @@ class HomeView extends StatelessWidget {
                   icon: Icon(
                     auth.isAuthenticated ? Icons.account_circle : Icons.login,
                     size: 30,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                );
+              },
+            ),
+          ),
+          // Admin Button (visible to admin user id == 1)
+          Positioned(
+            top: 50,
+            right: 70,
+            child: Consumer<AuthProvider>(
+              builder: (context, auth, _) {
+                final isAdmin = auth.user != null && (auth.user!['id'] == 1);
+                if (!isAdmin) return const SizedBox.shrink();
+                return IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AdminPage()),
+                    );
+                  },
+                  icon: Icon(
+                    Icons.admin_panel_settings,
+                    size: 28,
                     color: Theme.of(context).primaryColor,
                   ),
                 );
