@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/competition_service.dart';
+import '../services/realtime_service.dart';
 import '../providers/auth_provider.dart';
 
 class CompetitionProvider with ChangeNotifier {
   final CompetitionService _service = CompetitionService();
+  final RealtimeService _realtime = RealtimeService();
   AuthProvider? _authProvider;
 
   void setAuthProvider(AuthProvider auth) {
@@ -19,10 +21,13 @@ class CompetitionProvider with ChangeNotifier {
   bool _isReady = false;
   bool _gameStarted = false;
   bool _gameFinished = false;
-  Timer? _pollTimer;
   int _score = 0;
   int _puzzlesSolved = 0;
   DateTime? _puzzleStartTime;
+
+  // Real-time states
+  List<Map<String, dynamic>> _messages = [];
+  String? _solvedByUsername;
 
   Map<String, dynamic>? get currentRoom => _currentRoom;
   List<Map<String, dynamic>> get roomParticipants => _roomParticipants;
@@ -33,10 +38,14 @@ class CompetitionProvider with ChangeNotifier {
   bool get gameFinished => _gameFinished;
   int get score => _score;
   int get puzzlesSolved => _puzzlesSolved;
+  List<Map<String, dynamic>> get messages => _messages;
+  String? get solvedByUsername => _solvedByUsername;
 
   // Competition state
   List<Map<String, dynamic>> _activeCompetitions = [];
   List<Map<String, dynamic>> get activeCompetitions => _activeCompetitions;
+
+  StreamSubscription? _realtimeSub;
 
   Future<void> createRoom({
     String? name,
@@ -52,7 +61,7 @@ class CompetitionProvider with ChangeNotifier {
         timePerPuzzle: timePerPuzzle,
       );
       _currentRoom = result['room'];
-      _startPolling();
+      _connectRealtime();
       notifyListeners();
     } catch (e) {
       rethrow;
@@ -63,11 +72,94 @@ class CompetitionProvider with ChangeNotifier {
     try {
       final result = await _service.joinRoom(code);
       _currentRoom = result['room'];
-      _startPolling();
+      _connectRealtime();
       notifyListeners();
     } catch (e) {
       rethrow;
     }
+  }
+
+  void _connectRealtime() async {
+    if (_currentRoom == null || _authProvider == null) return;
+
+    final token = await _authProvider!.getToken();
+    if (token == null) return;
+
+    final roomId = _currentRoom!['id'];
+    // Assuming base URL from service, convert to wss
+    final baseUrl = "wonder-link-backend.amhmeed31.workers.dev";
+    final wsUrl = "wss://$baseUrl/rooms/ws?roomId=$roomId";
+
+    _realtime.connect(wsUrl, token);
+
+    _realtimeSub?.cancel();
+    _realtimeSub = _realtime.events.listen((event) {
+      _handleRealtimeEvent(event);
+    });
+  }
+
+  void _handleRealtimeEvent(Map<String, dynamic> event) {
+    switch (event['type']) {
+      case 'init':
+        _messages = List<Map<String, dynamic>>.from(event['messages'] ?? []);
+        _roomParticipants = List<Map<String, dynamic>>.from(
+          event['participants'] ?? [],
+        );
+        _updateGameState(event['gameState']);
+        break;
+      case 'chat':
+        _messages.add(event);
+        break;
+      case 'user_joined':
+      case 'user_left':
+        _roomParticipants = List<Map<String, dynamic>>.from(
+          event['participants'] ?? [],
+        );
+        break;
+      case 'game_started':
+        _gameStarted = true;
+        _currentPuzzleIndex = 0;
+        _solvedByUsername = null;
+        _gameFinished = false;
+        // The game UI will request the first puzzle if it's not in the event
+        break;
+      case 'puzzle_solved_first':
+        _solvedByUsername = event['username'];
+        if (event['userId'] == _authProvider?.userId.toString()) {
+          // I solved it first! (Optional: play sound)
+        }
+        break;
+      case 'new_puzzle':
+        _currentPuzzleIndex = event['gameState']['currentPuzzleIndex'];
+        _solvedByUsername = null;
+        _puzzleStartTime = DateTime.now();
+        break;
+      case 'game_finished':
+        _gameFinished = true;
+        break;
+    }
+    notifyListeners();
+  }
+
+  void _updateGameState(Map<String, dynamic> gameState) {
+    _gameStarted = gameState['status'] == 'active';
+    _gameFinished = gameState['status'] == 'finished';
+    _currentPuzzleIndex = gameState['currentPuzzleIndex'] ?? 0;
+  }
+
+  Future<void> sendMessage(String text) async {
+    _realtime.send({'type': 'chat', 'text': text});
+  }
+
+  Future<void> startGame() async {
+    _realtime.send({'type': 'start_game'});
+  }
+
+  Future<void> solvePuzzle(int puzzleIndex) async {
+    _realtime.send({'type': 'solve_puzzle', 'puzzleIndex': puzzleIndex});
+
+    // Also submit to DB for persistence
+    // (This part will be handled in the Game UI logic)
   }
 
   Future<void> setReady(bool ready) async {
@@ -88,7 +180,6 @@ class CompetitionProvider with ChangeNotifier {
         ? DateTime.now().difference(_puzzleStartTime!).inMilliseconds
         : 0;
 
-    // Get puzzle ID from room's current_puzzle_id
     final puzzleId = _currentRoom!['current_puzzle_id'] ?? 0;
 
     try {
@@ -101,19 +192,17 @@ class CompetitionProvider with ChangeNotifier {
       );
 
       if (result['isCorrect'] == true) {
-        _score = result['points'] ?? 0;
+        _score += result['points'] as int? ?? 0;
         _puzzlesSolved++;
+
+        // Notify others via WebSocket that I solved it
+        await solvePuzzle(_currentPuzzleIndex);
       }
 
       if (result['nextPuzzle'] != null) {
         _currentPuzzle = result['nextPuzzle'];
-        _currentPuzzleIndex++;
-        _puzzleStartTime = DateTime.now();
-      }
-
-      if (result['gameFinished'] == true) {
-        _gameFinished = true;
-        _stopPolling();
+        // _currentPuzzleIndex++ is handled by WebSocket event 'new_puzzle'
+        // to keep everyone synchronized.
       }
 
       notifyListeners();
@@ -122,51 +211,12 @@ class CompetitionProvider with ChangeNotifier {
     }
   }
 
-  void _startPolling() {
-    _stopPolling();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      _updateRoomStatus();
-    });
-  }
-
-  void _stopPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = null;
-  }
-
-  Future<void> _updateRoomStatus() async {
-    if (_currentRoom == null) return;
-
-    try {
-      final status = await _service.getRoomStatus(_currentRoom!['id']);
-      _roomParticipants = List<Map<String, dynamic>>.from(status['participants'] ?? []);
-
-      if (status['currentPuzzle'] != null && !_gameStarted) {
-        _gameStarted = true;
-        _currentPuzzle = status['currentPuzzle'];
-        _currentPuzzleIndex = 0;
-        _puzzleStartTime = DateTime.now();
-      } else if (status['currentPuzzle'] != null && _currentPuzzleIndex < status['room']['current_puzzle_index']) {
-        _currentPuzzle = status['currentPuzzle'];
-        _currentPuzzleIndex = status['room']['current_puzzle_index'];
-        _puzzleStartTime = DateTime.now();
-      }
-
-      if (status['room']['status'] == 'finished' && !_gameFinished) {
-        _gameFinished = true;
-        _stopPolling();
-      }
-
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Error polling room status: $e');
-    }
-  }
-
   Future<void> loadActiveCompetitions() async {
     try {
       final result = await _service.getActiveCompetitions();
-      _activeCompetitions = List<Map<String, dynamic>>.from(result['competitions'] ?? []);
+      _activeCompetitions = List<Map<String, dynamic>>.from(
+        result['competitions'] ?? [],
+      );
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading competitions: $e');
@@ -183,7 +233,8 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   void leaveRoom() {
-    _stopPolling();
+    _realtime.disconnect();
+    _realtimeSub?.cancel();
     _currentRoom = null;
     _roomParticipants = [];
     _currentPuzzle = null;
@@ -194,13 +245,15 @@ class CompetitionProvider with ChangeNotifier {
     _score = 0;
     _puzzlesSolved = 0;
     _puzzleStartTime = null;
+    _messages = [];
+    _solvedByUsername = null;
     notifyListeners();
   }
 
   @override
   void dispose() {
-    _stopPolling();
+    _realtime.dispose();
+    _realtimeSub?.cancel();
     super.dispose();
   }
 }
-

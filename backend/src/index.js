@@ -15,6 +15,9 @@ import {
   joinCompetition,
   getActiveCompetitions,
 } from './competitions.js';
+import { GroupRoom } from './room_do.js';
+
+export { GroupRoom };
 
 export default {
   async fetch(request, env, ctx) {
@@ -112,6 +115,27 @@ export default {
       }
       if (path === '/rooms/leaderboard' && request.method === 'GET') {
         return await getLeaderboard(request, env);
+      }
+
+      // WebSocket for Rooms (Real-time Chat & Game)
+      if (path === '/rooms/ws') {
+        const roomId = url.searchParams.get('roomId');
+        if (!roomId) return errorResponse('roomId required', 400);
+        
+        // Ensure user is authorized
+        const user = await getUserFromRequest(request, env);
+        if (!user) return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
+
+        const id = env.ROOM_DO.idFromName(roomId.toString());
+        const roomObject = env.ROOM_DO.get(id);
+        
+        // Append user info to URL for DO to use
+        const doUrl = new URL(request.url);
+        doUrl.pathname = '/ws';
+        doUrl.searchParams.set('userId', user.id);
+        doUrl.searchParams.set('username', user.username);
+        
+        return roomObject.fetch(new Request(doUrl, request));
       }
 
       // No route matched

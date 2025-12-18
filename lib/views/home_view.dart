@@ -9,6 +9,8 @@ import 'auth/login_screen.dart';
 import 'profile/profile_screen.dart';
 import 'admin/admin_page.dart';
 import 'competitions/competitions_view.dart';
+import 'groups/create_group_view.dart';
+import '../providers/competition_provider.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
@@ -127,6 +129,30 @@ class HomeView extends StatelessWidget {
                               padding: EdgeInsets.symmetric(
                                 horizontal: 40,
                                 vertical: 15,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 12),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const CreateGroupView(),
+                                ),
+                              );
+                            },
+                            icon: Icon(Icons.group_add),
+                            label: Text(
+                              isArabic ? 'إنشاء مجموعة' : 'Create Group',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 36,
+                                vertical: 12,
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(20),

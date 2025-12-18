@@ -22,7 +22,11 @@ dependencies:
     sdk: flutter
   shared_preferences:
   flutter_secure_storage:
-  email_otp: 
+  email_otp:
+  web_socket_channel: 
+  qr_flutter: 
+  share_plus:
+  mobile_scanner:
 
 dev_dependencies:
   flutter_test:

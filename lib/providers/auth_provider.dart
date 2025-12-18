@@ -10,6 +10,11 @@ class AuthProvider with ChangeNotifier {
   Map<String, dynamic>? get user => _user;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _user != null;
+  int? get userId => _user?['id'];
+
+  Future<String?> getToken() async {
+    return await _authService.getToken();
+  }
 
   AuthProvider() {
     _init();
