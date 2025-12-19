@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
-import '../../controllers/game_provider.dart';
-import '../../models/game_puzzle.dart';
-import '../../models/game_level.dart';
 
 class RoomGameView extends StatefulWidget {
   const RoomGameView({super.key});
@@ -14,18 +11,14 @@ class RoomGameView extends StatefulWidget {
 
 class _RoomGameViewState extends State<RoomGameView> {
   List<String> _selectedSteps = [];
-  int _currentStepIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     final competitionProvider = context.watch<CompetitionProvider>();
     final puzzle = competitionProvider.currentPuzzle;
-    final participants = competitionProvider.roomParticipants;
 
     if (puzzle == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final startWord = puzzle['startWord'] ?? '';
@@ -57,7 +50,10 @@ class _RoomGameViewState extends State<RoomGameView> {
                     const Text('النقاط'),
                     Text(
                       '${competitionProvider.score}',
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -66,7 +62,10 @@ class _RoomGameViewState extends State<RoomGameView> {
                     const Text('الألغاز المحلولة'),
                     Text(
                       '${competitionProvider.puzzlesSolved}',
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -93,7 +92,10 @@ class _RoomGameViewState extends State<RoomGameView> {
                             child: Text(
                               startWord,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
@@ -107,7 +109,10 @@ class _RoomGameViewState extends State<RoomGameView> {
                             child: Text(
                               endWord,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
@@ -142,7 +147,6 @@ class _RoomGameViewState extends State<RoomGameView> {
                   ...steps.asMap().entries.map((entry) {
                     final stepIndex = entry.key;
                     final step = entry.value;
-                    final word = step['word'] ?? '';
                     final options = List<String>.from(step['options'] ?? []);
 
                     return Card(
@@ -154,14 +158,17 @@ class _RoomGameViewState extends State<RoomGameView> {
                           children: [
                             Text(
                               'الخطوة ${stepIndex + 1}',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             const SizedBox(height: 8),
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: options.map((option) {
-                                final isSelected = _selectedSteps.length > stepIndex &&
+                                final isSelected =
+                                    _selectedSteps.length > stepIndex &&
                                     _selectedSteps[stepIndex] == option;
 
                                 return ChoiceChip(
@@ -170,9 +177,14 @@ class _RoomGameViewState extends State<RoomGameView> {
                                   onSelected: (selected) {
                                     setState(() {
                                       if (_selectedSteps.length <= stepIndex) {
-                                        _selectedSteps = List.filled(stepIndex + 1, '');
+                                        _selectedSteps = List.filled(
+                                          stepIndex + 1,
+                                          '',
+                                        );
                                       }
-                                      _selectedSteps[stepIndex] = selected ? option : '';
+                                      _selectedSteps[stepIndex] = selected
+                                          ? option
+                                          : '';
                                     });
                                   },
                                 );
@@ -188,7 +200,8 @@ class _RoomGameViewState extends State<RoomGameView> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _selectedSteps.length == steps.length &&
+                      onPressed:
+                          _selectedSteps.length == steps.length &&
                               _selectedSteps.every((s) => s.isNotEmpty)
                           ? () {
                               competitionProvider.submitAnswer(_selectedSteps);
@@ -233,13 +246,13 @@ class _RoomGameViewState extends State<RoomGameView> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            ...competitionProvider.roomParticipants.asMap().entries.map((entry) {
+            ...competitionProvider.roomParticipants.asMap().entries.map((
+              entry,
+            ) {
               final index = entry.key;
               final participant = entry.value;
               return ListTile(
-                leading: CircleAvatar(
-                  child: Text('${index + 1}'),
-                ),
+                leading: CircleAvatar(child: Text('${index + 1}')),
                 title: Text(participant['username'] ?? 'مجهول'),
                 trailing: Text('${participant['score'] ?? 0} نقطة'),
               );
@@ -250,4 +263,3 @@ class _RoomGameViewState extends State<RoomGameView> {
     );
   }
 }
-

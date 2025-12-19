@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
-import '../../providers/auth_provider.dart';
 import 'room_lobby_view.dart';
 import 'room_game_view.dart';
 
@@ -24,7 +23,6 @@ class _CompetitionsViewState extends State<CompetitionsView> {
   @override
   Widget build(BuildContext context) {
     final competitionProvider = context.watch<CompetitionProvider>();
-    final authProvider = context.watch<AuthProvider>();
 
     // If in a room, show room view
     if (competitionProvider.currentRoom != null) {
@@ -38,10 +36,38 @@ class _CompetitionsViewState extends State<CompetitionsView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('المسابقات والغرف'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => _showJoinRoomDialog(context),
+            tooltip: 'بحث عن غرفة',
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'ابحث بالكود (مثال: ABCD12)',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.grey.withOpacity(0.05),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              onSubmitted: (value) {
+                if (value.length == 6) {
+                  competitionProvider.joinRoom(value.toUpperCase());
+                }
+              },
+            ),
+          ),
           // Create Room Card
           Card(
             elevation: 2,
@@ -51,7 +77,11 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                 padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
-                    Icon(Icons.add_circle_outline, size: 40, color: Theme.of(context).primaryColor),
+                    Icon(
+                      Icons.add_circle_outline,
+                      size: 40,
+                      color: Theme.of(context).primaryColor,
+                    ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
@@ -86,7 +116,11 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                 padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
-                    Icon(Icons.meeting_room, size: 40, color: Theme.of(context).primaryColor),
+                    Icon(
+                      Icons.meeting_room,
+                      size: 40,
+                      color: Theme.of(context).primaryColor,
+                    ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
@@ -115,9 +149,9 @@ class _CompetitionsViewState extends State<CompetitionsView> {
           // Active Competitions
           Text(
             'المسابقات النشطة',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           if (competitionProvider.activeCompetitions.isEmpty)
@@ -138,14 +172,20 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                   trailing: competition['status'] == 'waiting'
                       ? ElevatedButton(
                           onPressed: () {
-                            competitionProvider.joinCompetition(competition['id']);
+                            competitionProvider.joinCompetition(
+                              competition['id'],
+                            );
                           },
                           child: const Text('انضم'),
                         )
                       : Text(
-                          competition['status'] == 'active' ? 'جارية' : 'منتهية',
+                          competition['status'] == 'active'
+                              ? 'جارية'
+                              : 'منتهية',
                           style: TextStyle(
-                            color: competition['status'] == 'active' ? Colors.green : Colors.grey,
+                            color: competition['status'] == 'active'
+                                ? Colors.green
+                                : Colors.grey,
                           ),
                         ),
                 ),
@@ -184,15 +224,19 @@ class _CompetitionsViewState extends State<CompetitionsView> {
           ElevatedButton(
             onPressed: () async {
               try {
-                await competitionProvider.createRoom(name: nameController.text.isEmpty ? null : nameController.text);
+                await competitionProvider.createRoom(
+                  name: nameController.text.isEmpty
+                      ? null
+                      : nameController.text,
+                );
                 if (context.mounted) {
                   Navigator.pop(context);
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('خطأ: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
                 }
               }
             },
@@ -234,15 +278,17 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                 return;
               }
               try {
-                await competitionProvider.joinRoom(codeController.text.toUpperCase());
+                await competitionProvider.joinRoom(
+                  codeController.text.toUpperCase(),
+                );
                 if (context.mounted) {
                   Navigator.pop(context);
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('خطأ: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
                 }
               }
             },
@@ -253,4 +299,3 @@ class _CompetitionsViewState extends State<CompetitionsView> {
     );
   }
 }
-

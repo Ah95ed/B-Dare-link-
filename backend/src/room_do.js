@@ -8,11 +8,13 @@ export class GroupRoom {
     this.sessions = [];
     this.roomData = null;
     this.messages = [];
+    this.hostId = null; // creator user id
     this.gameState = {
       status: 'waiting',
       currentPuzzleIndex: 0,
-      solvedBy: null, // userId of who solved it first
+      solvedBy: null, 
       lastPuzzleId: null,
+      readyUsers: {}, // userId -> boolean
     };
   }
 
@@ -30,24 +32,53 @@ export class GroupRoom {
 
       await this.handleSession(server, url.searchParams.get('userId'), url.searchParams.get('username'));
 
-      return new Response(null, { status: 101, webSocket: client });
+      const responseHeaders = new Headers();
+      const protocol = request.headers.get('Sec-WebSocket-Protocol');
+      if (protocol) {
+        responseHeaders.set('Sec-WebSocket-Protocol', protocol);
+      }
+
+      return new Response(null, { 
+        status: 101, 
+        webSocket: client,
+        headers: responseHeaders
+      });
     }
 
     return new Response('Not Found', { status: 404 });
   }
 
   async handleSession(ws, userId, username) {
+    console.log(`User ${username} (${userId}) attempting to connect`);
     ws.accept();
 
+    // First one to join is the host if not already set
+    if (!this.hostId) {
+      this.hostId = userId;
+      console.log(`Host assigned: ${userId}`);
+    }
+
+    // De-duplicate existing sessions for this user if any
+    this.sessions = this.sessions.filter(s => s.userId !== userId);
+    
     const session = { ws, userId, username };
     this.sessions.push(session);
+
+    const getParticipants = () => {
+      return this.sessions.map(s => ({ 
+        userId: s.userId, 
+        username: s.username,
+        isReady: !!this.gameState.readyUsers[s.userId]
+      }));
+    };
 
     // Send current state to new participant
     ws.send(JSON.stringify({
       type: 'init',
       messages: this.messages.slice(-50),
       gameState: this.gameState,
-      participants: this.sessions.map(s => ({ userId: s.userId, username: s.username }))
+      hostId: this.hostId,
+      participants: getParticipants()
     }));
 
     // Broadcast join
@@ -55,25 +86,37 @@ export class GroupRoom {
       type: 'user_joined',
       userId,
       username,
-      participants: this.sessions.map(s => ({ userId: s.userId, username: s.username }))
+      hostId: this.hostId,
+      participants: getParticipants()
     });
 
     ws.onmessage = async (msg) => {
       try {
+        console.log(`Received message from ${userId}: ${msg.data}`);
         const data = JSON.parse(msg.data);
         await this.handleMessage(session, data);
       } catch (err) {
+        console.error(`Error handling message: ${err.message}`);
         ws.send(JSON.stringify({ type: 'error', message: err.message }));
       }
     };
 
     ws.onclose = () => {
+      console.log(`Connection closed for user ${userId}`);
       this.sessions = this.sessions.filter(s => s !== session);
+      
+      // If host left, assign new host if anyone left
+      if (this.hostId === userId && this.sessions.length > 0) {
+        this.hostId = this.sessions[0].userId;
+        console.log(`Host reassigned to: ${this.hostId}`);
+      }
+
       this.broadcast({
         type: 'user_left',
         userId,
         username,
-        participants: this.sessions.map(s => ({ userId: s.userId, username: s.username }))
+        hostId: this.hostId,
+        participants: getParticipants()
       });
     };
   }
@@ -92,11 +135,42 @@ export class GroupRoom {
         this.broadcast(msg);
         break;
 
+      case 'toggle_ready':
+        this.gameState.readyUsers[session.userId] = data.isReady;
+        this.broadcast({
+          type: 'ready_status',
+          userId: session.userId,
+          isReady: data.isReady,
+          participants: this.sessions.map(s => ({ 
+            userId: s.userId, 
+            username: s.username,
+            isReady: !!this.gameState.readyUsers[s.userId]
+          }))
+        });
+
+        // Check if all are ready to start
+        const allReady = this.sessions.length >= 2 && this.sessions.every(s => this.gameState.readyUsers[s.userId]);
+        if (allReady && this.gameState.status === 'waiting') {
+          await this.startGame();
+        }
+        break;
+
+      case 'kick_user':
+        if (session.userId !== this.hostId) {
+          throw new Error('Only host can kick users');
+        }
+        const targetSession = this.sessions.find(s => s.userId === data.targetUserId);
+        if (targetSession) {
+          targetSession.ws.send(JSON.stringify({ type: 'kicked' }));
+          targetSession.ws.close(1000, 'Kicked by host');
+        }
+        break;
+
       case 'start_game':
-        this.gameState.status = 'active';
-        this.gameState.currentPuzzleIndex = 0;
-        this.gameState.solvedBy = null;
-        this.broadcast({ type: 'game_started', gameState: this.gameState });
+        if (session.userId !== this.hostId) {
+          throw new Error('Only host can manually start game');
+        }
+        await this.startGame();
         break;
 
       case 'solve_puzzle':
@@ -122,6 +196,13 @@ export class GroupRoom {
         this.broadcast({ type: 'game_finished', gameState: this.gameState });
         break;
     }
+  }
+
+  async startGame() {
+    this.gameState.status = 'active';
+    this.gameState.currentPuzzleIndex = 0;
+    this.gameState.solvedBy = null;
+    this.broadcast({ type: 'game_started', gameState: this.gameState });
   }
 
   broadcast(message) {

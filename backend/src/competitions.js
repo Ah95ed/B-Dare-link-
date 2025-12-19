@@ -39,21 +39,37 @@ export async function createRoom(request, env) {
   } while (true);
 
   try {
+    if (!env || !env.DB) {
+      console.error('createRoom: DB binding missing');
+      return errorResponse('Server misconfiguration: database missing', 500);
+    }
+
+    console.log('Creating room with:', { name, code, competitionId, maxParticipants, puzzleCount, timePerPuzzle, userId: user.id });
+
     const result = await env.DB.prepare(
       'INSERT INTO rooms (name, code, competition_id, max_participants, puzzle_count, time_per_puzzle, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
       .bind(name, code, competitionId, maxParticipants, puzzleCount, timePerPuzzle, user.id)
       .run();
 
+    if (!result.success) {
+      console.error('Failed to insert room:', result);
+      return errorResponse('Failed to create room in database', 500);
+    }
+
+    const roomId = result.meta.last_row_id;
+    console.log('Room created with ID:', roomId);
+
     // Add creator as participant
     await env.DB.prepare('INSERT INTO room_participants (room_id, user_id, is_ready) VALUES (?, ?, ?)')
-      .bind(result.meta.last_row_id, user.id, false)
+      .bind(roomId, user.id, 0) // SQLite uses 0/1 for boolean
       .run();
 
-    const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(result.meta.last_row_id).first();
+    const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(roomId).first();
 
     return jsonResponse({ success: true, room }, 201);
   } catch (e) {
+    console.error('createRoom error:', e);
     return errorResponse(e.message, 500);
   }
 }

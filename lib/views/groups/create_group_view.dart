@@ -62,8 +62,13 @@ class _CreateGroupViewState extends State<CreateGroupView> {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Text('Max participants:'),
-                const SizedBox(width: 8),
+                const Flexible(
+                  child: Text(
+                    'Max participants:',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
                 DropdownButton<int>(
                   value: _maxParticipants,
                   items: [4, 6, 8, 10]
@@ -71,9 +76,11 @@ class _CreateGroupViewState extends State<CreateGroupView> {
                       .toList(),
                   onChanged: (v) => setState(() => _maxParticipants = v ?? 6),
                 ),
-                const Spacer(),
-                const Text('Puzzles:'),
                 const SizedBox(width: 8),
+                const Flexible(
+                  child: Text('Puzzles:', overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 4),
                 DropdownButton<int>(
                   value: _puzzleCount,
                   items: [3, 5, 7, 10]

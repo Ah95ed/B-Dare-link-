@@ -23,10 +23,11 @@ dependencies:
   shared_preferences:
   flutter_secure_storage:
   email_otp:
-  web_socket_channel: 
-  qr_flutter: 
+  web_socket_channel:
+  qr_flutter:
   share_plus:
   mobile_scanner:
+  app_links: ^6.3.2
 
 dev_dependencies:
   flutter_test:

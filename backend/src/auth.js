@@ -65,9 +65,25 @@ export async function login(request, env) {
 
 /** Extract user from Authorization header */
 export async function getUserFromRequest(request, env) {
+  let token = null;
   const authHeader = request.headers.get('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.split(' ')[1];
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else {
+    // Check Sec-WebSocket-Protocol for WebSocket tokens
+    const protocol = request.headers.get('Sec-WebSocket-Protocol');
+    if (protocol) {
+      // Format: bearer, TOKEN
+      const parts = protocol.split(',').map(p => p.trim());
+      const bearerIndex = parts.findIndex(p => p.toLowerCase() === 'bearer');
+      if (bearerIndex !== -1 && bearerIndex + 1 < parts.length) {
+        token = parts[bearerIndex + 1];
+      }
+    }
+  }
+
+  if (!token) return null;
   try {
     if (!env || !env.DB) {
       console.error('getUserFromRequest: DB binding missing');

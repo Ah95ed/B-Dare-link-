@@ -1,6 +1,14 @@
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS puzzles;
+PRAGMA foreign_keys = OFF;
+
+DROP TABLE IF EXISTS room_results;
+DROP TABLE IF EXISTS competition_results;
+DROP TABLE IF EXISTS room_participants;
+DROP TABLE IF EXISTS competition_participants;
+DROP TABLE IF EXISTS rooms;
+DROP TABLE IF EXISTS competitions;
 DROP TABLE IF EXISTS progress;
+DROP TABLE IF EXISTS puzzles;
+DROP TABLE IF EXISTS users;
 
 CREATE TABLE users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

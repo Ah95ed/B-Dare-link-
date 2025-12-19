@@ -28,6 +28,7 @@ class CompetitionProvider with ChangeNotifier {
   // Real-time states
   List<Map<String, dynamic>> _messages = [];
   String? _solvedByUsername;
+  String? _hostId;
 
   Map<String, dynamic>? get currentRoom => _currentRoom;
   List<Map<String, dynamic>> get roomParticipants => _roomParticipants;
@@ -40,6 +41,11 @@ class CompetitionProvider with ChangeNotifier {
   int get puzzlesSolved => _puzzlesSolved;
   List<Map<String, dynamic>> get messages => _messages;
   String? get solvedByUsername => _solvedByUsername;
+  String? get hostId => _hostId;
+  bool get isHost =>
+      _hostId != null &&
+      _authProvider != null &&
+      _hostId == _authProvider!.userId.toString();
 
   // Competition state
   List<Map<String, dynamic>> _activeCompetitions = [];
@@ -90,12 +96,12 @@ class CompetitionProvider with ChangeNotifier {
     final baseUrl = "wonder-link-backend.amhmeed31.workers.dev";
     final wsUrl = "wss://$baseUrl/rooms/ws?roomId=$roomId";
 
-    _realtime.connect(wsUrl, token);
-
     _realtimeSub?.cancel();
     _realtimeSub = _realtime.events.listen((event) {
       _handleRealtimeEvent(event);
     });
+
+    _realtime.connect(wsUrl, token);
   }
 
   void _handleRealtimeEvent(Map<String, dynamic> event) {
@@ -105,29 +111,52 @@ class CompetitionProvider with ChangeNotifier {
         _roomParticipants = List<Map<String, dynamic>>.from(
           event['participants'] ?? [],
         );
+        _hostId = event['hostId']?.toString();
+
+        // Find my own ready status in the participants list
+        final myId = _authProvider?.userId?.toString();
+        if (myId != null) {
+          final me = _roomParticipants.firstWhere(
+            (p) => p['userId']?.toString() == myId,
+            orElse: () => {},
+          );
+          _isReady = me['isReady'] == true;
+        }
+
         _updateGameState(event['gameState']);
         break;
       case 'chat':
-        _messages.add(event);
+        _messages = [..._messages, event];
         break;
       case 'user_joined':
       case 'user_left':
         _roomParticipants = List<Map<String, dynamic>>.from(
           event['participants'] ?? [],
         );
+        _hostId = event['hostId']?.toString();
+        break;
+      case 'ready_status':
+        _roomParticipants = List<Map<String, dynamic>>.from(
+          event['participants'] ?? [],
+        );
+        if (event['userId']?.toString() == _authProvider?.userId.toString()) {
+          _isReady = event['isReady'] ?? false;
+        }
+        break;
+      case 'error':
+        debugPrint('Realtime Error: ${event['message']}');
+        break;
+      case 'kicked':
+        leaveRoom();
         break;
       case 'game_started':
         _gameStarted = true;
         _currentPuzzleIndex = 0;
         _solvedByUsername = null;
         _gameFinished = false;
-        // The game UI will request the first puzzle if it's not in the event
         break;
       case 'puzzle_solved_first':
         _solvedByUsername = event['username'];
-        if (event['userId'] == _authProvider?.userId.toString()) {
-          // I solved it first! (Optional: play sound)
-        }
         break;
       case 'new_puzzle':
         _currentPuzzleIndex = event['gameState']['currentPuzzleIndex'];
@@ -141,10 +170,29 @@ class CompetitionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void _updateGameState(Map<String, dynamic> gameState) {
+  void _updateGameState(Map<String, dynamic>? gameState) {
+    if (gameState == null) return;
     _gameStarted = gameState['status'] == 'active';
     _gameFinished = gameState['status'] == 'finished';
     _currentPuzzleIndex = gameState['currentPuzzleIndex'] ?? 0;
+  }
+
+  bool get isConnected => _realtime.isConnected;
+  bool get isConnecting => _realtime.isConnecting;
+
+  Future<void> refreshRoomStatus() async {
+    if (_currentRoom == null) return;
+    try {
+      final result = await _service.getRoomStatus(_currentRoom!['id']);
+      _currentRoom = result['room'];
+      _roomParticipants = List<Map<String, dynamic>>.from(
+        result['participants'] ?? [],
+      );
+      _updateGameState(_currentRoom!); // room object contains status
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error refreshing room status: $e');
+    }
   }
 
   Future<void> sendMessage(String text) async {
@@ -153,6 +201,14 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> startGame() async {
     _realtime.send({'type': 'start_game'});
+  }
+
+  Future<void> toggleReady(bool ready) async {
+    _realtime.send({'type': 'toggle_ready', 'isReady': ready});
+  }
+
+  Future<void> kickUser(String userId) async {
+    _realtime.send({'type': 'kick_user', 'targetUserId': userId});
   }
 
   Future<void> solvePuzzle(int puzzleIndex) async {
