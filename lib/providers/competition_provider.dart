@@ -50,7 +50,17 @@ class CompetitionProvider with ChangeNotifier {
 
   // Competition state
   List<Map<String, dynamic>> _activeCompetitions = [];
+  List<Map<String, dynamic>> _myRooms = [];
   List<Map<String, dynamic>> get activeCompetitions => _activeCompetitions;
+  List<Map<String, dynamic>> get myRooms => _myRooms;
+
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
+
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
 
   StreamSubscription? _realtimeSub;
 
@@ -127,7 +137,12 @@ class CompetitionProvider with ChangeNotifier {
         _updateGameState(event['gameState']);
         break;
       case 'chat':
-        _messages = [..._messages, event];
+        if (event['message'] != null) {
+          _messages = [
+            ..._messages,
+            Map<String, dynamic>.from(event['message']),
+          ];
+        }
         break;
       case 'user_joined':
       case 'user_left':
@@ -140,14 +155,23 @@ class CompetitionProvider with ChangeNotifier {
         _roomParticipants = List<Map<String, dynamic>>.from(
           event['participants'] ?? [],
         );
-        if (event['userId']?.toString() == _authProvider?.userId.toString()) {
+        final myId = _authProvider?.userId?.toString();
+        if (event['userId']?.toString() == myId && myId != null) {
           _isReady = event['isReady'] ?? false;
         }
         break;
-      case 'error':
-        debugPrint('Realtime Error: ${event['message']}');
+
+      case 'user_kicked':
+        _roomParticipants = List<Map<String, dynamic>>.from(
+          event['participants'] ?? [],
+        );
         break;
+
       case 'kicked':
+      case 'room_deleted':
+        _errorMessage = event['type'] == 'kicked'
+            ? 'تم طردك من المجموعة'
+            : 'تم حذف المجموعة من قبل القائد';
         leaveRoom();
         break;
       case 'game_started':
@@ -211,10 +235,6 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> toggleReady(bool ready) async {
     _realtime.send({'type': 'toggle_ready', 'isReady': ready});
-  }
-
-  Future<void> kickUser(String userId) async {
-    _realtime.send({'type': 'kick_user', 'targetUserId': userId});
   }
 
   Future<void> solvePuzzle(int puzzleIndex) async {
@@ -294,9 +314,53 @@ class CompetitionProvider with ChangeNotifier {
     }
   }
 
-  void leaveRoom() {
+  Future<void> loadMyRooms() async {
+    try {
+      final result = await _service.getMyRooms();
+      _myRooms = List<Map<String, dynamic>>.from(result['rooms'] ?? []);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading my rooms: $e');
+    }
+  }
+
+  Future<void> leaveRoom() async {
+    if (_currentRoom != null) {
+      try {
+        await _service.leaveRoom(_currentRoom!['id']);
+      } catch (e) {
+        debugPrint('Error during leave API: $e');
+      }
+    }
+    _resetRoomState();
+    loadMyRooms();
+  }
+
+  Future<void> deleteRoom() async {
+    if (_currentRoom != null) {
+      try {
+        await _service.deleteRoom(_currentRoom!['id']);
+      } catch (e) {
+        _errorMessage = 'فشل في حذف المجموعة: $e';
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> kickUser(String userId) async {
+    if (_currentRoom != null) {
+      try {
+        await _service.kickUser(_currentRoom!['id'], userId);
+      } catch (e) {
+        debugPrint('Error kicking user: $e');
+      }
+    }
+  }
+
+  void _resetRoomState() {
     _realtime.disconnect();
     _realtimeSub?.cancel();
+    _realtimeSub = null;
     _currentRoom = null;
     _roomParticipants = [];
     _currentPuzzle = null;

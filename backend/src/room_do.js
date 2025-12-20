@@ -6,20 +6,41 @@ export class GroupRoom {
     this.state = state;
     this.env = env;
     this.sessions = [];
-    this.roomData = null;
+    this.roomData = null; // Keeping this as it was in the original and not explicitly removed
     this.messages = [];
     this.hostId = null; // creator user id
     this.gameState = {
-      status: 'waiting',
+      isStarted: false,
       currentPuzzleIndex: 0,
-      solvedBy: null, 
-      lastPuzzleId: null,
       readyUsers: {}, // userId -> boolean
     };
+
+    // Load state from storage
+    this.state.blockConcurrencyWhile(async () => {
+      let storedHost = await this.state.storage.get('hostId');
+      if (storedHost) this.hostId = storedHost;
+      
+      let storedState = await this.state.storage.get('gameState');
+      if (storedState) this.gameState = storedState;
+
+      let storedMessages = await this.state.storage.get('messages');
+      if (storedMessages) this.messages = storedMessages;
+    });
   }
 
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname.includes('/delete-event')) {
+      const data = await request.json();
+      this.broadcast({ type: 'room_deleted' });
+      await this.state.storage.deleteAll();
+      this.sessions.forEach(s => {
+        try { s.ws.close(1001, 'Deleted'); } catch(e) {}
+      });
+      this.sessions = [];
+      return new Response('OK');
+    }
 
     // Filter by action
     if (url.pathname.includes('/ws')) {
@@ -59,15 +80,19 @@ export class GroupRoom {
     console.log(`User ${username} (${userId}) attempting to connect`);
     ws.accept();
 
+    // De-duplicate existing sessions for this user if any (cleanup old or ghost connections)
+    this.sessions = this.sessions.filter(s => s.userId !== userId);
+    
+    // Safety: ensure userId is a string for comparisons
+    userId = userId.toString();
+
     // First one to join is the host if not already set
     if (!this.hostId) {
       this.hostId = userId;
+      await this.state.storage.put('hostId', this.hostId);
       console.log(`Host assigned: ${userId}`);
     }
 
-    // De-duplicate existing sessions for this user if any
-    this.sessions = this.sessions.filter(s => s.userId !== userId);
-    
     const session = { ws, userId, username };
     this.sessions.push(session);
 
@@ -78,6 +103,7 @@ export class GroupRoom {
         isReady: !!this.gameState.readyUsers[s.userId]
       }));
     };
+    this.getParticipants = getParticipants; // Make it available to handleMessage
 
     // Send current state to new participant
     ws.send(JSON.stringify({
@@ -129,37 +155,33 @@ export class GroupRoom {
   }
 
   async handleMessage(session, data) {
+    const userId = session.userId;
+    const username = session.username;
+
     switch (data.type) {
       case 'chat':
-        const msg = {
-          type: 'chat',
-          userId: session.userId,
-          username: session.username,
-          text: data.text,
-          timestamp: Date.now()
+        const chatMsg = { 
+          id: crypto.randomUUID(),
+          userId, 
+          username, 
+          text: data.text, 
+          timestamp: Date.now() 
         };
-        this.messages.push(msg);
-        this.broadcast(msg);
+        this.messages.push(chatMsg);
+        if (this.messages.length > 100) this.messages.shift();
+        await this.state.storage.put('messages', this.messages);
+        this.broadcast({ type: 'chat', message: chatMsg });
         break;
 
       case 'toggle_ready':
-        this.gameState.readyUsers[session.userId] = data.isReady;
+        this.gameState.readyUsers[userId] = !!data.isReady;
+        await this.state.storage.put('gameState', this.gameState);
         this.broadcast({
           type: 'ready_status',
-          userId: session.userId,
-          isReady: data.isReady,
-          participants: this.sessions.map(s => ({ 
-            userId: s.userId, 
-            username: s.username,
-            isReady: !!this.gameState.readyUsers[s.userId]
-          }))
+          userId,
+          isReady: this.gameState.readyUsers[userId],
+          participants: this.getParticipants()
         });
-
-        // Check if all are ready to start
-        const allReady = this.sessions.length >= 2 && this.sessions.every(s => this.gameState.readyUsers[s.userId]);
-        if (allReady && this.gameState.status === 'waiting') {
-          await this.startGame();
-        }
         break;
 
       case 'kick_user':

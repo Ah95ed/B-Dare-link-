@@ -16,7 +16,9 @@ class _CompetitionsViewState extends State<CompetitionsView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CompetitionProvider>().loadActiveCompetitions();
+      final cp = context.read<CompetitionProvider>();
+      cp.loadActiveCompetitions();
+      cp.loadMyRooms();
     });
   }
 
@@ -37,6 +39,14 @@ class _CompetitionsViewState extends State<CompetitionsView> {
       appBar: AppBar(
         title: const Text('المسابقات والغرف'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              competitionProvider.loadActiveCompetitions();
+              competitionProvider.loadMyRooms();
+            },
+            tooltip: 'تحديث',
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => _showJoinRoomDialog(context),
@@ -144,7 +154,41 @@ class _CompetitionsViewState extends State<CompetitionsView> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+
+          // Joined Rooms (My Rooms) section
+          if (competitionProvider.myRooms.isNotEmpty) ...[
+            Text(
+              'الغرف التي انضممت إليها',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            ...competitionProvider.myRooms.map((room) {
+              return Card(
+                elevation: 1,
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Theme.of(
+                      context,
+                    ).primaryColor.withOpacity(0.1),
+                    child: const Icon(Icons.group),
+                  ),
+                  title: Text(room['name'] ?? 'غرفة'),
+                  subtitle: Text(
+                    'كود: ${room['code']} • ${room['participant_count'] ?? 0} لاعب',
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    competitionProvider.joinRoom(room['code']);
+                  },
+                ),
+              );
+            }),
+            const SizedBox(height: 24),
+          ],
 
           // Active Competitions
           Text(

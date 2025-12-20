@@ -103,9 +103,16 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
             onPressed: () => competitionProvider.refreshRoomStatus(),
             tooltip: 'تحديث الغرفة',
           ),
+          if (competitionProvider.isHost)
+            IconButton(
+              icon: const Icon(Icons.delete_forever, color: Colors.red),
+              onPressed: () => _confirmDeleteRoom(context),
+              tooltip: 'حذف المجموعة',
+            ),
           IconButton(
-            icon: const Icon(Icons.exit_to_app),
+            icon: const Icon(Icons.logout),
             onPressed: () => competitionProvider.leaveRoom(),
+            tooltip: 'مغادرة',
           ),
         ],
       ),
@@ -187,7 +194,9 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               ),
                             ),
                           ),
-                          if (isPHost)
+                          if (isPHost &&
+                              pId != null &&
+                              competitionProvider.hostId != null)
                             Positioned(
                               right: 0,
                               bottom: 0,
@@ -224,14 +233,19 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (isHost && pId != currentUserId)
+                          if (isHost && pId != currentUserId && pId != null)
                             GestureDetector(
-                              onTap: () => competitionProvider.kickUser(pId!),
-                              child: const Padding(
-                                padding: EdgeInsets.only(right: 2),
-                                child: Icon(
-                                  Icons.cancel,
-                                  size: 14,
+                              onTap: () => competitionProvider.kickUser(pId),
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                margin: const EdgeInsets.only(left: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 10,
                                   color: Colors.red,
                                 ),
                               ),
@@ -459,6 +473,32 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteRoom(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف المجموعة'),
+        content: const Text(
+          'هل أنت متأكد من رغبتك في حذف المجموعة نهائياً؟ سيتم طرد جميع الأعضاء.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              context.read<CompetitionProvider>().deleteRoom();
+              Navigator.pop(context);
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

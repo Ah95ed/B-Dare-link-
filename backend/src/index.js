@@ -14,6 +14,10 @@ import {
   createCompetition,
   joinCompetition,
   getActiveCompetitions,
+  getMyRooms,
+  leaveRoom,
+  kickUser,
+  deleteRoom,
 } from './competitions.js';
 import { GroupRoom } from './room_do.js';
 
@@ -104,8 +108,20 @@ export default {
       if (path === '/rooms/join' && request.method === 'POST') {
         return await joinRoom(request, env);
       }
-      if (path === '/rooms/status' && request.method === 'GET') {
+      if (url.pathname === '/api/rooms/my' && request.method === 'GET') {
+        return getMyRooms(request, env);
+      }
+      if (url.pathname === '/api/rooms/status' && request.method === 'GET') {
         return await getRoomStatus(request, env);
+      }
+      if (url.pathname === '/api/rooms/leave' && request.method === 'POST') {
+        return await leaveRoom(request, env);
+      }
+      if (url.pathname === '/api/rooms/kick' && request.method === 'POST') {
+        return await kickUser(request, env);
+      }
+      if (url.pathname === '/api/rooms/delete' && request.method === 'DELETE') {
+        return await deleteRoom(request, env);
       }
       if (path === '/rooms/ready' && request.method === 'POST') {
         return await setReady(request, env);
@@ -130,9 +146,13 @@ export default {
         const roomObject = env.ROOM_DO.get(id);
         
         // Create a new request based on the original one but for the DO
-        const doRequest = new Request(request);
-        doRequest.headers.set('X-User-Id', user.id.toString());
-        doRequest.headers.set('X-User-Name', user.username);
+        const doHeaders = new Headers(request.headers);
+        doHeaders.set('X-User-Id', user.id.toString());
+        doHeaders.set('X-User-Name', user.username);
+        
+        const doRequest = new Request(request, {
+          headers: doHeaders
+        });
         
         return roomObject.fetch(doRequest);
       }

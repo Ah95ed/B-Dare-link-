@@ -62,7 +62,7 @@ export async function createRoom(request, env) {
 
     // Add creator as participant
     await env.DB.prepare('INSERT INTO room_participants (room_id, user_id, is_ready) VALUES (?, ?, ?)')
-      .bind(roomId, user.id, 0) // SQLite uses 0/1 for boolean
+      .bind(roomId, user.id, 1) // Host starts as ready
       .run();
 
     const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(roomId).first();
@@ -108,7 +108,7 @@ export async function joinRoom(request, env) {
 
     // Add participant
     await env.DB.prepare('INSERT INTO room_participants (room_id, user_id, is_ready) VALUES (?, ?, ?)')
-      .bind(room.id, user.id, false)
+      .bind(room.id, user.id, 0) // Join as not ready
       .run();
 
     return jsonResponse({ success: true, room }, 200);
@@ -442,3 +442,104 @@ export async function getActiveCompetitions(request, env) {
   }
 }
 
+// Get rooms the user has joined
+export async function getMyRooms(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return errorResponse('Unauthorized', 401);
+
+  try {
+    const rooms = await env.DB.prepare(
+      `SELECT r.*, u.username as creator_name, 
+      (SELECT COUNT(*) FROM room_participants WHERE room_id = r.id) as participant_count
+      FROM rooms r 
+      JOIN room_participants rp ON r.id = rp.room_id 
+      JOIN users u ON r.created_by = u.id
+      WHERE rp.user_id = ? AND r.status != 'finished'
+      ORDER BY r.created_at DESC`
+    )
+      .bind(user.id)
+      .all();
+
+    return jsonResponse({ rooms: rooms.results });
+  } catch (e) {
+    return errorResponse(e.message, 500);
+  }
+}
+
+// Leave a room
+export async function leaveRoom(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return errorResponse('Unauthorized', 401);
+
+  const { roomId } = await request.json();
+  if (!roomId) return errorResponse('roomId required', 400);
+
+  try {
+    await env.DB.prepare('DELETE FROM room_participants WHERE room_id = ? AND user_id = ?')
+      .bind(roomId, user.id)
+      .run();
+
+    return jsonResponse({ success: true });
+  } catch (e) {
+    return errorResponse(e.message, 500);
+  }
+}
+
+// Kick a user from a room (Host only)
+export async function kickUser(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return errorResponse('Unauthorized', 401);
+
+  const { roomId, targetUserId } = await request.json();
+  if (!roomId || !targetUserId) return errorResponse('roomId and targetUserId required', 400);
+
+  try {
+    // Verify host
+    const room = await env.DB.prepare('SELECT created_by FROM rooms WHERE id = ?').bind(roomId).first();
+    if (!room) return errorResponse('Room not found', 404);
+    if (room.created_by !== user.id) return errorResponse('Only host can kick users', 403);
+
+    // Remove from DB
+    await env.DB.prepare('DELETE FROM room_participants WHERE room_id = ? AND user_id = ?')
+      .bind(roomId, targetUserId)
+      .run();
+
+    return jsonResponse({ success: true });
+  } catch (e) {
+    return errorResponse(e.message, 500);
+  }
+}
+
+// Delete a room (Host only)
+export async function deleteRoom(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return errorResponse('Unauthorized', 401);
+
+  const url = new URL(request.url);
+  const roomId = url.searchParams.get('roomId');
+  if (!roomId) return errorResponse('roomId required', 400);
+
+  try {
+    // Verify host
+    const room = await env.DB.prepare('SELECT created_by FROM rooms WHERE id = ?').bind(roomId).first();
+    if (!room) return errorResponse('Room not found', 404);
+    if (room.created_by !== user.id) return errorResponse('Only host can delete room', 403);
+
+    // Delete participants and room
+    await env.DB.prepare('DELETE FROM room_participants WHERE room_id = ?').bind(roomId).run();
+    await env.DB.prepare('DELETE FROM room_results WHERE room_id = ?').bind(roomId).run();
+    await env.DB.prepare('DELETE FROM rooms WHERE id = ?').bind(roomId).run();
+
+    // Notify Durable Object to close all connections
+    const doId = env.ROOM_DO.idFromName(roomId.toString());
+    const roomObject = env.ROOM_DO.get(doId);
+    await roomObject.fetch(new Request('http://room/delete-event', {
+      method: 'POST',
+      body: JSON.stringify({ type: 'room_deleted' })
+    }));
+
+    return jsonResponse({ success: true });
+  } catch (e) {
+    return errorResponse(e.message, 500);
+  }
+}
