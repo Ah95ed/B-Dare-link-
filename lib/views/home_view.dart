@@ -10,7 +10,6 @@ import 'profile/profile_screen.dart';
 import 'admin/admin_page.dart';
 import 'competitions/competitions_view.dart';
 import 'groups/create_group_view.dart';
-import '../providers/competition_provider.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});

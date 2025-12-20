@@ -20,7 +20,8 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     super.initState();
     // Listen for message changes to scroll
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CompetitionProvider>().addListener(_scrollToBottom);
+      final cp = context.read<CompetitionProvider>();
+      cp.addListener(_scrollToBottom);
     });
   }
 
@@ -211,13 +212,13 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         children: [
                           Text(
                             (p['username'] ?? '...') +
-                                (isPHost ? ' (القائد)' : ''),
+                                (isPHost && pId != null ? ' (القائد)' : ''),
                             style: TextStyle(
                               fontSize: 10,
-                              fontWeight: isPHost
+                              fontWeight: isPHost && pId != null
                                   ? FontWeight.bold
                                   : FontWeight.normal,
-                              color: isPHost
+                              color: isPHost && pId != null
                                   ? Colors.amber.shade900
                                   : Colors.black,
                             ),
@@ -359,9 +360,20 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               horizontal: 16,
                             ),
                           ),
-                          onSubmitted: (val) {
+                          onSubmitted: (val) async {
                             if (val.trim().isNotEmpty) {
-                              competitionProvider.sendMessage(val.trim());
+                              final sent = await competitionProvider
+                                  .sendMessage(val.trim());
+                              if (!sent && mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'فشل إرسال الرسالة، يرجى التأكد من الاتصال',
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
                               _messageController.clear();
                               _scrollToBottom();
                             }
@@ -374,11 +386,21 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           Icons.send,
                           color: Theme.of(context).primaryColor,
                         ),
-                        onPressed: () {
+                        onPressed: () async {
                           if (_messageController.text.trim().isNotEmpty) {
-                            competitionProvider.sendMessage(
+                            final sent = await competitionProvider.sendMessage(
                               _messageController.text.trim(),
                             );
+                            if (!sent && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'فشل إرسال الرسالة، يرجى التأكد من الاتصال',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
                             _messageController.clear();
                             _scrollToBottom();
                           }

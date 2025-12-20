@@ -22,15 +22,22 @@ export class GroupRoom {
     const url = new URL(request.url);
 
     // Filter by action
-    if (url.pathname === '/ws') {
+    if (url.pathname.includes('/ws')) {
       if (request.headers.get('Upgrade') !== 'websocket') {
         return new Response('Expected Upgrade: websocket', { status: 426 });
+      }
+
+      const userId = request.headers.get('X-User-Id');
+      const username = request.headers.get('X-User-Name');
+
+      if (!userId || !username) {
+        return new Response('Missing Identity Headers', { status: 400 });
       }
 
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
 
-      await this.handleSession(server, url.searchParams.get('userId'), url.searchParams.get('username'));
+      await this.handleSession(server, userId, username);
 
       const responseHeaders = new Headers();
       const protocol = request.headers.get('Sec-WebSocket-Protocol');

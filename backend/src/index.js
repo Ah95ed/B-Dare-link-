@@ -129,13 +129,12 @@ export default {
         const id = env.ROOM_DO.idFromName(roomId.toString());
         const roomObject = env.ROOM_DO.get(id);
         
-        // Append user info to URL for DO to use
-        const doUrl = new URL(request.url);
-        doUrl.pathname = '/ws';
-        doUrl.searchParams.set('userId', user.id);
-        doUrl.searchParams.set('username', user.username);
+        // Create a new request based on the original one but for the DO
+        const doRequest = new Request(request);
+        doRequest.headers.set('X-User-Id', user.id.toString());
+        doRequest.headers.set('X-User-Name', user.username);
         
-        return roomObject.fetch(new Request(doUrl, request));
+        return roomObject.fetch(doRequest);
       }
 
       // No route matched

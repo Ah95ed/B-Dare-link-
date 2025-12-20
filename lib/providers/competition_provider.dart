@@ -44,8 +44,9 @@ class CompetitionProvider with ChangeNotifier {
   String? get hostId => _hostId;
   bool get isHost =>
       _hostId != null &&
+      _hostId!.isNotEmpty &&
       _authProvider != null &&
-      _hostId == _authProvider!.userId.toString();
+      _authProvider!.userId.toString() == _hostId;
 
   // Competition state
   List<Map<String, dynamic>> _activeCompetitions = [];
@@ -195,8 +196,13 @@ class CompetitionProvider with ChangeNotifier {
     }
   }
 
-  Future<void> sendMessage(String text) async {
-    _realtime.send({'type': 'chat', 'text': text});
+  Future<bool> sendMessage(String text) async {
+    try {
+      _realtime.send({'type': 'chat', 'text': text});
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<void> startGame() async {
