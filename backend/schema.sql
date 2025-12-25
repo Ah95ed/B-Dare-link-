@@ -70,12 +70,28 @@ CREATE TABLE rooms (
   time_per_puzzle INTEGER DEFAULT 60,
   current_puzzle_index INTEGER DEFAULT 0,
   current_puzzle_id INTEGER, -- Reference to puzzles table
+  -- New fields for puzzle sources
+  puzzle_source TEXT DEFAULT 'database', -- 'ai', 'database', 'manual'
+  difficulty INTEGER DEFAULT 1, -- 1-10
+  language TEXT DEFAULT 'ar', -- 'ar', 'en'
   started_at TIMESTAMP,
   finished_at TIMESTAMP,
   created_by INTEGER,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (created_by) REFERENCES users(id),
   FOREIGN KEY (competition_id) REFERENCES competitions(id)
+);
+
+-- Room Puzzles (ألغاز كل غرفة مُعدّة مسبقاً)
+CREATE TABLE room_puzzles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id INTEGER NOT NULL,
+  puzzle_index INTEGER NOT NULL,
+  puzzle_json TEXT NOT NULL,
+  solved_by INTEGER, -- User who solved it first
+  solved_at TIMESTAMP,
+  FOREIGN KEY (room_id) REFERENCES rooms(id),
+  FOREIGN KEY (solved_by) REFERENCES users(id)
 );
 
 -- Competition Participants (مشاركون في مسابقات)

@@ -23,6 +23,7 @@ class CompetitionProvider with ChangeNotifier {
   bool _gameFinished = false;
   int _score = 0;
   int _puzzlesSolved = 0;
+  int _totalPuzzles = 5;
   DateTime? _puzzleStartTime;
 
   // Real-time states
@@ -37,8 +38,17 @@ class CompetitionProvider with ChangeNotifier {
   bool get isReady => _isReady;
   bool get gameStarted => _gameStarted;
   bool get gameFinished => _gameFinished;
+
+  /// Reset game state to go back to lobby without leaving room
+  void goBackToLobby() {
+    _gameStarted = false;
+    _currentPuzzle = null;
+    notifyListeners();
+  }
+
   int get score => _score;
   int get puzzlesSolved => _puzzlesSolved;
+  int get totalPuzzles => _totalPuzzles;
   List<Map<String, dynamic>> get messages => _messages;
   String? get solvedByUsername => _solvedByUsername;
   String? get hostId => _hostId;
@@ -69,6 +79,9 @@ class CompetitionProvider with ChangeNotifier {
     int maxParticipants = 10,
     int puzzleCount = 5,
     int timePerPuzzle = 60,
+    String puzzleSource = 'database',
+    int difficulty = 1,
+    String language = 'ar',
   }) async {
     try {
       final result = await _service.createRoom(
@@ -76,6 +89,9 @@ class CompetitionProvider with ChangeNotifier {
         maxParticipants: maxParticipants,
         puzzleCount: puzzleCount,
         timePerPuzzle: timePerPuzzle,
+        puzzleSource: puzzleSource,
+        difficulty: difficulty,
+        language: language,
       );
       _currentRoom = result['room'];
       _connectRealtime();
@@ -90,6 +106,8 @@ class CompetitionProvider with ChangeNotifier {
       final result = await _service.joinRoom(code);
       _currentRoom = result['room'];
       _connectRealtime();
+      // Fetch current puzzle if game is already active
+      await refreshRoomStatus();
       notifyListeners();
     } catch (e) {
       rethrow;
@@ -105,7 +123,7 @@ class CompetitionProvider with ChangeNotifier {
     final roomId = _currentRoom!['id'];
     // Assuming base URL from service, convert to wss
     final baseUrl = "wonder-link-backend.amhmeed31.workers.dev";
-    final wsUrl = "wss://$baseUrl/rooms/ws?roomId=$roomId";
+    final wsUrl = "wss://$baseUrl/rooms/ws?roomId=$roomId&token=$token";
 
     _realtimeSub?.cancel();
     _realtimeSub = _realtime.events.listen((event) {
@@ -176,16 +194,27 @@ class CompetitionProvider with ChangeNotifier {
         break;
       case 'game_started':
         _gameStarted = true;
-        _currentPuzzleIndex = 0;
+        _currentPuzzleIndex = event['puzzleIndex'] ?? 0;
+        _totalPuzzles = event['totalPuzzles'] ?? 5;
         _solvedByUsername = null;
         _gameFinished = false;
+        if (event['puzzle'] != null) {
+          _currentPuzzle = Map<String, dynamic>.from(event['puzzle']);
+        }
+        _puzzleStartTime = DateTime.now();
         break;
       case 'puzzle_solved_first':
         _solvedByUsername = event['username'];
         break;
       case 'new_puzzle':
-        _currentPuzzleIndex = event['gameState']['currentPuzzleIndex'];
+        _currentPuzzleIndex =
+            event['gameState']['currentPuzzleIndex'] ??
+            event['puzzleIndex'] ??
+            0;
         _solvedByUsername = null;
+        if (event['puzzle'] != null) {
+          _currentPuzzle = Map<String, dynamic>.from(event['puzzle']);
+        }
         _puzzleStartTime = DateTime.now();
         break;
       case 'game_finished':
@@ -195,11 +224,25 @@ class CompetitionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void _updateGameState(Map<String, dynamic>? gameState) {
+  void _updateGameState(
+    Map<String, dynamic>? gameState, {
+    Map<String, dynamic>? puzzle,
+  }) {
     if (gameState == null) return;
     _gameStarted = gameState['status'] == 'active';
     _gameFinished = gameState['status'] == 'finished';
     _currentPuzzleIndex = gameState['currentPuzzleIndex'] ?? 0;
+
+    // Load puzzle if provided
+    if (puzzle != null) {
+      _currentPuzzle = Map<String, dynamic>.from(puzzle);
+      _puzzleStartTime = DateTime.now();
+    }
+    // Also check if gameState has currentPuzzle (from init/websocket)
+    if (gameState['currentPuzzle'] != null) {
+      _currentPuzzle = Map<String, dynamic>.from(gameState['currentPuzzle']);
+      _puzzleStartTime = DateTime.now();
+    }
   }
 
   bool get isConnected => _realtime.isConnected;
@@ -213,7 +256,13 @@ class CompetitionProvider with ChangeNotifier {
       _roomParticipants = List<Map<String, dynamic>>.from(
         result['participants'] ?? [],
       );
-      _updateGameState(_currentRoom!); // room object contains status
+
+      // Get current puzzle from API result if game is active
+      final puzzle = result['currentPuzzle'];
+      _updateGameState(
+        _currentRoom!,
+        puzzle: puzzle != null ? Map<String, dynamic>.from(puzzle) : null,
+      );
       notifyListeners();
     } catch (e) {
       debugPrint('Error refreshing room status: $e');
@@ -222,19 +271,40 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<bool> sendMessage(String text) async {
     try {
-      _realtime.send({'type': 'chat', 'text': text});
-      return true;
+      final sent = _realtime.send({'type': 'chat', 'text': text});
+      if (!sent) {
+        debugPrint('Message not sent - WebSocket not connected');
+      }
+      return sent;
     } catch (e) {
+      debugPrint('Error sending message: $e');
       return false;
     }
   }
 
   Future<void> startGame() async {
-    _realtime.send({'type': 'start_game'});
+    if (_currentRoom == null) return;
+    try {
+      debugPrint('Starting game via HTTP API for room ${_currentRoom!['id']}');
+      await _service.startGame(_currentRoom!['id']);
+      // The game_started event will come via WebSocket after puzzles are generated
+    } catch (e) {
+      debugPrint('Error starting game: $e');
+      _errorMessage = 'فشل بدء اللعبة: $e';
+      notifyListeners();
+    }
   }
 
   Future<void> toggleReady(bool ready) async {
-    _realtime.send({'type': 'toggle_ready', 'isReady': ready});
+    if (_currentRoom == null) return;
+    try {
+      // Call API to set ready - this triggers game start if all are ready
+      await _service.setReady(_currentRoom!['id'], ready);
+      // Also notify via WebSocket for immediate UI update
+      _realtime.send({'type': 'toggle_ready', 'isReady': ready});
+    } catch (e) {
+      debugPrint('Error toggling ready: $e');
+    }
   }
 
   Future<void> solvePuzzle(int puzzleIndex) async {
@@ -262,12 +332,9 @@ class CompetitionProvider with ChangeNotifier {
         ? DateTime.now().difference(_puzzleStartTime!).inMilliseconds
         : 0;
 
-    final puzzleId = _currentRoom!['current_puzzle_id'] ?? 0;
-
     try {
       final result = await _service.submitAnswer(
         roomId: _currentRoom!['id'],
-        puzzleId: puzzleId,
         puzzleIndex: _currentPuzzleIndex,
         steps: steps,
         timeTaken: timeTaken,
@@ -277,18 +344,56 @@ class CompetitionProvider with ChangeNotifier {
         _score += result['points'] as int? ?? 0;
         _puzzlesSolved++;
 
-        // Notify others via WebSocket that I solved it
-        await solvePuzzle(_currentPuzzleIndex);
+        // Show success message
+        if (result['isFirstCorrect'] == true) {
+          // Will be updated by WebSocket event 'puzzle_solved_first'
+        } else if (result['rank'] != null) {
+          // Show rank if not first
+          debugPrint('Solved correctly! Rank: ${result['rank']}');
+        }
+      } else {
+        // Show error for incorrect answer
+        debugPrint('Incorrect answer');
       }
 
-      if (result['nextPuzzle'] != null) {
-        _currentPuzzle = result['nextPuzzle'];
-        // _currentPuzzleIndex++ is handled by WebSocket event 'new_puzzle'
-        // to keep everyone synchronized.
+      // nextPuzzle and gameFinished are handled by WebSocket events
+      // to keep all players synchronized
+
+      notifyListeners();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Quiz format answer submission (answerIndex instead of steps)
+  Future<void> submitQuizAnswer(int answerIndex) async {
+    if (_currentRoom == null || _currentPuzzle == null) return;
+
+    final timeTaken = _puzzleStartTime != null
+        ? DateTime.now().difference(_puzzleStartTime!).inMilliseconds
+        : 0;
+
+    try {
+      final result = await _service.submitQuizAnswer(
+        roomId: _currentRoom!['id'],
+        puzzleIndex: _currentPuzzleIndex,
+        answerIndex: answerIndex,
+        timeTaken: timeTaken,
+      );
+
+      if (result['isCorrect'] == true) {
+        _score += result['points'] as int? ?? 0;
+        _puzzlesSolved++;
+        debugPrint(
+          'Correct! Points: ${result['points']}, First: ${result['isFirstCorrect']}',
+        );
+      } else {
+        debugPrint('Incorrect answer');
       }
 
       notifyListeners();
     } catch (e) {
+      debugPrint('Error submitting quiz answer: $e');
       rethrow;
     }
   }
@@ -340,6 +445,8 @@ class CompetitionProvider with ChangeNotifier {
     if (_currentRoom != null) {
       try {
         await _service.deleteRoom(_currentRoom!['id']);
+        _resetRoomState();
+        loadMyRooms();
       } catch (e) {
         _errorMessage = 'فشل في حذف المجموعة: $e';
         notifyListeners();

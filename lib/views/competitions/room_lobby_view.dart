@@ -15,22 +15,10 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  @override
-  void initState() {
-    super.initState();
-    // Listen for message changes to scroll
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final cp = context.read<CompetitionProvider>();
-      cp.addListener(_scrollToBottom);
-    });
-  }
+  int _prevMessageCount = 0;
 
   @override
   void dispose() {
-    // Remove listener before disposing
-    if (mounted) {
-      context.read<CompetitionProvider>().removeListener(_scrollToBottom);
-    }
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -54,6 +42,15 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     final room = competitionProvider.currentRoom;
     final participants = competitionProvider.roomParticipants;
     final messages = competitionProvider.messages;
+
+    // Auto-scroll on new messages
+    if (messages.length > _prevMessageCount) {
+      _prevMessageCount = messages.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    } else if (messages.length < _prevMessageCount) {
+      // Handle reset/clear
+      _prevMessageCount = messages.length;
+    }
 
     if (room == null) {
       return const Scaffold(body: Center(child: Text('لا توجد غرفة نشطة')));
@@ -163,6 +160,25 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               ],
             ),
           ),
+
+          // Game Settings Info
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Colors.grey.shade50,
+            child: Row(
+              children: [
+                const Icon(Icons.settings, size: 16, color: Colors.grey),
+                const SizedBox(width: 8),
+                Text(
+                  '${room['puzzleCount'] ?? 5} ألغاز • ${(room['timePerPuzzle'] ?? 60)} ثانية/لغز • ${room['puzzleSource'] == 'ai' ? 'ذكاء اصطناعي' : (room['puzzleSource'] == 'manual' ? 'يدوي' : 'قاعدة بيانات')}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+
           // Participants Row
           SizedBox(
             height: 100,
@@ -220,11 +236,10 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            (p['username'] ?? '...') +
-                                (isPHost && pId != null ? ' (القائد)' : ''),
+                            (p['username'] ?? '...'),
                             style: TextStyle(
                               fontSize: 10,
-                              fontWeight: isPHost && pId != null
+                              fontWeight: isPHost
                                   ? FontWeight.bold
                                   : FontWeight.normal,
                               color: isPHost && pId != null
@@ -272,6 +287,12 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
             ),
           ),
           const Divider(height: 1),
+
+          // Current Puzzle Display (if game is active)
+          if (competitionProvider.currentPuzzle != null) ...[
+            _buildPuzzleCard(context, competitionProvider),
+            const Divider(height: 1),
+          ],
 
           // Chat Area
           Expanded(
@@ -451,11 +472,92 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       ),
                     ),
                   ),
+                  if (isHost && !competitionProvider.gameStarted) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => competitionProvider.startGame(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.amber.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'ابدأ اللعب الآن 🎮',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Builds a card widget displaying the current puzzle.
+  /// This is a simple placeholder implementation that shows the puzzle
+  /// question and a list of possible options if they exist.
+  Widget _buildPuzzleCard(BuildContext context, CompetitionProvider provider) {
+    final puzzle = provider.currentPuzzle;
+    if (puzzle == null) {
+      return const SizedBox.shrink();
+    }
+    // Expected puzzle fields (adjust as needed):
+    // - 'question' : String
+    // - 'options'  : List<dynamic>
+    // - 'type'    : String (e.g., 'quiz' or 'steps')
+    final String question = puzzle['question']?.toString() ?? 'سؤال غير متوفر';
+    final List<dynamic> options = puzzle['options'] as List<dynamic>? ?? [];
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              question,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            if (options.isNotEmpty)
+              ...options.asMap().entries.map((e) {
+                final idx = e.key;
+                final opt = e.value?.toString() ?? '';
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Theme.of(context).primaryColorLight,
+                    child: Text((idx + 1).toString()),
+                  ),
+                  title: Text(opt),
+                  onTap: () async {
+                    // For quiz type, send selected answer index.
+                    if (puzzle['type'] == 'quiz') {
+                      await provider.submitQuizAnswer(idx);
+                    } else {
+                      // For step‑based puzzles, you may handle differently.
+                      // Here we simply send the answer as a list with the chosen option.
+                      await provider.submitAnswer([opt]);
+                    }
+                  },
+                );
+              }).toList(),
+          ],
+        ),
       ),
     );
   }

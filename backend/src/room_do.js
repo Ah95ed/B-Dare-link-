@@ -42,6 +42,69 @@ export class GroupRoom {
       return new Response('OK');
     }
 
+    // Handle game start event from competitions.js
+    if (url.pathname.includes('/start-game-event')) {
+      const data = await request.json();
+      this.gameState.status = 'active';
+      this.gameState.currentPuzzleIndex = data.puzzleIndex || 0;
+      this.gameState.totalPuzzles = data.totalPuzzles || 5;
+      this.gameState.currentPuzzle = data.puzzle;
+      this.gameState.solvedBy = null;
+      await this.state.storage.put('gameState', this.gameState);
+      
+      // Broadcast game start with puzzle to all players
+      this.broadcast({
+        type: 'game_started',
+        gameState: this.gameState,
+        puzzle: data.puzzle,
+        puzzleIndex: data.puzzleIndex,
+        totalPuzzles: data.totalPuzzles
+      });
+      return new Response('OK');
+    }
+
+    // Handle puzzle solved event
+    if (url.pathname.includes('/puzzle-solved')) {
+      const data = await request.json();
+      this.gameState.solvedBy = data.userId;
+      await this.state.storage.put('gameState', this.gameState);
+      this.broadcast({
+        type: 'puzzle_solved_first',
+        userId: data.userId,
+        username: data.username,
+        puzzleIndex: data.puzzleIndex,
+        timeTaken: data.timeTaken
+      });
+      return new Response('OK');
+    }
+
+    // Handle next puzzle event
+    if (url.pathname.includes('/next-puzzle')) {
+      const data = await request.json();
+      this.gameState.currentPuzzleIndex = data.puzzleIndex;
+      this.gameState.currentPuzzle = data.puzzle;
+      this.gameState.solvedBy = null;
+      await this.state.storage.put('gameState', this.gameState);
+      this.broadcast({
+        type: 'new_puzzle',
+        puzzle: data.puzzle,
+        puzzleIndex: data.puzzleIndex,
+        gameState: this.gameState
+      });
+      return new Response('OK');
+    }
+
+    // Handle game finish event
+    if (url.pathname.includes('/finish-game')) {
+      this.gameState.status = 'finished';
+      await this.state.storage.put('gameState', this.gameState);
+      this.broadcast({
+        type: 'game_finished',
+        gameState: this.gameState
+      });
+      return new Response('OK');
+    }
+
     // Filter by action
     if (url.pathname.includes('/ws')) {
       if (request.headers.get('Upgrade') !== 'websocket') {
@@ -63,7 +126,11 @@ export class GroupRoom {
       const responseHeaders = new Headers();
       const protocol = request.headers.get('Sec-WebSocket-Protocol');
       if (protocol) {
-        responseHeaders.set('Sec-WebSocket-Protocol', protocol);
+        // Only return the first protocol (bearer) to avoid duplicate header error
+        const parts = protocol.split(',').map(p => p.trim());
+        if (parts.length > 0) {
+          responseHeaders.set('Sec-WebSocket-Protocol', parts[0]);
+        }
       }
 
       return new Response(null, { 
@@ -215,9 +282,16 @@ export class GroupRoom {
         break;
 
       case 'next_puzzle':
-        this.gameState.currentPuzzleIndex = data.nextIndex;
+        this.gameState.currentPuzzleIndex = data.puzzleIndex;
+        this.gameState.currentPuzzle = data.puzzle;
         this.gameState.solvedBy = null;
-        this.broadcast({ type: 'new_puzzle', gameState: this.gameState });
+        await this.state.storage.put('gameState', this.gameState);
+        this.broadcast({ 
+          type: 'new_puzzle', 
+          puzzle: data.puzzle,
+          puzzleIndex: data.puzzleIndex,
+          gameState: this.gameState 
+        });
         break;
       
       case 'finish_game':

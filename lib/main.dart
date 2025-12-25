@@ -65,6 +65,7 @@ class _DeepLinkHandlerState extends State<DeepLinkHandler> {
   @override
   void dispose() {
     _linkSubscription?.cancel();
+   
     super.dispose();
   }
 

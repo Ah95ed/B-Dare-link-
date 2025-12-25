@@ -17,6 +17,9 @@ class CompetitionService {
     int maxParticipants = 10,
     int puzzleCount = 5,
     int timePerPuzzle = 60,
+    String puzzleSource = 'database', // 'ai', 'database', 'manual'
+    int difficulty = 1,
+    String language = 'ar',
   }) async {
     final token = await _getToken();
     final response = await http.post(
@@ -30,6 +33,9 @@ class CompetitionService {
         'maxParticipants': maxParticipants,
         'puzzleCount': puzzleCount,
         'timePerPuzzle': timePerPuzzle,
+        'puzzleSource': puzzleSource,
+        'difficulty': difficulty,
+        'language': language,
       }),
     );
 
@@ -92,7 +98,6 @@ class CompetitionService {
 
   Future<Map<String, dynamic>> submitAnswer({
     required int roomId,
-    required int puzzleId,
     required int puzzleIndex,
     required List<String> steps,
     required int timeTaken,
@@ -106,7 +111,6 @@ class CompetitionService {
       },
       body: jsonEncode({
         'roomId': roomId,
-        'puzzleId': puzzleId,
         'puzzleIndex': puzzleIndex,
         'steps': steps,
         'timeTaken': timeTaken,
@@ -117,6 +121,52 @@ class CompetitionService {
       return jsonDecode(response.body);
     } else {
       throw Exception('Failed to submit answer: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> submitQuizAnswer({
+    required int roomId,
+    required int puzzleIndex,
+    required int answerIndex,
+    required int timeTaken,
+  }) async {
+    final token = await _getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/rooms/answer'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'roomId': roomId,
+        'puzzleIndex': puzzleIndex,
+        'answerIndex': answerIndex,
+        'timeTaken': timeTaken,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to submit quiz answer: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> startGame(int roomId) async {
+    final token = await _getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/rooms/start'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'roomId': roomId}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to start game: ${response.body}');
     }
   }
 

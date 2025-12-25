@@ -18,6 +18,7 @@ import {
   leaveRoom,
   kickUser,
   deleteRoom,
+  manualStartGame,
 } from './competitions.js';
 import { GroupRoom } from './room_do.js';
 
@@ -91,14 +92,18 @@ export default {
       }
 
       // ---------- Competitions & Rooms ----------
-      if (path === '/competitions' && request.method === 'GET') {
-        return await getActiveCompetitions(request, env);
+      if (path === '/competitions' || path === '/api/competitions/active') {
+        if (request.method === 'GET') {
+          return await getActiveCompetitions(request, env);
+        }
+        if (request.method === 'POST') {
+          return await createCompetition(request, env);
+        }
       }
-      if (path === '/competitions' && request.method === 'POST') {
-        return await createCompetition(request, env);
-      }
-      if (path === '/competitions/join' && request.method === 'POST') {
-        return await joinCompetition(request, env);
+      if (path === '/competitions/join' || path === '/api/competitions/join') {
+        if (request.method === 'POST') {
+          return await joinCompetition(request, env);
+        }
       }
 
       // Rooms
@@ -111,7 +116,7 @@ export default {
       if (url.pathname === '/api/rooms/my' && request.method === 'GET') {
         return getMyRooms(request, env);
       }
-      if (url.pathname === '/api/rooms/status' && request.method === 'GET') {
+      if ((path === '/rooms/status' || url.pathname === '/api/rooms/status') && request.method === 'GET') {
         return await getRoomStatus(request, env);
       }
       if (url.pathname === '/api/rooms/leave' && request.method === 'POST') {
@@ -131,6 +136,9 @@ export default {
       }
       if (path === '/rooms/leaderboard' && request.method === 'GET') {
         return await getLeaderboard(request, env);
+      }
+      if (path === '/rooms/start' && request.method === 'POST') {
+        return await manualStartGame(request, env);
       }
 
       // WebSocket for Rooms (Real-time Chat & Game)

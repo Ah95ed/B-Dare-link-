@@ -121,3 +121,88 @@ Make the link non-obvious but fair and logically defensible; distractors must be
 export function expectedStepsMinMax(level) {
   return stepsMinMax(level);
 }
+
+// ============= NEW QUIZ FORMAT FOR COMPETITIONS =============
+
+export function buildQuizSystemPrompt({ language = 'ar', level = 1 } = {}) {
+  const isArabic = language === 'ar';
+  const difficulty = difficultyLabel(level);
+
+  if (isArabic) {
+    return `You are a quiz master generating fun trivia questions in ARABIC for a speed-based multiplayer game.
+
+Generate ONE question with 4 multiple choice options.
+
+Level: ${level}
+Difficulty: ${difficulty}
+
+Requirements:
+- Question must be in Arabic (Modern Standard Arabic)
+- Question should be interesting, engaging, and suitable for all ages
+- Categories: general knowledge, science, geography, history, culture, logic puzzles, riddles
+- Exactly 4 options, only ONE is correct
+- Options should be plausible (not obviously wrong)
+- correctIndex is 0-3 indicating which option is correct
+- Include a short hint that helps without giving away the answer
+
+Topics to cover (vary randomly):
+- ألغاز ذكاء وتفكير
+- معلومات عامة
+- جغرافيا وعواصم
+- تاريخ وحضارات
+- علوم وطبيعة
+- رياضيات وأرقام
+- ثقافة عربية وإسلامية
+
+Output ONLY valid JSON:
+{
+  "question": "نص السؤال بالعربية",
+  "options": ["خيار1", "خيار2", "خيار3", "خيار4"],
+  "correctIndex": 0,
+  "hint": "تلميح مساعد",
+  "category": "الفئة"
+}`;
+  }
+
+  return `You are a quiz master generating fun trivia questions in ENGLISH for a speed-based multiplayer game.
+
+Generate ONE question with 4 multiple choice options.
+
+Level: ${level}
+Difficulty: ${difficulty}
+
+Requirements:
+- Question should be interesting, engaging, and suitable for all ages
+- Categories: general knowledge, science, geography, history, culture, logic puzzles, riddles
+- Exactly 4 options, only ONE is correct
+- Options should be plausible (not obviously wrong)
+- correctIndex is 0-3 indicating which option is correct
+- Include a short hint
+
+Output ONLY valid JSON:
+{
+  "question": "Question text",
+  "options": ["Option1", "Option2", "Option3", "Option4"],
+  "correctIndex": 0,
+  "hint": "Helpful hint",
+  "category": "Category"
+}`;
+}
+
+export function buildQuizUserPrompt({ language = 'ar', level = 1, seed } = {}) {
+  const isArabic = language === 'ar';
+  const difficulty = difficultyLabel(level);
+  const seedLine = seed == null ? '' : `\nVariation seed: ${seed}`;
+
+  if (isArabic) {
+    return `Generate a fresh, unique ARABIC quiz question for level ${level} (${difficulty}).
+Make it engaging and fun! Don't repeat common questions.
+The question should challenge players but be fair.
+Shuffle the correct answer position randomly.${seedLine}`;
+  }
+
+  return `Generate a fresh, unique ENGLISH quiz question for level ${level} (${difficulty}).
+Make it engaging and fun! Don't repeat common questions.
+The question should challenge players but be fair.
+Shuffle the correct answer position randomly.${seedLine}`;
+}

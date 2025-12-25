@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
 import 'room_lobby_view.dart';
+import 'create_room_view.dart';
 import 'room_game_view.dart';
 
 class CompetitionsView extends StatefulWidget {
@@ -241,53 +242,9 @@ class _CompetitionsViewState extends State<CompetitionsView> {
   }
 
   void _showCreateRoomDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final competitionProvider = context.read<CompetitionProvider>();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('إنشاء غرفة جديدة'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'اسم الغرفة (اختياري)',
-                hintText: 'مثال: غرفة الأصدقاء',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await competitionProvider.createRoom(
-                  name: nameController.text.isEmpty
-                      ? null
-                      : nameController.text,
-                );
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
-                }
-              }
-            },
-            child: const Text('إنشاء'),
-          ),
-        ],
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CreateRoomView()),
     );
   }
 

@@ -56,9 +56,16 @@ class RealtimeService {
     }
   }
 
-  void send(Map<String, dynamic> data) {
+  bool send(Map<String, dynamic> data) {
     if (_channel != null && _isConnected) {
       _channel!.sink.add(jsonEncode(data));
+      debugPrint('WebSocket message sent: ${data['type']}');
+      return true;
+    } else {
+      debugPrint(
+        'WebSocket send failed - not connected. isConnected: $_isConnected, channel: ${_channel != null}',
+      );
+      return false;
     }
   }
 
