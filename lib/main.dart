@@ -71,7 +71,7 @@ class _DeepLinkHandlerState extends State<DeepLinkHandler> {
 
   @override
   Widget build(BuildContext context) => widget.child;
-}
+} 
 
 class WonderLinkApp extends StatelessWidget {
   const WonderLinkApp({super.key});

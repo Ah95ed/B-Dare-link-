@@ -10,6 +10,7 @@ import 'profile/profile_screen.dart';
 import 'admin/admin_page.dart';
 import 'competitions/competitions_view.dart';
 import 'groups/create_group_view.dart';
+import 'groups/join_group_view.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
@@ -156,6 +157,21 @@ class HomeView extends StatelessWidget {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(20),
                               ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const JoinGroupView(),
+                                ),
+                              );
+                            },
+                            icon: Icon(Icons.group),
+                            label: Text(
+                              isArabic ? 'الانضمام إلى مجموعة' : 'Join Group',
                             ),
                           ),
                         ],

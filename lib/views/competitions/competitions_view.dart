@@ -72,9 +72,17 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                 fillColor: Colors.grey.withOpacity(0.05),
               ),
               textCapitalization: TextCapitalization.characters,
-              onSubmitted: (value) {
+              onSubmitted: (value) async {
                 if (value.length == 6) {
-                  competitionProvider.joinRoom(value.toUpperCase());
+                  try {
+                    await competitionProvider.joinRoom(value.toUpperCase());
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('خطأ في الانضمام: $e')),
+                      );
+                    }
+                  }
                 }
               },
             ),
@@ -182,8 +190,16 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                     'كود: ${room['code']} • ${room['participant_count'] ?? 0} لاعب',
                   ),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    competitionProvider.joinRoom(room['code']);
+                  onTap: () async {
+                    try {
+                      await competitionProvider.joinRoom(room['code']);
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('خطأ في الانضمام: $e')),
+                        );
+                      }
+                    }
                   },
                 ),
               );

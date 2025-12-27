@@ -83,6 +83,12 @@ export async function getUserFromRequest(request, env) {
     }
   }
 
+  // Check for token in query parameter
+  if (!token) {
+    const url = new URL(request.url);
+    token = url.searchParams.get('token');
+  }
+
   if (!token) return null;
   try {
     if (!env || !env.DB) {

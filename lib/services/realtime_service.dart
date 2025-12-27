@@ -23,7 +23,13 @@ class RealtimeService {
     // URL format: wss://.../rooms/ws?roomId=...
     final uri = Uri.parse(url);
     try {
-      _channel = WebSocketChannel.connect(uri, protocols: ['bearer', token]);
+      // Pass token via Sec-WebSocket-Protocol (e.g. "bearer, <token>")
+      // so the Cloudflare Worker can authenticate the websocket handshake.
+      if (token.isNotEmpty) {
+        _channel = WebSocketChannel.connect(uri, protocols: ['bearer', token]);
+      } else {
+        _channel = WebSocketChannel.connect(uri);
+      }
 
       _channel!.stream.listen(
         (data) {
@@ -47,18 +53,25 @@ class RealtimeService {
           _isConnecting = false;
           _isConnected = false;
           _channel = null;
+          _eventController.add({'type': 'closed'});
         },
       );
     } catch (e) {
       _isConnecting = false;
       _isConnected = false;
       debugPrint('Connection error: $e');
+      _eventController.add({'type': 'error', 'message': e.toString()});
     }
   }
 
   bool send(Map<String, dynamic> data) {
     if (_channel != null && _isConnected) {
-      _channel!.sink.add(jsonEncode(data));
+      try {
+        _channel!.sink.add(jsonEncode(data));
+      } catch (e) {
+        debugPrint('WebSocket send exception: $e');
+        return false;
+      }
       debugPrint('WebSocket message sent: ${data['type']}');
       return true;
     } else {

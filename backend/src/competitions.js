@@ -89,7 +89,11 @@ export async function joinRoom(request, env) {
     const room = await env.DB.prepare('SELECT * FROM rooms WHERE code = ?').bind(code).first();
     if (!room) return errorResponse('Room not found', 404);
 
-    if (room.status !== 'waiting') {
+    if (room.status === 'finished') {
+      return errorResponse('Room is finished and cannot be joined', 400);
+    }
+    // Allow joining rooms that are waiting or active
+    if (room.status !== 'waiting' && room.status !== 'active') {
       return errorResponse('Room is not accepting new participants', 400);
     }
 
@@ -232,13 +236,38 @@ async function startRoomGame(env, roomId) {
       .all();
 
     if (puzzles.results.length === 0) {
-      throw new Error('No puzzles available in database');
-    }
+      console.warn('No puzzles found for requested level/lang, attempting fallback.');
 
-    puzzlesData = puzzles.results.map(p => ({
-      puzzleId: p.id,
-      puzzleJson: p.json
-    }));
+      // Try to fetch any puzzle regardless of level/lang as a quick fallback
+      const anyFallback = await env.DB.prepare(
+        'SELECT id, json FROM puzzles ORDER BY RANDOM() LIMIT ?'
+      )
+        .bind(puzzleCount)
+        .all();
+
+      if (anyFallback.results.length > 0) {
+        puzzlesData = anyFallback.results.map(p => ({
+          puzzleId: p.id,
+          puzzleJson: p.json,
+        }));
+      } else {
+        // As a last resort, try to generate puzzles via AI if configured
+        console.warn('No puzzles in DB at all; attempting AI generation fallback');
+        for (let i = 0; i < puzzleCount; i++) {
+          try {
+            const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
+            puzzlesData.push({ puzzleId: null, puzzleJson: JSON.stringify(aiPuzzle) });
+          } catch (e) {
+            console.error('AI fallback generation failed:', e);
+          }
+        }
+      }
+    } else {
+      puzzlesData = puzzles.results.map(p => ({
+        puzzleId: p.id,
+        puzzleJson: p.json
+      }));
+    }
   } else if (puzzleSource === 'ai') {
     // Generate puzzles using AI (multiple calls)
     for (let i = 0; i < puzzleCount; i++) {
@@ -293,7 +322,7 @@ async function startRoomGame(env, roomId) {
   const roomObject = env.ROOM_DO.get(doId);
   await roomObject.fetch(new Request('http://room/start-game-event', {
     method: 'POST',
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       type: 'start_game',
       puzzle: firstPuzzle,
       puzzleIndex: 0,
@@ -305,48 +334,48 @@ async function startRoomGame(env, roomId) {
 // Helper function to generate AI puzzle (Quiz format for competitions)
 async function generateAIPuzzle(env, language, level) {
   const { buildQuizSystemPrompt, buildQuizUserPrompt } = await import('./prompt.js');
-  
+
   // Use Quiz format for simple Q&A
   const systemPrompt = buildQuizSystemPrompt({ language, level });
   const userPrompt = buildQuizUserPrompt({ language, level, seed: Date.now() });
-  
+
   const openaiApiKey = env?.OPENAI_API_KEY;
   const openaiModel = env?.OPENAI_MODEL || 'gpt-4o-mini';
   const groqApiKey = env?.GROQ_API_KEY;
   const groqModel = env?.GROQ_MODEL || 'llama-3.1-8b-instant';
-  
+
   // User provided specific Gemini PRO Key
   const geminiApiKey = env?.GEMINI_API_KEY || 'AIzaSyB8TZZA574oaqNymEmW-9UnptJHBA4ViDs';
 
   let content = '';
 
   if (geminiApiKey) {
-      // Use Gemini
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: systemPrompt + "\n\n" + userPrompt
-            }]
-          }],
-          generationConfig: {
-            response_mime_type: "application/json",
-            temperature: 0.9,
-          }
-        })
-      });
+    // Use Gemini
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Gemini API Error: ${response.status} ${errText}`);
-      }
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: systemPrompt + "\n\n" + userPrompt
+          }]
+        }],
+        generationConfig: {
+          response_mime_type: "application/json",
+          temperature: 0.9,
+        }
+      })
+    });
 
-      const data = await response.json();
-      content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Gemini API Error: ${response.status} ${errText}`);
+    }
+
+    const data = await response.json();
+    content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
   } else if (openaiApiKey) {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -396,7 +425,7 @@ export async function submitAnswer(request, env) {
 
   const body = await request.json();
   const { roomId, puzzleIndex, answerIndex, steps, timeTaken } = body;
-  
+
   // Support both formats: answerIndex (new quiz) or steps (legacy)
   if (!roomId || puzzleIndex === undefined) {
     return errorResponse('Missing required fields', 400);
@@ -423,11 +452,11 @@ export async function submitAnswer(request, env) {
     )
       .bind(roomId, puzzleIndex)
       .first();
-    
+
     if (!puzzleRow) return errorResponse('Puzzle not found', 404);
 
     const puzzle = JSON.parse(puzzleRow.puzzle_json);
-    
+
     // Check answer based on puzzle format
     let isCorrect = false;
     if (answerIndex !== undefined && puzzle.correctIndex !== undefined) {
@@ -449,9 +478,9 @@ export async function submitAnswer(request, env) {
       )
         .bind(roomId, puzzleIndex)
         .first();
-      
+
       isFirstCorrect = existingCorrect.c === 0;
-      
+
       // If first correct, mark as solved in room_puzzles
       if (isFirstCorrect) {
         await env.DB.prepare(
@@ -471,7 +500,7 @@ export async function submitAnswer(request, env) {
 
     let points = 0;
     let rank = null;
-    
+
     if (isCorrect) {
       // Calculate points based on speed and if first
       if (isFirstCorrect) {
@@ -481,7 +510,7 @@ export async function submitAnswer(request, env) {
       } else {
         // Regular points for correct answer
         points = Math.max(100, 1000 - Math.floor(timeTaken / 100));
-        
+
         // Get rank (how many solved before this user)
         const fasterCount = await env.DB.prepare(
           'SELECT COUNT(*) AS c FROM room_results WHERE room_id = ? AND puzzle_index = ? AND is_correct = 1 AND time_taken < ?'
@@ -490,7 +519,7 @@ export async function submitAnswer(request, env) {
           .first();
         rank = fasterCount.c + 1;
       }
-      
+
       // Update participant score
       await env.DB.prepare(
         'UPDATE room_participants SET score = score + ?, puzzles_solved = puzzles_solved + 1, current_puzzle_index = ? WHERE room_id = ? AND user_id = ?'
@@ -527,7 +556,7 @@ export async function submitAnswer(request, env) {
 
     let nextPuzzle = null;
     let gameFinished = false;
-    
+
     if (finished.c >= participants.c) {
       // All finished, move to next puzzle
       if (puzzleIndex < room.puzzle_count - 1) {
@@ -543,7 +572,7 @@ export async function submitAnswer(request, env) {
             .bind(puzzleIndex + 1, roomId)
             .run();
           nextPuzzle = JSON.parse(nextPuzzleRow.puzzle_json);
-          
+
           // Notify Durable Object about next puzzle
           const doId = env.ROOM_DO.idFromName(roomId.toString());
           const roomObject = env.ROOM_DO.get(doId);
@@ -562,7 +591,7 @@ export async function submitAnswer(request, env) {
         await env.DB.prepare('UPDATE rooms SET status = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?')
           .bind('finished', roomId)
           .run();
-        
+
         // Notify Durable Object
         const doId = env.ROOM_DO.idFromName(roomId.toString());
         const roomObject = env.ROOM_DO.get(doId);

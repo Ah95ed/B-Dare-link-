@@ -108,8 +108,13 @@ class CompetitionProvider with ChangeNotifier {
       _connectRealtime();
       // Fetch current puzzle if game is already active
       await refreshRoomStatus();
+      // Refresh the list of my rooms after joining
+      await loadMyRooms();
       notifyListeners();
     } catch (e) {
+      // Capture error message for UI feedback
+      _errorMessage = e.toString();
+      notifyListeners();
       rethrow;
     }
   }
@@ -118,7 +123,11 @@ class CompetitionProvider with ChangeNotifier {
     if (_currentRoom == null || _authProvider == null) return;
 
     final token = await _authProvider!.getToken();
-    if (token == null) return;
+    if (token == null || token.isEmpty) {
+      _errorMessage = 'مفقود: توكن المصادقة. الرجاء تسجيل الدخول من جديد.';
+      notifyListeners();
+      return;
+    }
 
     final roomId = _currentRoom!['id'];
     // Assuming base URL from service, convert to wss
@@ -134,6 +143,29 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   void _handleRealtimeEvent(Map<String, dynamic> event) {
+    // Surface transport-level errors to the UI
+    if (event['type'] == 'error' || event['type'] == 'closed') {
+      _errorMessage =
+          event['message'] ??
+          (event['type'] == 'closed' ? 'WebSocket closed' : null);
+      notifyListeners();
+      // Attempt reconnect after short delay
+      Future.delayed(const Duration(seconds: 3), () async {
+        try {
+          if (_currentRoom != null && _authProvider != null) {
+            final token = await _authProvider!.getToken();
+            if (token != null && token.isNotEmpty) {
+              final roomId = _currentRoom!['id'];
+              final baseUrl = "wonder-link-backend.amhmeed31.workers.dev";
+              final wsUrl =
+                  "wss://$baseUrl/rooms/ws?roomId=$roomId&token=$token";
+              _realtime.connect(wsUrl, token);
+            }
+          }
+        } catch (e) {}
+      });
+      return;
+    }
     switch (event['type']) {
       case 'init':
         _messages = List<Map<String, dynamic>>.from(event['messages'] ?? []);

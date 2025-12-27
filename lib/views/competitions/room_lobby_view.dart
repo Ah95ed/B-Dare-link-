@@ -115,6 +115,32 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
       ),
       body: Column(
         children: [
+          // Error Banner
+          if (competitionProvider.errorMessage != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+              color: Colors.red.withOpacity(0.1),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      competitionProvider.errorMessage!,
+                      style: TextStyle(
+                        color: Colors.red.shade800,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Connection Status Indicator
           Container(
             width: double.infinity,
@@ -273,24 +299,36 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               },
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            color: Colors.grey.shade200,
-            child: Center(
-              child: Text(
-                'عدد اللاعبين: ${participants.length} / ${room['max_participants']}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
+          // Replace player count area with puzzle question when available
+          if (competitionProvider.currentPuzzle != null) ...[
+            const Divider(height: 1),
+            _buildPuzzleCard(context, competitionProvider),
+            const Divider(height: 1),
+          ] else ...[
+            const Divider(height: 1),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              color: Colors.grey.shade100,
+              width: double.infinity,
+              child: Row(
+                children: [
+                  const Icon(Icons.group, size: 16, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Text(
+                    'بانتظار بدء اللعب...',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${participants.length}/${room['max_participants']}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const Divider(height: 1),
-
-          // Current Puzzle Display (if game is active)
-          if (competitionProvider.currentPuzzle != null) ...[
-            _buildPuzzleCard(context, competitionProvider),
             const Divider(height: 1),
           ],
 
@@ -477,7 +515,10 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () => competitionProvider.startGame(),
+                        onPressed: () async {
+                          await competitionProvider.startGame();
+                          await competitionProvider.refreshRoomStatus();
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.amber.shade700,
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -555,7 +596,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                     }
                   },
                 );
-              }).toList(),
+              }),
           ],
         ),
       ),
