@@ -304,6 +304,52 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
             const Divider(height: 1),
             _buildPuzzleCard(context, competitionProvider),
             const Divider(height: 1),
+          ] else if (competitionProvider.gameStarted) ...[
+            const Divider(height: 1),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              color: Colors.blue.shade50,
+              width: double.infinity,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'جاري تحميل السؤال...',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.blue.shade900,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      await competitionProvider.refreshRoomStatus();
+                    },
+                    icon: const Icon(Icons.refresh, size: 14),
+                    label: const Text('تحديث', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
           ] else ...[
             const Divider(height: 1),
             Container(
@@ -517,6 +563,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       child: ElevatedButton(
                         onPressed: () async {
                           await competitionProvider.startGame();
+                          await Future.delayed(const Duration(seconds: 2));
                           await competitionProvider.refreshRoomStatus();
                         },
                         style: ElevatedButton.styleFrom(
@@ -531,6 +578,66 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (isHost &&
+                      competitionProvider.gameStarted &&
+                      competitionProvider.currentPuzzle == null) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          await competitionProvider.refreshRoomStatus();
+                        },
+                        icon: const Icon(Icons.refresh, color: Colors.white),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        label: const Text(
+                          'جلب السؤال الحالي',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (isHost &&
+                      competitionProvider.gameStarted &&
+                      competitionProvider.currentPuzzle != null) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          await competitionProvider.startGame();
+                          await Future.delayed(const Duration(seconds: 2));
+                          await competitionProvider.refreshRoomStatus();
+                        },
+                        icon: const Icon(Icons.skip_next, color: Colors.white),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        label: const Text(
+                          'السؤال التالي ▶️',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -574,6 +681,42 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               question,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 8),
+            if (provider.puzzleEndsAt != null)
+              StreamBuilder<int>(
+                stream: Stream.periodic(const Duration(seconds: 1), (_) {
+                  final now = DateTime.now();
+                  final remaining = provider.puzzleEndsAt!
+                      .difference(now)
+                      .inSeconds;
+                  return remaining > 0 ? remaining : 0;
+                }),
+                builder: (context, snapshot) {
+                  final remaining =
+                      snapshot.data ??
+                      provider.puzzleEndsAt!
+                          .difference(DateTime.now())
+                          .inSeconds;
+                  final secs = remaining > 0 ? remaining : 0;
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: Chip(
+                      backgroundColor: secs <= 5
+                          ? Colors.red.shade100
+                          : Colors.blue.shade100,
+                      label: Text(
+                        'الوقت المتبقي: $secs ثانية',
+                        style: TextStyle(
+                          color: secs <= 5
+                              ? Colors.red.shade800
+                              : Colors.blue.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             const SizedBox(height: 12),
             if (options.isNotEmpty)
               ...options.asMap().entries.map((e) {
@@ -587,16 +730,56 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                   title: Text(opt),
                   onTap: () async {
                     // For quiz type, send selected answer index.
-                    if (puzzle['type'] == 'quiz') {
+                    if ((puzzle['type'] ?? 'quiz') == 'quiz') {
                       await provider.submitQuizAnswer(idx);
                     } else {
-                      // For step‑based puzzles, you may handle differently.
-                      // Here we simply send the answer as a list with the chosen option.
                       await provider.submitAnswer([opt]);
                     }
                   },
                 );
-              }),
+              })
+            else
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'لم تصل خيارات لهذا السؤال بعد.',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            await provider.refreshRoomStatus();
+                          },
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('تحديث السؤال'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Flexible(
+                          child: Text(
+                            'إذا استمر غياب الخيارات، اطلب من القائد إعادة بدء الجولة.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

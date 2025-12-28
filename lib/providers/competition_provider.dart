@@ -25,6 +25,8 @@ class CompetitionProvider with ChangeNotifier {
   int _puzzlesSolved = 0;
   int _totalPuzzles = 5;
   DateTime? _puzzleStartTime;
+  DateTime? _puzzleEndsAt;
+  int _timePerPuzzleSeconds = 30;
 
   // Real-time states
   List<Map<String, dynamic>> _messages = [];
@@ -35,6 +37,8 @@ class CompetitionProvider with ChangeNotifier {
   List<Map<String, dynamic>> get roomParticipants => _roomParticipants;
   Map<String, dynamic>? get currentPuzzle => _currentPuzzle;
   int get currentPuzzleIndex => _currentPuzzleIndex;
+  DateTime? get puzzleEndsAt => _puzzleEndsAt;
+  int get timePerPuzzleSeconds => _timePerPuzzleSeconds;
   bool get isReady => _isReady;
   bool get gameStarted => _gameStarted;
   bool get gameFinished => _gameFinished;
@@ -225,6 +229,7 @@ class CompetitionProvider with ChangeNotifier {
         leaveRoom();
         break;
       case 'game_started':
+        debugPrint('🎮 Game started event received');
         _gameStarted = true;
         _currentPuzzleIndex = event['puzzleIndex'] ?? 0;
         _totalPuzzles = event['totalPuzzles'] ?? 5;
@@ -232,8 +237,30 @@ class CompetitionProvider with ChangeNotifier {
         _gameFinished = false;
         if (event['puzzle'] != null) {
           _currentPuzzle = Map<String, dynamic>.from(event['puzzle']);
+          // Default type for safety so UI shows options as quiz
+          _currentPuzzle!['type'] = _currentPuzzle!['type'] ?? 'quiz';
+          debugPrint('✅ Puzzle loaded: ${_currentPuzzle!['question']}');
+          debugPrint(
+            '✅ Options count: ${(_currentPuzzle!['options'] as List?)?.length ?? 0}',
+          );
+        } else {
+          debugPrint('⚠️ Puzzle missing in game_started, fetching from API');
         }
+        // Always refresh to ensure we have the puzzle
+        refreshRoomStatus();
         _puzzleStartTime = DateTime.now();
+        // Read timer info from gameState if present
+        final gs = event['gameState'];
+        if (gs != null && gs['puzzleEndsAt'] != null) {
+          _puzzleEndsAt = DateTime.fromMillisecondsSinceEpoch(
+            gs['puzzleEndsAt'],
+          );
+          if (gs['timePerPuzzle'] != null) {
+            _timePerPuzzleSeconds =
+                int.tryParse(gs['timePerPuzzle'].toString()) ??
+                _timePerPuzzleSeconds;
+          }
+        }
         break;
       case 'puzzle_solved_first':
         _solvedByUsername = event['username'];
@@ -248,6 +275,27 @@ class CompetitionProvider with ChangeNotifier {
           _currentPuzzle = Map<String, dynamic>.from(event['puzzle']);
         }
         _puzzleStartTime = DateTime.now();
+        final gs2 = event['gameState'];
+        if (gs2 != null && gs2['puzzleEndsAt'] != null) {
+          _puzzleEndsAt = DateTime.fromMillisecondsSinceEpoch(
+            gs2['puzzleEndsAt'],
+          );
+          if (gs2['timePerPuzzle'] != null) {
+            _timePerPuzzleSeconds =
+                int.tryParse(gs2['timePerPuzzle'].toString()) ??
+                _timePerPuzzleSeconds;
+          }
+        }
+        break;
+      case 'timer_started':
+        if (event['endsAt'] != null) {
+          _puzzleEndsAt = DateTime.fromMillisecondsSinceEpoch(event['endsAt']);
+        }
+        if (event['durationSec'] != null) {
+          _timePerPuzzleSeconds =
+              int.tryParse(event['durationSec'].toString()) ??
+              _timePerPuzzleSeconds;
+        }
         break;
       case 'game_finished':
         _gameFinished = true;
@@ -264,6 +312,21 @@ class CompetitionProvider with ChangeNotifier {
     _gameStarted = gameState['status'] == 'active';
     _gameFinished = gameState['status'] == 'finished';
     _currentPuzzleIndex = gameState['currentPuzzleIndex'] ?? 0;
+    if (gameState['puzzleEndsAt'] != null) {
+      _puzzleEndsAt = DateTime.fromMillisecondsSinceEpoch(
+        gameState['puzzleEndsAt'],
+      );
+    }
+    if (gameState['timePerPuzzle'] != null) {
+      _timePerPuzzleSeconds =
+          int.tryParse(gameState['timePerPuzzle'].toString()) ??
+          _timePerPuzzleSeconds;
+    }
+    if (gameState['timePerPuzzle'] != null) {
+      _timePerPuzzleSeconds =
+          int.tryParse(gameState['timePerPuzzle'].toString()) ??
+          _timePerPuzzleSeconds;
+    }
 
     // Load puzzle if provided
     if (puzzle != null) {
@@ -283,6 +346,7 @@ class CompetitionProvider with ChangeNotifier {
   Future<void> refreshRoomStatus() async {
     if (_currentRoom == null) return;
     try {
+      debugPrint('🔄 Refreshing room status for room ${_currentRoom!['id']}');
       final result = await _service.getRoomStatus(_currentRoom!['id']);
       _currentRoom = result['room'];
       _roomParticipants = List<Map<String, dynamic>>.from(
@@ -291,13 +355,20 @@ class CompetitionProvider with ChangeNotifier {
 
       // Get current puzzle from API result if game is active
       final puzzle = result['currentPuzzle'];
+      debugPrint(
+        '📊 Room status: ${_currentRoom!['status']}, puzzle: ${puzzle != null ? 'present' : 'null'}',
+      );
+      if (puzzle != null) {
+        debugPrint('📝 Puzzle question: ${puzzle['question']}');
+        debugPrint('📝 Puzzle options: ${puzzle['options']}');
+      }
       _updateGameState(
         _currentRoom!,
         puzzle: puzzle != null ? Map<String, dynamic>.from(puzzle) : null,
       );
       notifyListeners();
     } catch (e) {
-      debugPrint('Error refreshing room status: $e');
+      debugPrint('❌ Error refreshing room status: $e');
     }
   }
 
@@ -510,6 +581,8 @@ class CompetitionProvider with ChangeNotifier {
     _score = 0;
     _puzzlesSolved = 0;
     _puzzleStartTime = null;
+    _puzzleEndsAt = null;
+    _timePerPuzzleSeconds = 30;
     _messages = [];
     _solvedByUsername = null;
     notifyListeners();

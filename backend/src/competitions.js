@@ -326,7 +326,9 @@ async function startRoomGame(env, roomId) {
       type: 'start_game',
       puzzle: firstPuzzle,
       puzzleIndex: 0,
-      totalPuzzles: puzzlesData.length
+      totalPuzzles: puzzlesData.length,
+      roomId: roomId,
+      timePerPuzzle: room.time_per_puzzle || 60
     })
   }));
 }
@@ -581,7 +583,9 @@ export async function submitAnswer(request, env) {
             body: JSON.stringify({
               type: 'next_puzzle',
               puzzle: nextPuzzle,
-              puzzleIndex: puzzleIndex + 1
+              puzzleIndex: puzzleIndex + 1,
+              roomId: roomId,
+              timePerPuzzle: room.time_per_puzzle || 60
             })
           }));
         }
@@ -597,7 +601,7 @@ export async function submitAnswer(request, env) {
         const roomObject = env.ROOM_DO.get(doId);
         await roomObject.fetch(new Request('http://room/finish-game', {
           method: 'POST',
-          body: JSON.stringify({ type: 'finish_game' })
+          body: JSON.stringify({ type: 'finish_game', roomId: roomId })
         }));
       }
     }
@@ -846,9 +850,13 @@ export async function deleteRoom(request, env) {
     if (!room) return errorResponse('Room not found', 404);
     if (room.created_by !== user.id) return errorResponse('Only host can delete room', 403);
 
-    // Delete participants and room
-    await env.DB.prepare('DELETE FROM room_participants WHERE room_id = ?').bind(roomId).run();
+    // Clean up dependent tables to satisfy FK constraints
     await env.DB.prepare('DELETE FROM room_results WHERE room_id = ?').bind(roomId).run();
+    await env.DB.prepare('DELETE FROM room_puzzles WHERE room_id = ?').bind(roomId).run();
+    await env.DB.prepare('DELETE FROM room_participants WHERE room_id = ?').bind(roomId).run();
+    await env.DB.prepare('DELETE FROM competition_participants WHERE room_id = ?').bind(roomId).run();
+
+    // Delete the room record
     await env.DB.prepare('DELETE FROM rooms WHERE id = ?').bind(roomId).run();
 
     // Notify Durable Object to close all connections
