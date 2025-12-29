@@ -16,7 +16,7 @@ class _CreateRoomViewState extends State<CreateRoomView> {
   // Default values
   int _puzzleCount = 5;
   int _timePerPuzzle = 30;
-  String _puzzleSource = 'database';
+  String _puzzleSource = 'ai';
   int _difficulty = 1;
   final String _language = 'ar';
   final int _maxParticipants = 10;

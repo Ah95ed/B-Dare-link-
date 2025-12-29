@@ -28,10 +28,8 @@ class _JoinGroupViewState extends State<JoinGroupView> {
       final provider = Provider.of<CompetitionProvider>(context, listen: false);
       await provider.joinRoom(code.toUpperCase());
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const GroupRoomView()),
-      );
+      // Room joined, provider will show lobby automatically
+      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(

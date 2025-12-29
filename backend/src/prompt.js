@@ -206,3 +206,78 @@ Make it engaging and fun! Don't repeat common questions.
 The question should challenge players but be fair.
 Shuffle the correct answer position randomly.${seedLine}`;
 }
+
+// ============= WONDER LINK QUIZ (pair-link multiple-choice) =============
+
+export function buildLinkQuizSystemPrompt({ language = 'ar', level = 1 } = {}) {
+  const isArabic = language === 'ar';
+  const difficulty = difficultyLabel(level);
+
+  if (isArabic) {
+    return `أنت منشئ ألغاز لُعبة متعددة اللاعبين سريعة الإيقاع، هدفها اكتشاف "الرابط العجيب" بين شيئين.
+
+المطلوب: إنشاء سؤال اختيار من متعدد (4 خيارات) يسأل: ما الرابط بين عنصرين عربيين واضحين (مثل: باب خشب، شجرة)؟
+
+المستوى: ${level}
+الدرجة: ${difficulty}
+
+الشروط:
+- صِغ السؤال بالعربية الفصحى، بصيغة: "ما الرابط بين \"X\" و\"Y\"؟".
+- اختر عنصرين ملموسين أو مفاهيم يومية مفهومة (بدون أسماء علم حساسة).
+- أنشئ 4 خيارات واضحة ومقنعة، خيار واحد صحيح فقط.
+- اجعل الخيارات الأخرى مشتتات plausibly related وليست عشوائية.
+- اذكر تلميحًا قصيرًا يساعد دون كشف الإجابة.
+- يُستحسن تضمين تفسير مختصر (explanation) للجابة الصحيحة.
+
+الصيغَة JSON فقط (بدون أي نص زائد):
+{
+  "question": "ما الرابط بين \"باب خشب\" و\"شجرة\"؟",
+  "options": ["خيار1", "خيار2", "خيار3", "خيار4"],
+  "correctIndex": 0,
+  "hint": "تلميح موجز",
+  "category": "wonder_link",
+  "pair": { "a": "باب خشب", "b": "شجرة" },
+  "explanation": "لماذا هذا هو الرابط الصحيح"
+}`;
+  }
+
+  return `You create fast-paced multiplayer "Wonder Link" multiple-choice questions.
+
+Task: Ask for the link between two everyday items (e.g., wooden door and tree). Provide 4 options with exactly one correct.
+
+Level: ${level}
+Difficulty: ${difficulty}
+
+Requirements:
+- Question in the form: "What is the link between \"X\" and \"Y\"?"
+- Pick two concrete or common concepts; avoid sensitive proper nouns.
+- Provide 4 plausible options; exactly one is correct.
+- Include a short hint and a brief explanation for the correct answer.
+
+Output JSON only:
+{
+  "question": "What is the link between \"wooden door\" and \"tree\"?",
+  "options": ["Option1", "Option2", "Option3", "Option4"],
+  "correctIndex": 0,
+  "hint": "Short hint",
+  "category": "wonder_link",
+  "pair": { "a": "wooden door", "b": "tree" },
+  "explanation": "Why the correct link is valid"
+}`;
+}
+
+export function buildLinkQuizUserPrompt({ language = 'ar', level = 1, seed } = {}) {
+  const isArabic = language === 'ar';
+  const difficulty = difficultyLabel(level);
+  const seedLine = seed == null ? '' : `\nSeed: ${seed}`;
+
+  if (isArabic) {
+    return `ولّد سؤالَ رابطٍ عجيب بالعربية، مستوى ${level} (${difficulty}).
+اختر عنصرين عربيين واضحين وغير حسّاسين، واكتب السؤال بصيغة: ما الرابط بين "X" و"Y"؟
+قدّم 4 خيارات مقنعة، واحد فقط صحيح، مع تلميحٍ موجز وتفسير مختصر للصواب.${seedLine}`;
+  }
+
+  return `Generate a Wonder Link MCQ in ENGLISH for level ${level} (${difficulty}).
+Pick two everyday items; ask "What is the link between \"X\" and \"Y\"?"
+Provide 4 plausible options (one correct), a short hint, and a brief explanation.${seedLine}`;
+}

@@ -14,6 +14,7 @@ database_name = "wonder-link-db"
 AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
 OPENAI_MODEL = "gpt-4o-mini"
 PUZZLE_BANK_MIN = "30"
+GEMINI_MODEL = "gemini-1.5-flash-001"
 
 [durable_objects]
 bindings = [

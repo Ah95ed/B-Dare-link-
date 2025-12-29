@@ -62,6 +62,34 @@ class CompetitionProvider with ChangeNotifier {
       _authProvider != null &&
       _authProvider!.userId.toString() == _hostId;
 
+  // Normalize puzzle to always have question/options/type for UI
+  Map<String, dynamic> _normalizePuzzle(Map<String, dynamic> puzzle) {
+    final normalized = Map<String, dynamic>.from(puzzle);
+
+    // If this looks like a Wonder Link puzzle (steps array), lift first step into options/question
+    final steps = (normalized['steps'] as List?) ?? const [];
+    if ((normalized['options'] as List?)?.isEmpty == true && steps.isNotEmpty) {
+      final firstStep = Map<String, dynamic>.from(steps.first as Map? ?? {});
+      final start = normalized['startWord'] ?? '';
+      final end = normalized['endWord'] ?? '';
+      final stepWord = firstStep['word'] ?? start;
+      normalized['type'] = normalized['type'] ?? 'steps';
+      normalized['question'] =
+          normalized['question'] ??
+          'اربط بين "$start" و"$end" - اختر الكلمة التالية بعد "$stepWord"';
+      normalized['options'] = List<dynamic>.from(
+        firstStep['options'] ?? const [],
+      );
+      normalized['correctIndex'] =
+          normalized['correctIndex'] ?? (firstStep['correctIndex'] ?? 0);
+    }
+
+    normalized['question'] = normalized['question'] ?? 'سؤال غير متوفر';
+    normalized['options'] = (normalized['options'] as List?) ?? <dynamic>[];
+    normalized['type'] = normalized['type'] ?? 'quiz';
+    return normalized;
+  }
+
   // Competition state
   List<Map<String, dynamic>> _activeCompetitions = [];
   List<Map<String, dynamic>> _myRooms = [];
@@ -83,7 +111,7 @@ class CompetitionProvider with ChangeNotifier {
     int maxParticipants = 10,
     int puzzleCount = 5,
     int timePerPuzzle = 60,
-    String puzzleSource = 'database',
+    String puzzleSource = 'ai',
     int difficulty = 1,
     String language = 'ar',
   }) async {
@@ -236,13 +264,18 @@ class CompetitionProvider with ChangeNotifier {
         _solvedByUsername = null;
         _gameFinished = false;
         if (event['puzzle'] != null) {
-          _currentPuzzle = Map<String, dynamic>.from(event['puzzle']);
-          // Default type for safety so UI shows options as quiz
-          _currentPuzzle!['type'] = _currentPuzzle!['type'] ?? 'quiz';
+          _currentPuzzle = _normalizePuzzle(
+            Map<String, dynamic>.from(event['puzzle']),
+          );
           debugPrint('✅ Puzzle loaded: ${_currentPuzzle!['question']}');
           debugPrint(
             '✅ Options count: ${(_currentPuzzle!['options'] as List?)?.length ?? 0}',
           );
+          final ci = int.tryParse((_currentPuzzle!['correctIndex']).toString());
+          final opts = (_currentPuzzle!['options'] as List?) ?? const [];
+          if (ci != null && ci >= 0 && ci < opts.length) {
+            debugPrint('✅ Correct answer: ${opts[ci]} (index $ci)');
+          }
         } else {
           debugPrint('⚠️ Puzzle missing in game_started, fetching from API');
         }
@@ -272,7 +305,15 @@ class CompetitionProvider with ChangeNotifier {
             0;
         _solvedByUsername = null;
         if (event['puzzle'] != null) {
-          _currentPuzzle = Map<String, dynamic>.from(event['puzzle']);
+          _currentPuzzle = _normalizePuzzle(
+            Map<String, dynamic>.from(event['puzzle']),
+          );
+          final ci = int.tryParse((_currentPuzzle!['correctIndex']).toString());
+          final opts = (_currentPuzzle!['options'] as List?) ?? const [];
+          debugPrint('🆕 New puzzle: ${_currentPuzzle!['question']}');
+          if (ci != null && ci >= 0 && ci < opts.length) {
+            debugPrint('✅ Correct answer: ${opts[ci]} (index $ci)');
+          }
         }
         _puzzleStartTime = DateTime.now();
         final gs2 = event['gameState'];
@@ -312,6 +353,10 @@ class CompetitionProvider with ChangeNotifier {
     _gameStarted = gameState['status'] == 'active';
     _gameFinished = gameState['status'] == 'finished';
     _currentPuzzleIndex = gameState['currentPuzzleIndex'] ?? 0;
+    // Safety defaults to avoid null UI
+    if (_currentPuzzle != null) {
+      _currentPuzzle = _normalizePuzzle(_currentPuzzle!);
+    }
     if (gameState['puzzleEndsAt'] != null) {
       _puzzleEndsAt = DateTime.fromMillisecondsSinceEpoch(
         gameState['puzzleEndsAt'],
@@ -330,13 +375,18 @@ class CompetitionProvider with ChangeNotifier {
 
     // Load puzzle if provided
     if (puzzle != null) {
-      _currentPuzzle = Map<String, dynamic>.from(puzzle);
+      _currentPuzzle = _normalizePuzzle(Map<String, dynamic>.from(puzzle));
       _puzzleStartTime = DateTime.now();
     }
     // Also check if gameState has currentPuzzle (from init/websocket)
     if (gameState['currentPuzzle'] != null) {
-      _currentPuzzle = Map<String, dynamic>.from(gameState['currentPuzzle']);
+      _currentPuzzle = _normalizePuzzle(
+        Map<String, dynamic>.from(gameState['currentPuzzle']),
+      );
       _puzzleStartTime = DateTime.now();
+    }
+    if (_currentPuzzle != null) {
+      _currentPuzzle = _normalizePuzzle(_currentPuzzle!);
     }
   }
 
@@ -359,8 +409,17 @@ class CompetitionProvider with ChangeNotifier {
         '📊 Room status: ${_currentRoom!['status']}, puzzle: ${puzzle != null ? 'present' : 'null'}',
       );
       if (puzzle != null) {
+        final normalized = _normalizePuzzle(Map<String, dynamic>.from(puzzle));
         debugPrint('📝 Puzzle question: ${puzzle['question']}');
         debugPrint('📝 Puzzle options: ${puzzle['options']}');
+        final ci = int.tryParse((puzzle['correctIndex']).toString());
+        final opts = (normalized['options'] as List?) ?? const [];
+        if (ci != null && ci >= 0 && ci < opts.length) {
+          debugPrint('✅ Correct answer: ${opts[ci]} (index $ci)');
+        }
+        _updateGameState(_currentRoom!, puzzle: normalized);
+        notifyListeners();
+        return;
       }
       _updateGameState(
         _currentRoom!,
@@ -388,12 +447,57 @@ class CompetitionProvider with ChangeNotifier {
   Future<void> startGame() async {
     if (_currentRoom == null) return;
     try {
+      // Refresh first to get latest status and any existing puzzle
+      await refreshRoomStatus();
+      final status = _currentRoom?['status']?.toString() ?? 'unknown';
+      debugPrint('Starting game requested. Current room status: $status');
+
+      if (status != 'waiting') {
+        // If already active, just ensure we fetch the current puzzle and surface an error
+        await refreshRoomStatus();
+        final msg =
+            'فشل بدء اللعبة: الغرفة ليست في وضع الانتظار (الحالة: $status)';
+        debugPrint(msg);
+        _errorMessage = msg;
+        notifyListeners();
+        return;
+      }
+
       debugPrint('Starting game via HTTP API for room ${_currentRoom!['id']}');
       await _service.startGame(_currentRoom!['id']);
       // The game_started event will come via WebSocket after puzzles are generated
+      // Also pull status to hydrate puzzle if event is delayed
+      await refreshRoomStatus();
     } catch (e) {
       debugPrint('Error starting game: $e');
       _errorMessage = 'فشل بدء اللعبة: $e';
+      // Try to fetch current state/puzzle to keep UI consistent
+      await refreshRoomStatus();
+      notifyListeners();
+    }
+  }
+
+  Future<void> nextPuzzle() async {
+    if (_currentRoom == null) return;
+    try {
+      await refreshRoomStatus();
+      final status = _currentRoom?['status']?.toString() ?? 'unknown';
+      debugPrint(
+        'Host requested next puzzle for room ${_currentRoom!['id']} (status: $status)',
+      );
+
+      if (status == 'waiting') {
+        debugPrint('Room is waiting; starting game instead of next');
+        await startGame();
+        return;
+      }
+
+      await _service.nextPuzzle(_currentRoom!['id']);
+      await refreshRoomStatus();
+    } catch (e) {
+      debugPrint('Error advancing to next puzzle: $e');
+      _errorMessage = 'فشل تبديل السؤال: $e';
+      await refreshRoomStatus();
       notifyListeners();
     }
   }
@@ -477,6 +581,21 @@ class CompetitionProvider with ChangeNotifier {
         : 0;
 
     try {
+      // Ensure room is active before submitting to avoid “Room is not active”
+      await refreshRoomStatus();
+      final status = _currentRoom?['status']?.toString() ?? 'unknown';
+      if (status == 'waiting') {
+        await startGame();
+        await refreshRoomStatus();
+      }
+      final activeStatus = _currentRoom?['status']?.toString();
+      if (activeStatus != 'active') {
+        _errorMessage =
+            'لا يمكن إرسال الإجابة لأن الغرفة ليست نشطة (الحالة: $activeStatus)';
+        notifyListeners();
+        return;
+      }
+
       final result = await _service.submitQuizAnswer(
         roomId: _currentRoom!['id'],
         puzzleIndex: _currentPuzzleIndex,
@@ -492,6 +611,26 @@ class CompetitionProvider with ChangeNotifier {
         );
       } else {
         debugPrint('Incorrect answer');
+      }
+
+      // If server already returned next puzzle, hydrate immediately for snappy UX
+      if (result['nextPuzzle'] != null) {
+        _currentPuzzleIndex = (_currentPuzzleIndex + 1);
+        _currentPuzzle = _normalizePuzzle(
+          Map<String, dynamic>.from(result['nextPuzzle']),
+        );
+        _puzzleStartTime = DateTime.now();
+        _puzzleEndsAt =
+            null; // will be updated by timer_started/new_puzzle events
+      }
+
+      // If game finished, mark and refresh leaderboard
+      if (result['gameFinished'] == true) {
+        _gameFinished = true;
+        await refreshRoomStatus();
+      } else {
+        // Fallback: pull fresh state so next_puzzle moves if server advanced
+        await refreshRoomStatus();
       }
 
       notifyListeners();
@@ -541,7 +680,8 @@ class CompetitionProvider with ChangeNotifier {
       }
     }
     _resetRoomState();
-    loadMyRooms();
+    await loadMyRooms();
+    notifyListeners();
   }
 
   Future<void> deleteRoom() async {
@@ -554,6 +694,26 @@ class CompetitionProvider with ChangeNotifier {
         _errorMessage = 'فشل في حذف المجموعة: $e';
         notifyListeners();
       }
+    }
+  }
+
+  Future<void> reopenRoom() async {
+    if (_currentRoom == null) return;
+    try {
+      await _service.reopenRoom(_currentRoom!['id']);
+      // reset local state like going back to lobby
+      _gameStarted = false;
+      _gameFinished = false;
+      _currentPuzzle = null;
+      _currentPuzzleIndex = 0;
+      _puzzlesSolved = 0;
+      _score = 0;
+      _isReady = false;
+      await refreshRoomStatus();
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'فشل إعادة فتح الغرفة: $e';
+      notifyListeners();
     }
   }
 

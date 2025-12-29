@@ -89,11 +89,9 @@ export async function joinRoom(request, env) {
     const room = await env.DB.prepare('SELECT * FROM rooms WHERE code = ?').bind(code).first();
     if (!room) return errorResponse('Room not found', 404);
 
-    if (room.status === 'finished') {
-      return errorResponse('Room is finished and cannot be joined', 400);
-    }
-    // Allow joining rooms that are waiting or active
-    if (room.status !== 'waiting' && room.status !== 'active') {
+    // Allow joining waiting/active/finished rooms
+    // Users can rejoin finished rooms to see results or replay
+    if (room.status !== 'waiting' && room.status !== 'active' && room.status !== 'finished') {
       return errorResponse('Room is not accepting new participants', 400);
     }
 
@@ -163,6 +161,19 @@ export async function getRoomStatus(request, env) {
             currentPuzzle._solvedBy = solver.username;
           }
         }
+        // Log puzzle fetch for verification
+        const ci = Number(currentPuzzle.correctIndex);
+        const opts = Array.isArray(currentPuzzle.options) ? currentPuzzle.options : [];
+        const correctAns = ci >= 0 && ci < opts.length ? opts[ci] : 'N/A';
+        console.log('[FETCH PUZZLE]', {
+          roomId,
+          puzzleIndex: room.current_puzzle_index,
+          question: currentPuzzle.question,
+          optionCount: opts.length,
+          correctIndex: ci,
+          correctAnswer: correctAns,
+          category: currentPuzzle.category
+        });
       }
     }
 
@@ -223,9 +234,17 @@ async function startRoomGame(env, roomId) {
   const puzzleSource = room.puzzle_source || 'database';
   const difficulty = room.difficulty || 1;
   const language = room.language || 'ar';
-  const puzzleCount = room.puzzle_count || 5;
+  const puzzleCount = Math.max(room.puzzle_count || 5, 5); // ensure at least 5 puzzles
 
   let puzzlesData = [];
+
+  const isValidQuiz = (p) => {
+    if (!p) return false;
+    if (typeof p.question !== 'string' || p.question.trim().length === 0) return false;
+    if (!Array.isArray(p.options) || p.options.length < 2) return false;
+    if (p.correctIndex === undefined || p.correctIndex === null) return false;
+    return true;
+  };
 
   if (puzzleSource === 'database') {
     // Get random puzzles from database
@@ -263,10 +282,29 @@ async function startRoomGame(env, roomId) {
         }
       }
     } else {
-      puzzlesData = puzzles.results.map(p => ({
-        puzzleId: p.id,
-        puzzleJson: p.json
-      }));
+      // Validate each puzzle; fallback to AI if malformed
+      for (const p of puzzles.results) {
+        try {
+          const parsed = JSON.parse(p.json);
+          if (isValidQuiz(parsed)) {
+            puzzlesData.push({ puzzleId: p.id, puzzleJson: p.json });
+          } else {
+            try {
+              const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
+              puzzlesData.push({ puzzleId: null, puzzleJson: JSON.stringify(aiPuzzle) });
+            } catch (e) {
+              console.warn('AI fallback failed, skipping malformed puzzle', e);
+            }
+          }
+        } catch (e) {
+          try {
+            const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
+            puzzlesData.push({ puzzleId: null, puzzleJson: JSON.stringify(aiPuzzle) });
+          } catch (err) {
+            console.warn('AI fallback failed after JSON parse error', err);
+          }
+        }
+      }
     }
   } else if (puzzleSource === 'ai') {
     // Generate puzzles using AI (multiple calls)
@@ -294,7 +332,25 @@ async function startRoomGame(env, roomId) {
   // 'manual' puzzles would be pre-stored when room is created
 
   if (puzzlesData.length === 0) {
-    throw new Error('No puzzles available');
+    // Final fallback: try any puzzles from DB
+    const anyFallback = await env.DB.prepare(
+      'SELECT id, json FROM puzzles ORDER BY RANDOM() LIMIT ?'
+    )
+      .bind(puzzleCount)
+      .all();
+
+    for (const p of anyFallback.results || []) {
+      try {
+        const parsed = JSON.parse(p.json);
+        if (isValidQuiz(parsed)) {
+          puzzlesData.push({ puzzleId: p.id, puzzleJson: p.json });
+        }
+      } catch (e) { }
+    }
+
+    if (puzzlesData.length === 0) {
+      throw new Error('No puzzles available');
+    }
   }
 
   // Store puzzles in room_puzzles table
@@ -335,11 +391,18 @@ async function startRoomGame(env, roomId) {
 
 // Helper function to generate AI puzzle (Quiz format for competitions)
 async function generateAIPuzzle(env, language, level) {
-  const { buildQuizSystemPrompt, buildQuizUserPrompt } = await import('./prompt.js');
+  // Decide quiz type: 'wonder_link' (pair-link) or generic 'quiz'
+  const quizType = (env?.QUIZ_TYPE || 'wonder_link').toLowerCase();
 
-  // Use Quiz format for simple Q&A
-  const systemPrompt = buildQuizSystemPrompt({ language, level });
-  const userPrompt = buildQuizUserPrompt({ language, level, seed: Date.now() });
+  const prompts = await import('./prompt.js');
+  const useWonderLink = quizType === 'wonder_link' || quizType === 'link';
+
+  const systemPrompt = useWonderLink
+    ? prompts.buildLinkQuizSystemPrompt({ language, level })
+    : prompts.buildQuizSystemPrompt({ language, level });
+  const userPrompt = useWonderLink
+    ? prompts.buildLinkQuizUserPrompt({ language, level, seed: Date.now() })
+    : prompts.buildQuizUserPrompt({ language, level, seed: Date.now() });
 
   const openaiApiKey = env?.OPENAI_API_KEY;
   const openaiModel = env?.OPENAI_MODEL || 'gpt-4o-mini';
@@ -348,12 +411,13 @@ async function generateAIPuzzle(env, language, level) {
 
   // User provided specific Gemini PRO Key
   const geminiApiKey = env?.GEMINI_API_KEY || 'AIzaSyB8TZZA574oaqNymEmW-9UnptJHBA4ViDs';
+  const geminiModel = env?.GEMINI_MODEL || 'gemini-1.5-flash-001';
 
   let content = '';
 
   if (geminiApiKey) {
     // Use Gemini
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -417,7 +481,38 @@ async function generateAIPuzzle(env, language, level) {
 
   // Parse the JSON response
   const cleanContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
-  return JSON.parse(cleanContent);
+  const parsed = JSON.parse(cleanContent);
+
+  // Validate the puzzle has required fields
+  if (!parsed.question || !Array.isArray(parsed.options) || parsed.options.length < 2) {
+    console.error('Invalid puzzle from AI:', parsed);
+    throw new Error('AI generated invalid puzzle format');
+  }
+  if (parsed.correctIndex === undefined || parsed.correctIndex === null) {
+    console.error('Missing correctIndex in AI puzzle:', parsed);
+    throw new Error('AI puzzle missing correctIndex');
+  }
+
+  try {
+    const cidx = Number(parsed.correctIndex);
+    const ans = Array.isArray(parsed.options) && cidx >= 0 && cidx < parsed.options.length
+      ? parsed.options[cidx]
+      : 'N/A';
+    console.log('[AI QUIZ]', {
+      language,
+      level,
+      category: parsed.category || 'quiz',
+      question: parsed.question,
+      correctIndex: parsed.correctIndex,
+      correctAnswer: ans
+    });
+  } catch (_) { /* ignore logging errors */ }
+
+  // Ensure category is set for wonder_link
+  if (useWonderLink) {
+    parsed.category = parsed.category || 'wonder_link';
+  }
+  return parsed;
 }
 
 // Submit answer (supports both quiz format and legacy steps format)
@@ -493,11 +588,28 @@ export async function submitAnswer(request, env) {
       }
     }
 
-    // Save result (puzzle_id can be null for AI-generated puzzles)
+    // Ensure puzzle_id references a real row to satisfy FK constraint
+    // If puzzle came from DB it may already have puzzleId; otherwise insert a stub row
+    let puzzleId = null;
+    if (puzzle.puzzleId) {
+      puzzleId = puzzle.puzzleId;
+    }
+    if (!puzzleId) {
+      const lang = room.language || 'ar';
+      const difficulty = room.difficulty || 1;
+      const jsonStr = JSON.stringify(puzzle);
+      const inserted = await env.DB.prepare(
+        'INSERT INTO puzzles (level, lang, json) VALUES (?, ?, ?)' // returns last_row_id
+      )
+        .bind(difficulty, lang, jsonStr)
+        .run();
+      puzzleId = inserted.meta.last_row_id;
+    }
+
     await env.DB.prepare(
       'INSERT INTO room_results (room_id, user_id, puzzle_id, puzzle_index, is_correct, time_taken) VALUES (?, ?, ?, ?, ?, ?)'
     )
-      .bind(roomId, user.id, null, puzzleIndex, isCorrect, timeTaken)
+      .bind(roomId, user.id, puzzleId, puzzleIndex, isCorrect, timeTaken)
       .run();
 
     let points = 0;
@@ -751,14 +863,18 @@ export async function getMyRooms(request, env) {
   if (!user) return errorResponse('Unauthorized', 401);
 
   try {
+    // Get all rooms user participated in (exclude deleted rooms)
     const rooms = await env.DB.prepare(
-      `SELECT r.*, u.username as creator_name, 
-      (SELECT COUNT(*) FROM room_participants WHERE room_id = r.id) as participant_count
+      `SELECT r.id, r.name, r.code, r.status, r.created_by, r.puzzle_count, 
+              r.time_per_puzzle, r.difficulty, r.language, r.puzzle_source, r.created_at,
+              u.username as creator_name,
+              COUNT(DISTINCT rp.user_id) as participant_count
       FROM rooms r 
       JOIN room_participants rp ON r.id = rp.room_id 
       JOIN users u ON r.created_by = u.id
-      WHERE rp.user_id = ? AND r.status != 'finished'
-      ORDER BY r.created_at DESC`
+      WHERE rp.user_id = ? 
+      GROUP BY r.id
+      ORDER BY r.created_at DESC LIMIT 50`
     )
       .bind(user.id)
       .all();
@@ -868,6 +984,111 @@ export async function deleteRoom(request, env) {
     }));
 
     return jsonResponse({ success: true });
+  } catch (e) {
+    return errorResponse(e.message, 500);
+  }
+}
+
+// Reopen a finished room (Host only): reset status/puzzles/scores
+export async function reopenRoom(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return errorResponse('Unauthorized', 401);
+
+  const { roomId } = await request.json();
+  if (!roomId) return errorResponse('roomId required', 400);
+
+  try {
+    const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(roomId).first();
+    if (!room) return errorResponse('Room not found', 404);
+    if (room.created_by !== user.id) return errorResponse('Only host can reopen room', 403);
+
+    // Clear puzzles/results
+    await env.DB.prepare('DELETE FROM room_results WHERE room_id = ?').bind(roomId).run();
+    await env.DB.prepare('DELETE FROM room_puzzles WHERE room_id = ?').bind(roomId).run();
+
+    // Reset participants
+    await env.DB.prepare('UPDATE room_participants SET score = 0, puzzles_solved = 0, current_puzzle_index = 0, is_ready = 0 WHERE room_id = ?')
+      .bind(roomId)
+      .run();
+
+    // Reset room status
+    await env.DB.prepare('UPDATE rooms SET status = ?, current_puzzle_index = 0, current_puzzle_id = NULL, started_at = NULL, finished_at = NULL WHERE id = ?')
+      .bind('waiting', roomId)
+      .run();
+
+    // Notify DO (optional best-effort)
+    try {
+      const doId = env.ROOM_DO.idFromName(roomId.toString());
+      const roomObject = env.ROOM_DO.get(doId);
+      await roomObject.fetch(new Request('http://room/reopen', {
+        method: 'POST',
+        body: JSON.stringify({ type: 'room_reopened' })
+      }));
+    } catch (_) { }
+
+    return jsonResponse({ success: true });
+  } catch (e) {
+    return errorResponse(e.message, 500);
+  }
+}
+
+// Force advance to next puzzle (Host only)
+export async function forceNextPuzzle(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return errorResponse('Unauthorized', 401);
+
+  const { roomId } = await request.json();
+  if (!roomId) return errorResponse('roomId required', 400);
+
+  try {
+    const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(roomId).first();
+    if (!room) return errorResponse('Room not found', 404);
+    if (room.created_by !== user.id) return errorResponse('Only host can advance puzzle', 403);
+    if (room.status !== 'active') return errorResponse('Room is not active', 400);
+
+    const currentIdx = room.current_puzzle_index ?? 0;
+    const nextIdx = currentIdx + 1;
+
+    if (nextIdx >= (room.puzzle_count ?? 0)) {
+      // Finish the game if no more puzzles
+      await env.DB.prepare('UPDATE rooms SET status = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .bind('finished', roomId)
+        .run();
+      const doId = env.ROOM_DO.idFromName(roomId.toString());
+      const roomObject = env.ROOM_DO.get(doId);
+      await roomObject.fetch(new Request('http://room/finish-game', {
+        method: 'POST',
+        body: JSON.stringify({ type: 'finish_game', roomId })
+      }));
+      return jsonResponse({ success: true, gameFinished: true });
+    }
+
+    const nextRow = await env.DB.prepare(
+      'SELECT puzzle_json FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
+    ).bind(roomId, nextIdx).first();
+
+    if (!nextRow) return errorResponse('Next puzzle not found', 404);
+
+    await env.DB.prepare('UPDATE rooms SET current_puzzle_index = ? WHERE id = ?')
+      .bind(nextIdx, roomId)
+      .run();
+
+    const nextPuzzle = JSON.parse(nextRow.puzzle_json);
+
+    const doId = env.ROOM_DO.idFromName(roomId.toString());
+    const roomObject = env.ROOM_DO.get(doId);
+    await roomObject.fetch(new Request('http://room/next-puzzle', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'next_puzzle',
+        puzzle: nextPuzzle,
+        puzzleIndex: nextIdx,
+        roomId: roomId,
+        timePerPuzzle: room.time_per_puzzle || 60
+      })
+    }));
+
+    return jsonResponse({ success: true, nextPuzzle });
   } catch (e) {
     return errorResponse(e.message, 500);
   }

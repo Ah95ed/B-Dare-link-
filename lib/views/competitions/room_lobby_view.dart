@@ -113,278 +113,272 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Error Banner
-          if (competitionProvider.errorMessage != null)
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Error Banner
+            if (competitionProvider.errorMessage != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 6,
+                  horizontal: 12,
+                ),
+                color: Colors.red.withOpacity(0.1),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        competitionProvider.errorMessage!,
+                        style: TextStyle(
+                          color: Colors.red.shade800,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            // Connection Status Indicator
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-              color: Colors.red.withOpacity(0.1),
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              color: competitionProvider.isConnected
+                  ? Colors.green.withOpacity(0.1)
+                  : (competitionProvider.isConnecting
+                        ? Colors.orange.withOpacity(0.1)
+                        : Colors.red.withOpacity(0.1)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 16),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      competitionProvider.errorMessage!,
-                      style: TextStyle(
-                        color: Colors.red.shade800,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          // Connection Status Indicator
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            color: competitionProvider.isConnected
-                ? Colors.green.withOpacity(0.1)
-                : (competitionProvider.isConnecting
-                      ? Colors.orange.withOpacity(0.1)
-                      : Colors.red.withOpacity(0.1)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  competitionProvider.isConnected
-                      ? Icons.cloud_done
-                      : (competitionProvider.isConnecting
-                            ? Icons.cloud_queue
-                            : Icons.cloud_off),
-                  size: 14,
-                  color: competitionProvider.isConnected
-                      ? Colors.green
-                      : (competitionProvider.isConnecting
-                            ? Colors.orange
-                            : Colors.red),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  competitionProvider.isConnected
-                      ? 'متصل بالخادم'
-                      : (competitionProvider.isConnecting
-                            ? 'جارٍ الاتصال...'
-                            : 'غير متصل - اضغط تحديث'),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: competitionProvider.isConnected
-                        ? Colors.green.shade800
+                  Icon(
+                    competitionProvider.isConnected
+                        ? Icons.cloud_done
                         : (competitionProvider.isConnecting
-                              ? Colors.orange.shade800
-                              : Colors.red.shade800),
-                    fontWeight: FontWeight.bold,
+                              ? Icons.cloud_queue
+                              : Icons.cloud_off),
+                    size: 14,
+                    color: competitionProvider.isConnected
+                        ? Colors.green
+                        : (competitionProvider.isConnecting
+                              ? Colors.orange
+                              : Colors.red),
                   ),
-                ),
-              ],
-            ),
-          ),
-
-          // Game Settings Info
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: Colors.grey.shade50,
-            child: Row(
-              children: [
-                const Icon(Icons.settings, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text(
-                  '${room['puzzleCount'] ?? 5} ألغاز • ${(room['timePerPuzzle'] ?? 60)} ثانية/لغز • ${room['puzzleSource'] == 'ai' ? 'ذكاء اصطناعي' : (room['puzzleSource'] == 'manual' ? 'يدوي' : 'قاعدة بيانات')}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const Spacer(),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-
-          // Participants Row
-          SizedBox(
-            height: 100,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: participants.length,
-              itemBuilder: (context, index) {
-                final p = participants[index];
-                final pId = p['userId']?.toString();
-                final isPHost = pId == competitionProvider.hostId;
-                final isPReady = p['isReady'] == true;
-
-                return Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Column(
-                    children: [
-                      Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 24,
-                            backgroundColor: isPReady
-                                ? Colors.green
-                                : Colors.grey.shade300,
-                            child: CircleAvatar(
-                              radius: 22,
-                              child: Text(
-                                p['username']?[0]?.toUpperCase() ?? '?',
-                              ),
-                            ),
-                          ),
-                          if (isPHost &&
-                              pId != null &&
-                              competitionProvider.hostId != null)
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: const BoxDecoration(
-                                  color: Colors.amber,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.star,
-                                  size: 12,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            (p['username'] ?? '...'),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: isPHost
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              color: isPHost && pId != null
-                                  ? Colors.amber.shade900
-                                  : Colors.black,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (isHost && pId != currentUserId && pId != null)
-                            GestureDetector(
-                              onTap: () => competitionProvider.kickUser(pId),
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                margin: const EdgeInsets.only(left: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withOpacity(0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.close,
-                                  size: 10,
-                                  color: Colors.red,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          // Replace player count area with puzzle question when available
-          if (competitionProvider.currentPuzzle != null) ...[
-            const Divider(height: 1),
-            _buildPuzzleCard(context, competitionProvider),
-            const Divider(height: 1),
-          ] else if (competitionProvider.gameStarted) ...[
-            const Divider(height: 1),
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              color: Colors.blue.shade50,
-              width: double.infinity,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.blue.shade700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'جاري تحميل السؤال...',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.blue.shade900,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () async {
-                      await competitionProvider.refreshRoomStatus();
-                    },
-                    icon: const Icon(Icons.refresh, size: 14),
-                    label: const Text('تحديث', style: TextStyle(fontSize: 12)),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-          ] else ...[
-            const Divider(height: 1),
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              color: Colors.grey.shade100,
-              width: double.infinity,
-              child: Row(
-                children: [
-                  const Icon(Icons.group, size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Text(
-                    'بانتظار بدء اللعب...',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${participants.length}/${room['max_participants']}',
-                    style: const TextStyle(
+                    competitionProvider.isConnected
+                        ? 'متصل بالخادم'
+                        : (competitionProvider.isConnecting
+                              ? 'جارٍ الاتصال...'
+                              : 'غير متصل - اضغط تحديث'),
+                    style: TextStyle(
                       fontSize: 12,
+                      color: competitionProvider.isConnected
+                          ? Colors.green.shade800
+                          : (competitionProvider.isConnecting
+                                ? Colors.orange.shade800
+                                : Colors.red.shade800),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
             ),
-            const Divider(height: 1),
-          ],
 
-          // Chat Area
-          Expanded(
-            child: Container(
+            // Game Settings Info
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: Colors.grey.shade50,
+              child: Row(
+                children: [
+                  const Icon(Icons.settings, size: 16, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${room['puzzleCount'] ?? 5} ألغاز • ${(room['timePerPuzzle'] ?? 60)} ثانية/لغز • ${room['puzzleSource'] == 'ai' ? 'ذكاء اصطناعي' : (room['puzzleSource'] == 'manual' ? 'يدوي' : 'قاعدة بيانات')}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const Spacer(),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+
+            // Top area: show puzzle instead of participants list
+            if (competitionProvider.currentPuzzle != null) ...[
+              _buildPuzzleCard(context, competitionProvider),
+              const Divider(height: 1),
+            ] else if (competitionProvider.gameStarted) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 16,
+                ),
+                color: Colors.blue.shade50,
+                width: double.infinity,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.blue.shade700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'جاري تحميل السؤال...',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue.shade900,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () async {
+                        await competitionProvider.refreshRoomStatus();
+                      },
+                      icon: const Icon(Icons.refresh, size: 14),
+                      label: const Text(
+                        'تحديث',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+            ] else ...[
+              // Participants Row (only before game starts)
+              SizedBox(
+                height: 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  itemCount: participants.length,
+                  itemBuilder: (context, index) {
+                    final p = participants[index];
+                    final pId = p['userId']?.toString();
+                    final isPHost = pId == competitionProvider.hostId;
+                    final isPReady = p['isReady'] == true;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Column(
+                        children: [
+                          Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: isPReady
+                                    ? Colors.green
+                                    : Colors.grey.shade300,
+                                child: CircleAvatar(
+                                  radius: 22,
+                                  child: Text(
+                                    p['username']?[0]?.toUpperCase() ?? '?',
+                                  ),
+                                ),
+                              ),
+                              if (isPHost &&
+                                  pId != null &&
+                                  competitionProvider.hostId != null)
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.amber,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.star,
+                                      size: 12,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                (p['username'] ?? '...'),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: isPHost
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isPHost && pId != null
+                                      ? Colors.amber.shade900
+                                      : Colors.black,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (isHost && pId != currentUserId && pId != null)
+                                GestureDetector(
+                                  onTap: () =>
+                                      competitionProvider.kickUser(pId),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    margin: const EdgeInsets.only(left: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 10,
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+            // Below area removed (now puzzle appears at top area)
+
+            // Chat Area (scrolls with the page)
+            Container(
+              color: Colors.grey.shade50,
+              width: double.infinity,
               child: ListView.builder(
                 controller: _scrollController,
                 padding: const EdgeInsets.all(16),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
                 itemCount: messages.length,
                 itemBuilder: (context, index) {
                   final msg = messages[index];
@@ -443,46 +437,71 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                 },
               ),
             ),
-          ),
 
-          // Input & Ready Button
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          decoration: InputDecoration(
-                            hintText: 'اكتب رسالة...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
+            // Input & Ready Button
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            decoration: InputDecoration(
+                              hintText: 'اكتب رسالة...',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey.shade100,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                             ),
-                            filled: true,
-                            fillColor: Colors.grey.shade100,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                            ),
+                            onSubmitted: (val) async {
+                              if (val.trim().isNotEmpty) {
+                                final sent = await competitionProvider
+                                    .sendMessage(val.trim());
+                                if (!sent && mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'فشل إرسال الرسالة، يرجى التأكد من الاتصال',
+                                      ),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                                _messageController.clear();
+                                _scrollToBottom();
+                              }
+                            },
                           ),
-                          onSubmitted: (val) async {
-                            if (val.trim().isNotEmpty) {
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: Icon(
+                            Icons.send,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                          onPressed: () async {
+                            if (_messageController.text.trim().isNotEmpty) {
                               final sent = await competitionProvider
-                                  .sendMessage(val.trim());
+                                  .sendMessage(_messageController.text.trim());
                               if (!sent && mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -498,157 +517,157 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                             }
                           },
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: Icon(
-                          Icons.send,
-                          color: Theme.of(context).primaryColor,
-                        ),
-                        onPressed: () async {
-                          if (_messageController.text.trim().isNotEmpty) {
-                            final sent = await competitionProvider.sendMessage(
-                              _messageController.text.trim(),
-                            );
-                            if (!sent && mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'فشل إرسال الرسالة، يرجى التأكد من الاتصال',
-                                  ),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                            _messageController.clear();
-                            _scrollToBottom();
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        competitionProvider.toggleReady(
-                          !competitionProvider.isReady,
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: competitionProvider.isReady
-                            ? Colors.green
-                            : Theme.of(context).primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(
-                        competitionProvider.isReady
-                            ? 'أنت جاهز ✅'
-                            : 'إعلان الجاهزية',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
-                      ),
+                      ],
                     ),
-                  ),
-                  if (isHost && !competitionProvider.gameStarted) ...[
                     const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () async {
-                          await competitionProvider.startGame();
-                          await Future.delayed(const Duration(seconds: 2));
-                          await competitionProvider.refreshRoomStatus();
+                        onPressed: () {
+                          competitionProvider.toggleReady(
+                            !competitionProvider.isReady,
+                          );
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.amber.shade700,
+                          backgroundColor: competitionProvider.isReady
+                              ? Colors.green
+                              : Theme.of(context).primaryColor,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: const Text(
-                          'ابدأ اللعب الآن 🎮',
-                          style: TextStyle(
+                        child: Text(
+                          competitionProvider.isReady
+                              ? 'أنت جاهز ✅'
+                              : 'إعلان الجاهزية',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
-                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                     ),
-                  ],
-                  if (isHost &&
-                      competitionProvider.gameStarted &&
-                      competitionProvider.currentPuzzle == null) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          await competitionProvider.refreshRoomStatus();
-                        },
-                        icon: const Icon(Icons.refresh, color: Colors.white),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange.shade600,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    if (isHost && !competitionProvider.gameStarted) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            await competitionProvider.nextPuzzle();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.amber.shade700,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'ابدأ اللعب الآن 🎮',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        label: const Text(
-                          'جلب السؤال الحالي',
-                          style: TextStyle(
+                      ),
+                    ],
+                    if (isHost &&
+                        competitionProvider.gameStarted &&
+                        competitionProvider.currentPuzzle == null) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            await competitionProvider.refreshRoomStatus();
+                          },
+                          icon: const Icon(Icons.refresh, color: Colors.white),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange.shade600,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          label: const Text(
+                            'جلب السؤال الحالي',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (isHost &&
+                        competitionProvider.gameStarted &&
+                        competitionProvider.currentPuzzle != null) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            await competitionProvider.nextPuzzle();
+                          },
+                          icon: const Icon(
+                            Icons.skip_next,
                             color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple.shade600,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          label: const Text(
+                            'السؤال التالي ▶️',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                  if (isHost &&
-                      competitionProvider.gameStarted &&
-                      competitionProvider.currentPuzzle != null) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          await competitionProvider.startGame();
-                          await Future.delayed(const Duration(seconds: 2));
-                          await competitionProvider.refreshRoomStatus();
-                        },
-                        icon: const Icon(Icons.skip_next, color: Colors.white),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.purple.shade600,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    ],
+                    if (isHost && competitionProvider.gameFinished) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            await competitionProvider.reopenRoom();
+                          },
+                          icon: const Icon(Icons.refresh, color: Colors.white),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal.shade700,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                        ),
-                        label: const Text(
-                          'السؤال التالي ▶️',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
+                          label: const Text(
+                            'إعادة فتح الغرفة',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -667,6 +686,9 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     // - 'type'    : String (e.g., 'quiz' or 'steps')
     final String question = puzzle['question']?.toString() ?? 'سؤال غير متوفر';
     final List<dynamic> options = puzzle['options'] as List<dynamic>? ?? [];
+    final String? startWord = puzzle['startWord']?.toString();
+    final String? endWord = puzzle['endWord']?.toString();
+    final String? hint = puzzle['hint']?.toString();
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -674,113 +696,149 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              question,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            if (provider.puzzleEndsAt != null)
-              StreamBuilder<int>(
-                stream: Stream.periodic(const Duration(seconds: 1), (_) {
-                  final now = DateTime.now();
-                  final remaining = provider.puzzleEndsAt!
-                      .difference(now)
-                      .inSeconds;
-                  return remaining > 0 ? remaining : 0;
-                }),
-                builder: (context, snapshot) {
-                  final remaining =
-                      snapshot.data ??
-                      provider.puzzleEndsAt!
-                          .difference(DateTime.now())
-                          .inSeconds;
-                  final secs = remaining > 0 ? remaining : 0;
-                  return Align(
-                    alignment: Alignment.centerLeft,
-                    child: Chip(
-                      backgroundColor: secs <= 5
-                          ? Colors.red.shade100
-                          : Colors.blue.shade100,
-                      label: Text(
-                        'الوقت المتبقي: $secs ثانية',
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                question,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (startWord != null || endWord != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      if (startWord != null)
+                        Chip(
+                          label: Text('بداية: $startWord'),
+                          backgroundColor: Colors.orange.shade50,
+                        ),
+                      if (endWord != null)
+                        Chip(
+                          label: Text('نهاية: $endWord'),
+                          backgroundColor: Colors.green.shade50,
+                        ),
+                    ],
+                  ),
+                ),
+              if (hint != null && hint.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'تلميح: $hint',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              if (provider.puzzleEndsAt != null)
+                StreamBuilder<int>(
+                  stream: Stream.periodic(const Duration(seconds: 1), (_) {
+                    final now = DateTime.now();
+                    final remaining = provider.puzzleEndsAt!
+                        .difference(now)
+                        .inSeconds;
+                    return remaining > 0 ? remaining : 0;
+                  }),
+                  builder: (context, snapshot) {
+                    final remaining =
+                        snapshot.data ??
+                        provider.puzzleEndsAt!
+                            .difference(DateTime.now())
+                            .inSeconds;
+                    final secs = remaining > 0 ? remaining : 0;
+                    return Align(
+                      alignment: Alignment.centerLeft,
+                      child: Chip(
+                        backgroundColor: secs <= 5
+                            ? Colors.red.shade100
+                            : Colors.blue.shade100,
+                        label: Text(
+                          'الوقت المتبقي: $secs ثانية',
+                          style: TextStyle(
+                            color: secs <= 5
+                                ? Colors.red.shade800
+                                : Colors.blue.shade800,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              const SizedBox(height: 12),
+              if (options.isNotEmpty)
+                ...options.asMap().entries.map((e) {
+                  final idx = e.key;
+                  final opt = e.value?.toString() ?? '';
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Theme.of(context).primaryColorLight,
+                      child: Text((idx + 1).toString()),
+                    ),
+                    title: Text(opt),
+                    onTap: () async {
+                      // For quiz type, send selected answer index.
+                      if ((puzzle['type'] ?? 'quiz') == 'quiz') {
+                        await provider.submitQuizAnswer(idx);
+                      } else {
+                        await provider.submitAnswer([opt]);
+                      }
+                    },
+                  );
+                })
+              else
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'لم تصل خيارات لهذا السؤال بعد.',
                         style: TextStyle(
-                          color: secs <= 5
-                              ? Colors.red.shade800
-                              : Colors.blue.shade800,
+                          color: Colors.red,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            const SizedBox(height: 12),
-            if (options.isNotEmpty)
-              ...options.asMap().entries.map((e) {
-                final idx = e.key;
-                final opt = e.value?.toString() ?? '';
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Theme.of(context).primaryColorLight,
-                    child: Text((idx + 1).toString()),
-                  ),
-                  title: Text(opt),
-                  onTap: () async {
-                    // For quiz type, send selected answer index.
-                    if ((puzzle['type'] ?? 'quiz') == 'quiz') {
-                      await provider.submitQuizAnswer(idx);
-                    } else {
-                      await provider.submitAnswer([opt]);
-                    }
-                  },
-                );
-              })
-            else
-              Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'لم تصل خيارات لهذا السؤال بعد.',
-                      style: TextStyle(
-                        color: Colors.red,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            await provider.refreshRoomStatus();
-                          },
-                          icon: const Icon(Icons.refresh, size: 16),
-                          label: const Text('تحديث السؤال'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              await provider.refreshRoomStatus();
+                            },
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('تحديث السؤال'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Flexible(
-                          child: Text(
-                            'إذا استمر غياب الخيارات، اطلب من القائد إعادة بدء الجولة.',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          const SizedBox(width: 8),
+                          const Flexible(
+                            child: Text(
+                              'إذا استمر غياب الخيارات، اطلب من القائد إعادة بدء الجولة.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

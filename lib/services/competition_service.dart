@@ -17,7 +17,7 @@ class CompetitionService {
     int maxParticipants = 10,
     int puzzleCount = 5,
     int timePerPuzzle = 60,
-    String puzzleSource = 'database', // 'ai', 'database', 'manual'
+    String puzzleSource = 'ai', // 'ai', 'database', 'manual'
     int difficulty = 1,
     String language = 'ar',
   }) async {
@@ -167,6 +167,42 @@ class CompetitionService {
       return jsonDecode(response.body);
     } else {
       throw Exception('Failed to start game: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> reopenRoom(int roomId) async {
+    final token = await _getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/rooms/reopen'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'roomId': roomId}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to reopen room: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> nextPuzzle(int roomId) async {
+    final token = await _getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/rooms/next'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'roomId': roomId}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to advance puzzle: ${response.body}');
     }
   }
 

@@ -19,6 +19,8 @@ import {
   kickUser,
   deleteRoom,
   manualStartGame,
+  reopenRoom,
+  forceNextPuzzle,
 } from './competitions.js';
 import { GroupRoom } from './room_do.js';
 
@@ -140,28 +142,34 @@ export default {
       if (path === '/rooms/start' && request.method === 'POST') {
         return await manualStartGame(request, env);
       }
+      if (path === '/rooms/reopen' && request.method === 'POST') {
+        return await reopenRoom(request, env);
+      }
+      if (path === '/rooms/next' && request.method === 'POST') {
+        return await forceNextPuzzle(request, env);
+      }
 
       // WebSocket for Rooms (Real-time Chat & Game)
       if (path === '/rooms/ws') {
         const roomId = url.searchParams.get('roomId');
         if (!roomId) return errorResponse('roomId required', 400);
-        
+
         // Ensure user is authorized
         const user = await getUserFromRequest(request, env);
         if (!user) return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
 
         const id = env.ROOM_DO.idFromName(roomId.toString());
         const roomObject = env.ROOM_DO.get(id);
-        
+
         // Create a new request based on the original one but for the DO
         const doHeaders = new Headers(request.headers);
         doHeaders.set('X-User-Id', user.id.toString());
         doHeaders.set('X-User-Name', user.username);
-        
+
         const doRequest = new Request(request, {
           headers: doHeaders
         });
-        
+
         return roomObject.fetch(doRequest);
       }
 

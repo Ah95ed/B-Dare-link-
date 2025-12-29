@@ -27,13 +27,9 @@ class _CompetitionsViewState extends State<CompetitionsView> {
   Widget build(BuildContext context) {
     final competitionProvider = context.watch<CompetitionProvider>();
 
-    // If in a room, show room view
+    // If in a room, show room lobby (game happens in lobby now)
     if (competitionProvider.currentRoom != null) {
-      if (competitionProvider.gameStarted) {
-        return const RoomGameView();
-      } else {
-        return const RoomLobbyView();
-      }
+      return const RoomLobbyView();
     }
 
     return Scaffold(

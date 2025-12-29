@@ -15,7 +15,7 @@ class _CreateGroupViewState extends State<CreateGroupView> {
   int _maxParticipants = 6;
   int _puzzleCount = 5;
   int _timePerPuzzle = 60;
-  String _puzzleSource = 'database';
+  String _puzzleSource = 'ai';
   int _difficulty = 1;
   String _language = 'ar';
   bool _loading = false;
@@ -41,10 +41,8 @@ class _CreateGroupViewState extends State<CreateGroupView> {
       );
 
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const RoomLobbyView()),
-      );
+      // Room created, provider will show lobby automatically
+      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
