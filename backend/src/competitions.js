@@ -539,31 +539,51 @@ export async function submitAnswer(request, env) {
       return errorResponse('Room is not active', 400);
     }
 
-    if (room.current_puzzle_index !== puzzleIndex) {
-      return errorResponse('Wrong puzzle index', 400);
-    }
-
-    // Get puzzle from room_puzzles table
+    // Allow answering any puzzle that exists in the room and hasn't been answered by this user yet
+    // (instead of strict current_puzzle_index check which can fail with network delays)
     const puzzleRow = await env.DB.prepare(
       'SELECT puzzle_json FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
     )
       .bind(roomId, puzzleIndex)
       .first();
 
-    if (!puzzleRow) return errorResponse('Puzzle not found', 404);
+    if (!puzzleRow) return errorResponse('Puzzle not found', 400);
 
     const puzzle = JSON.parse(puzzleRow.puzzle_json);
 
+    // Normalize correctIndex to number if present
+    if (puzzle.correctIndex !== undefined && puzzle.correctIndex !== null) {
+      puzzle.correctIndex = Number(puzzle.correctIndex);
+    }
     // Check answer based on puzzle format
     let isCorrect = false;
-    if (answerIndex !== undefined && puzzle.correctIndex !== undefined) {
+
+    // Debug log
+    console.log('[SUBMIT ANSWER]', {
+      answerIndex,
+      correctIndex: puzzle.correctIndex,
+      correctIndexType: typeof puzzle.correctIndex,
+      steps,
+      hasSteps: Array.isArray(puzzle.steps),
+      puzzleKeys: Object.keys(puzzle)
+    });
+
+    if (answerIndex !== undefined && typeof puzzle.correctIndex === 'number') {
       // New quiz format: compare answerIndex with correctIndex
       isCorrect = Number(answerIndex) === Number(puzzle.correctIndex);
-    } else if (steps && puzzle.steps) {
+    } else if (steps && Array.isArray(puzzle.steps)) {
       // Legacy format: compare steps array
       const correctSteps = puzzle.steps.map((s) => s.word);
       isCorrect = JSON.stringify(correctSteps) === JSON.stringify(steps);
     } else {
+      console.log('[ERROR] Invalid puzzle format', {
+        answerIndex,
+        correctIndex: puzzle.correctIndex,
+        correctIndexType: typeof puzzle.correctIndex,
+        steps,
+        puzzleSteps: puzzle.steps,
+        fullPuzzle: puzzle
+      });
       return errorResponse('Invalid puzzle format', 400);
     }
 

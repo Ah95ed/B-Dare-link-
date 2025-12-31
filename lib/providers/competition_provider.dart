@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/competition_service.dart';
 import '../services/realtime_service.dart';
@@ -32,8 +32,14 @@ class CompetitionProvider with ChangeNotifier {
   List<Map<String, dynamic>> _messages = [];
   String? _solvedByUsername;
   String? _hostId;
+  int? _selectedAnswerIndex;
+  bool? _lastAnswerCorrect;
+  int? _correctAnswerIndex;
 
   Map<String, dynamic>? get currentRoom => _currentRoom;
+  int? get selectedAnswerIndex => _selectedAnswerIndex;
+  bool? get lastAnswerCorrect => _lastAnswerCorrect;
+  int? get correctAnswerIndex => _correctAnswerIndex;
   List<Map<String, dynamic>> get roomParticipants => _roomParticipants;
   Map<String, dynamic>? get currentPuzzle => _currentPuzzle;
   int get currentPuzzleIndex => _currentPuzzleIndex;
@@ -76,7 +82,7 @@ class CompetitionProvider with ChangeNotifier {
       normalized['type'] = normalized['type'] ?? 'steps';
       normalized['question'] =
           normalized['question'] ??
-          'اربط بين "$start" و"$end" - اختر الكلمة التالية بعد "$stepWord"';
+          'ربط بين "$start" و"$end" - اختر الكلمة التالية بعد "$stepWord"';
       normalized['options'] = List<dynamic>.from(
         firstStep['options'] ?? const [],
       );
@@ -156,7 +162,7 @@ class CompetitionProvider with ChangeNotifier {
 
     final token = await _authProvider!.getToken();
     if (token == null || token.isEmpty) {
-      _errorMessage = 'مفقود: توكن المصادقة. الرجاء تسجيل الدخول من جديد.';
+      _errorMessage = 'مقيد: توكن المصادقة. الرجاء تسجيل الدخول من جديد.';
       notifyListeners();
       return;
     }
@@ -263,21 +269,26 @@ class CompetitionProvider with ChangeNotifier {
         _totalPuzzles = event['totalPuzzles'] ?? 5;
         _solvedByUsername = null;
         _gameFinished = false;
+        _selectedAnswerIndex = null;
+        _lastAnswerCorrect = null;
+        _correctAnswerIndex = null;
         if (event['puzzle'] != null) {
           _currentPuzzle = _normalizePuzzle(
             Map<String, dynamic>.from(event['puzzle']),
           );
-          debugPrint('✅ Puzzle loaded: ${_currentPuzzle!['question']}');
+          debugPrint('âœ… Puzzle loaded: ${_currentPuzzle!['question']}');
           debugPrint(
-            '✅ Options count: ${(_currentPuzzle!['options'] as List?)?.length ?? 0}',
+            'âœ… Options count: ${(_currentPuzzle!['options'] as List?)?.length ?? 0}',
           );
           final ci = int.tryParse((_currentPuzzle!['correctIndex']).toString());
           final opts = (_currentPuzzle!['options'] as List?) ?? const [];
           if (ci != null && ci >= 0 && ci < opts.length) {
-            debugPrint('✅ Correct answer: ${opts[ci]} (index $ci)');
+            debugPrint('âœ… Correct answer: ${opts[ci]} (index $ci)');
           }
         } else {
-          debugPrint('⚠️ Puzzle missing in game_started, fetching from API');
+          debugPrint(
+            'âš ï¸ Puzzle missing in game_started, fetching from API',
+          );
         }
         // Always refresh to ensure we have the puzzle
         refreshRoomStatus();
@@ -304,15 +315,18 @@ class CompetitionProvider with ChangeNotifier {
             event['puzzleIndex'] ??
             0;
         _solvedByUsername = null;
+        _selectedAnswerIndex = null;
+        _lastAnswerCorrect = null;
+        _correctAnswerIndex = null;
         if (event['puzzle'] != null) {
           _currentPuzzle = _normalizePuzzle(
             Map<String, dynamic>.from(event['puzzle']),
           );
           final ci = int.tryParse((_currentPuzzle!['correctIndex']).toString());
           final opts = (_currentPuzzle!['options'] as List?) ?? const [];
-          debugPrint('🆕 New puzzle: ${_currentPuzzle!['question']}');
+          debugPrint('✨ New puzzle: ${_currentPuzzle!['question']}');
           if (ci != null && ci >= 0 && ci < opts.length) {
-            debugPrint('✅ Correct answer: ${opts[ci]} (index $ci)');
+            debugPrint('âœ… Correct answer: ${opts[ci]} (index $ci)');
           }
         }
         _puzzleStartTime = DateTime.now();
@@ -410,14 +424,23 @@ class CompetitionProvider with ChangeNotifier {
       );
       if (puzzle != null) {
         final normalized = _normalizePuzzle(Map<String, dynamic>.from(puzzle));
-        debugPrint('📝 Puzzle question: ${puzzle['question']}');
-        debugPrint('📝 Puzzle options: ${puzzle['options']}');
+        debugPrint('📄 Puzzle question: ${puzzle['question']}');
+        debugPrint('📄 Puzzle options: ${puzzle['options']}');
         final ci = int.tryParse((puzzle['correctIndex']).toString());
         final opts = (normalized['options'] as List?) ?? const [];
         if (ci != null && ci >= 0 && ci < opts.length) {
           debugPrint('✅ Correct answer: ${opts[ci]} (index $ci)');
         }
-        _updateGameState(_currentRoom!, puzzle: normalized);
+
+        // Only update puzzle if game is active (status = 'active')
+        final roomStatus = _currentRoom!['status']?.toString() ?? 'unknown';
+        if (roomStatus == 'active') {
+          _updateGameState(_currentRoom!, puzzle: normalized);
+        } else {
+          // Clear puzzle if game hasn't started
+          _currentPuzzle = null;
+          _updateGameState(_currentRoom!, puzzle: null);
+        }
         notifyListeners();
         return;
       }
@@ -427,7 +450,7 @@ class CompetitionProvider with ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      debugPrint('❌ Error refreshing room status: $e');
+      debugPrint('âŒ Error refreshing room status: $e');
     }
   }
 
@@ -487,11 +510,20 @@ class CompetitionProvider with ChangeNotifier {
       );
 
       if (status == 'waiting') {
-        debugPrint('Room is waiting; starting game instead of next');
+        // إذا كانت الغرفة في وضع الانتظار، ابدأ اللعبة
+        debugPrint('Room is waiting; starting game via startGame');
         await startGame();
         return;
       }
 
+      if (status != 'active') {
+        _errorMessage =
+            'لا يمكن الانتقال للسؤال التالي. الغرفة ليست نشطة (الحالة: $status)';
+        notifyListeners();
+        return;
+      }
+
+      // إذا كانت نشطة، انتقل للسؤال التالي
       await _service.nextPuzzle(_currentRoom!['id']);
       await refreshRoomStatus();
     } catch (e) {
@@ -581,27 +613,32 @@ class CompetitionProvider with ChangeNotifier {
         : 0;
 
     try {
-      // Ensure room is active before submitting to avoid “Room is not active”
-      await refreshRoomStatus();
+      // تحديث الإجابة المختارة فوراً لعرض النتيجة للمستخدم
+      _selectedAnswerIndex = answerIndex;
+      notifyListeners();
+
+      // Save puzzle index BEFORE any operations that might change it
+      final submissionPuzzleIndex = _currentPuzzleIndex;
+
       final status = _currentRoom?['status']?.toString() ?? 'unknown';
-      if (status == 'waiting') {
-        await startGame();
-        await refreshRoomStatus();
-      }
-      final activeStatus = _currentRoom?['status']?.toString();
-      if (activeStatus != 'active') {
+
+      // يجب أن تكون اللعبة نشطة لإرسال الإجابة
+      if (status != 'active') {
         _errorMessage =
-            'لا يمكن إرسال الإجابة لأن الغرفة ليست نشطة (الحالة: $activeStatus)';
+            'لا يمكن إرسال الإجابة لأن اللعبة لم تبدأ بعد (الحالة: $status)';
         notifyListeners();
         return;
       }
 
+      // IMPORTANT: Send answer with the puzzle index that was current when user selected it
       final result = await _service.submitQuizAnswer(
         roomId: _currentRoom!['id'],
-        puzzleIndex: _currentPuzzleIndex,
+        puzzleIndex: submissionPuzzleIndex,
         answerIndex: answerIndex,
         timeTaken: timeTaken,
       );
+
+      _lastAnswerCorrect = result['isCorrect'] == true;
 
       if (result['isCorrect'] == true) {
         _score += result['points'] as int? ?? 0;
@@ -611,6 +648,13 @@ class CompetitionProvider with ChangeNotifier {
         );
       } else {
         debugPrint('Incorrect answer');
+        // حفظ الإجابة الصحيحة لعرضها
+        if (_currentPuzzle != null) {
+          final ci = int.tryParse((_currentPuzzle!['correctIndex']).toString());
+          if (ci != null) {
+            _correctAnswerIndex = ci;
+          }
+        }
       }
 
       // If server already returned next puzzle, hydrate immediately for snappy UX

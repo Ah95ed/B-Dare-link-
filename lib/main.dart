@@ -65,13 +65,13 @@ class _DeepLinkHandlerState extends State<DeepLinkHandler> {
   @override
   void dispose() {
     _linkSubscription?.cancel();
-   
+
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => widget.child;
-} 
+}
 
 class WonderLinkApp extends StatelessWidget {
   const WonderLinkApp({super.key});
