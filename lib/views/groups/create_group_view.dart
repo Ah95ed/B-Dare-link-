@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
-import '../competitions/room_lobby_view.dart';
 
 class CreateGroupView extends StatefulWidget {
   const CreateGroupView({super.key});

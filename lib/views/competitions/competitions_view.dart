@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
 import 'room_lobby_view.dart';
 import 'create_room_view.dart';
-import 'room_game_view.dart';
 
 class CompetitionsView extends StatefulWidget {
   const CompetitionsView({super.key});

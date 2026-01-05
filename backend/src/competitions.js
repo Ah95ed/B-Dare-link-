@@ -12,6 +12,14 @@ function generateRoomCode() {
   return code;
 }
 
+// Public puzzle payloads must not leak the correct answer before a user answers.
+function toPublicPuzzle(puzzle) {
+  if (!puzzle || typeof puzzle !== 'object') return puzzle;
+  const copy = Array.isArray(puzzle) ? puzzle.slice() : { ...puzzle };
+  delete copy.correctIndex;
+  return copy;
+}
+
 // Create a new room
 export async function createRoom(request, env) {
   const user = await getUserFromRequest(request, env);
@@ -122,6 +130,82 @@ export async function joinRoom(request, env) {
   }
 }
 
+// ========== Room Quiz Puzzle Helpers (robustness) ==========
+function normalizeQuizPuzzle(raw, { puzzleId = null } = {}) {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = { ...raw };
+
+  if (puzzleId !== null && puzzleId !== undefined) {
+    p.puzzleId = puzzleId;
+  }
+
+  const question = typeof p.question === 'string' ? p.question.trim() : '';
+  const options = Array.isArray(p.options)
+    ? p.options.map((o) => String(o ?? '').trim()).filter(Boolean)
+    : [];
+
+  if (!question) return null;
+  if (options.length < 2) return null;
+
+  if (p.correctIndex === undefined || p.correctIndex === null) return null;
+  let correctIndex = Number(p.correctIndex);
+  if (!Number.isFinite(correctIndex)) return null;
+  correctIndex = Math.trunc(correctIndex);
+  if (correctIndex < 0 || correctIndex >= options.length) return null;
+
+  // Ensure stable, valid shape
+  p.question = question;
+  p.options = options;
+  p.correctIndex = correctIndex;
+  p.type = p.type || 'quiz';
+  return p;
+}
+
+function parseAndNormalizeQuizJson(jsonStr, { puzzleId = null } = {}) {
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return normalizeQuizPuzzle(parsed, { puzzleId });
+  } catch (_) {
+    return null;
+  }
+}
+
+function safeParseJsonFromModelOutput(rawText) {
+  const cleaned = String(rawText ?? '')
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    // Attempt to salvage: parse the first JSON object or array embedded in the text.
+    const objStart = cleaned.indexOf('{');
+    const objEnd = cleaned.lastIndexOf('}');
+    if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+      const candidate = cleaned.slice(objStart, objEnd + 1);
+      try {
+        return JSON.parse(candidate);
+      } catch (_) {
+        // fall through
+      }
+    }
+
+    const arrStart = cleaned.indexOf('[');
+    const arrEnd = cleaned.lastIndexOf(']');
+    if (arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart) {
+      const candidate = cleaned.slice(arrStart, arrEnd + 1);
+      try {
+        return JSON.parse(candidate);
+      } catch (_) {
+        // fall through
+      }
+    }
+
+    throw e;
+  }
+}
+
 // Get room status
 export async function getRoomStatus(request, env) {
   const user = await getUserFromRequest(request, env);
@@ -146,12 +230,38 @@ export async function getRoomStatus(request, env) {
     let currentPuzzle = null;
     if (room.status === 'active' && room.current_puzzle_index !== null) {
       const puzzleRow = await env.DB.prepare(
-        'SELECT puzzle_json, solved_by FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
+        'SELECT id, puzzle_json, solved_by FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
       )
         .bind(roomId, room.current_puzzle_index)
         .first();
       if (puzzleRow) {
-        currentPuzzle = JSON.parse(puzzleRow.puzzle_json);
+        const normalized = parseAndNormalizeQuizJson(puzzleRow.puzzle_json);
+
+        // If we ever end up with a bad puzzle in a room (from old data/fallbacks), repair in-place.
+        if (!normalized) {
+          console.warn('[REPAIR PUZZLE] Invalid stored puzzle; regenerating', {
+            roomId,
+            puzzleIndex: room.current_puzzle_index,
+            roomLang: room.language,
+            roomDifficulty: room.difficulty,
+          });
+          try {
+            const repaired = normalizeQuizPuzzle(
+              await generateAIPuzzle(env, room.language || 'ar', room.difficulty || 1)
+            );
+            if (repaired) {
+              await env.DB.prepare('UPDATE room_puzzles SET puzzle_json = ? WHERE id = ?')
+                .bind(JSON.stringify(repaired), puzzleRow.id)
+                .run();
+              currentPuzzle = repaired;
+            }
+          } catch (e) {
+            console.error('[REPAIR PUZZLE] Failed to regenerate puzzle', e);
+          }
+        } else {
+          currentPuzzle = normalized;
+        }
+
         // Add solved_by info if available
         if (puzzleRow.solved_by) {
           const solver = await env.DB.prepare('SELECT username FROM users WHERE id = ?')
@@ -161,19 +271,8 @@ export async function getRoomStatus(request, env) {
             currentPuzzle._solvedBy = solver.username;
           }
         }
-        // Log puzzle fetch for verification
-        const ci = Number(currentPuzzle.correctIndex);
-        const opts = Array.isArray(currentPuzzle.options) ? currentPuzzle.options : [];
-        const correctAns = ci >= 0 && ci < opts.length ? opts[ci] : 'N/A';
-        console.log('[FETCH PUZZLE]', {
-          roomId,
-          puzzleIndex: room.current_puzzle_index,
-          question: currentPuzzle.question,
-          optionCount: opts.length,
-          correctIndex: ci,
-          correctAnswer: correctAns,
-          category: currentPuzzle.category
-        });
+        // Never leak correctIndex in status payloads.
+        currentPuzzle = toPublicPuzzle(currentPuzzle);
       }
     }
 
@@ -238,12 +337,24 @@ async function startRoomGame(env, roomId) {
 
   let puzzlesData = [];
 
-  const isValidQuiz = (p) => {
-    if (!p) return false;
-    if (typeof p.question !== 'string' || p.question.trim().length === 0) return false;
-    if (!Array.isArray(p.options) || p.options.length < 2) return false;
-    if (p.correctIndex === undefined || p.correctIndex === null) return false;
+  const pushPuzzle = (normalized, sourceTag) => {
+    if (!normalized) return false;
+    puzzlesData.push({
+      puzzleId: normalized.puzzleId ?? null,
+      puzzleJson: JSON.stringify(normalized),
+      source: sourceTag,
+    });
     return true;
+  };
+
+  const ensureRoomPuzzleCount = async () => {
+    // Fill remaining puzzles from AI if needed
+    while (puzzlesData.length < puzzleCount) {
+      const aiRaw = await generateAIPuzzle(env, language, difficulty);
+      const normalized = normalizeQuizPuzzle(aiRaw);
+      if (!normalized) throw new Error('AI generated invalid puzzle format');
+      pushPuzzle(normalized, 'ai_fill');
+    }
   };
 
   if (puzzleSource === 'database') {
@@ -251,7 +362,7 @@ async function startRoomGame(env, roomId) {
     const puzzles = await env.DB.prepare(
       'SELECT id, json FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT ?'
     )
-      .bind(difficulty, language, puzzleCount)
+      .bind(difficulty, language, puzzleCount * 5)
       .all();
 
     if (puzzles.results.length === 0) {
@@ -265,17 +376,21 @@ async function startRoomGame(env, roomId) {
         .all();
 
       if (anyFallback.results.length > 0) {
-        puzzlesData = anyFallback.results.map(p => ({
-          puzzleId: p.id,
-          puzzleJson: p.json,
-        }));
+        for (const p of anyFallback.results) {
+          if (puzzlesData.length >= puzzleCount) break;
+          const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
+          if (normalized) {
+            pushPuzzle(normalized, 'db_any');
+          }
+        }
       } else {
         // As a last resort, try to generate puzzles via AI if configured
         console.warn('No puzzles in DB at all; attempting AI generation fallback');
         for (let i = 0; i < puzzleCount; i++) {
           try {
             const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
-            puzzlesData.push({ puzzleId: null, puzzleJson: JSON.stringify(aiPuzzle) });
+            const normalized = normalizeQuizPuzzle(aiPuzzle);
+            if (normalized) pushPuzzle(normalized, 'ai_fallback');
           } catch (e) {
             console.error('AI fallback generation failed:', e);
           }
@@ -284,24 +399,24 @@ async function startRoomGame(env, roomId) {
     } else {
       // Validate each puzzle; fallback to AI if malformed
       for (const p of puzzles.results) {
+        if (puzzlesData.length >= puzzleCount) break;
         try {
-          const parsed = JSON.parse(p.json);
-          if (isValidQuiz(parsed)) {
-            puzzlesData.push({ puzzleId: p.id, puzzleJson: p.json });
+          const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
+          if (normalized) {
+            pushPuzzle(normalized, 'db_level_lang');
           } else {
-            try {
-              const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
-              puzzlesData.push({ puzzleId: null, puzzleJson: JSON.stringify(aiPuzzle) });
-            } catch (e) {
-              console.warn('AI fallback failed, skipping malformed puzzle', e);
-            }
+            const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
+            const aiNorm = normalizeQuizPuzzle(aiPuzzle);
+            if (aiNorm) pushPuzzle(aiNorm, 'ai_replace_bad_db');
           }
         } catch (e) {
+          console.warn('DB puzzle parse/normalize failed, using AI', e);
           try {
             const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
-            puzzlesData.push({ puzzleId: null, puzzleJson: JSON.stringify(aiPuzzle) });
+            const aiNorm = normalizeQuizPuzzle(aiPuzzle);
+            if (aiNorm) pushPuzzle(aiNorm, 'ai_after_db_error');
           } catch (err) {
-            console.warn('AI fallback failed after JSON parse error', err);
+            console.warn('AI fallback failed after DB error', err);
           }
         }
       }
@@ -311,10 +426,9 @@ async function startRoomGame(env, roomId) {
     for (let i = 0; i < puzzleCount; i++) {
       try {
         const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
-        puzzlesData.push({
-          puzzleId: null, // AI generated, no DB id
-          puzzleJson: JSON.stringify(aiPuzzle)
-        });
+        const normalized = normalizeQuizPuzzle(aiPuzzle);
+        if (!normalized) throw new Error('AI generated invalid puzzle format');
+        pushPuzzle(normalized, 'ai');
       } catch (e) {
         console.error('AI puzzle generation failed:', e);
         // Fallback to database puzzle
@@ -324,7 +438,10 @@ async function startRoomGame(env, roomId) {
           .bind(difficulty, language)
           .first();
         if (fallback) {
-          puzzlesData.push({ puzzleId: fallback.id, puzzleJson: fallback.json });
+          const normalized = parseAndNormalizeQuizJson(fallback.json, { puzzleId: fallback.id });
+          if (normalized) {
+            pushPuzzle(normalized, 'db_fallback');
+          }
         }
       }
     }
@@ -340,12 +457,9 @@ async function startRoomGame(env, roomId) {
       .all();
 
     for (const p of anyFallback.results || []) {
-      try {
-        const parsed = JSON.parse(p.json);
-        if (isValidQuiz(parsed)) {
-          puzzlesData.push({ puzzleId: p.id, puzzleJson: p.json });
-        }
-      } catch (e) { }
+      if (puzzlesData.length >= puzzleCount) break;
+      const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
+      if (normalized) pushPuzzle(normalized, 'db_final');
     }
 
     if (puzzlesData.length === 0) {
@@ -353,7 +467,14 @@ async function startRoomGame(env, roomId) {
     }
   }
 
-  // Store puzzles in room_puzzles table
+  // Ensure we always have enough valid puzzles
+  await ensureRoomPuzzleCount();
+
+  // Defensive cleanup: remove any previous state for this room
+  await env.DB.prepare('DELETE FROM room_results WHERE room_id = ?').bind(roomId).run();
+  await env.DB.prepare('DELETE FROM room_puzzles WHERE room_id = ?').bind(roomId).run();
+
+  // Store puzzles in room_puzzles table (always normalized JSON)
   for (let i = 0; i < puzzlesData.length; i++) {
     await env.DB.prepare(
       'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
@@ -373,7 +494,7 @@ async function startRoomGame(env, roomId) {
     .run();
 
   // Notify Durable Object to broadcast game start with first puzzle
-  const firstPuzzle = JSON.parse(puzzlesData[0].puzzleJson);
+  const firstPuzzle = toPublicPuzzle(JSON.parse(puzzlesData[0].puzzleJson));
   const doId = env.ROOM_DO.idFromName(roomId.toString());
   const roomObject = env.ROOM_DO.get(doId);
   await roomObject.fetch(new Request('http://room/start-game-event', {
@@ -408,42 +529,85 @@ async function generateAIPuzzle(env, language, level) {
   const openaiModel = env?.OPENAI_MODEL || 'gpt-4o-mini';
   const groqApiKey = env?.GROQ_API_KEY;
   const groqModel = env?.GROQ_MODEL || 'llama-3.1-8b-instant';
+  const aiModel = env?.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
 
-  // User provided specific Gemini PRO Key
-  const geminiApiKey = env?.GEMINI_API_KEY || 'AIzaSyB8TZZA574oaqNymEmW-9UnptJHBA4ViDs';
-  const geminiModel = env?.GEMINI_MODEL || 'gemini-1.5-flash-001';
+  // Gemini is optional and must be configured via env; do not hardcode API keys.
+  const geminiApiKey = env?.GEMINI_API_KEY;
+  // Use a conservative default model name that supports generateContent in v1beta.
+  const geminiModel = env?.GEMINI_MODEL || 'gemini-1.5-flash';
 
   let content = '';
 
   if (geminiApiKey) {
     // Use Gemini
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
+    const modelPath = String(geminiModel).startsWith('models/')
+      ? String(geminiModel)
+      : `models/${geminiModel}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${geminiApiKey}`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: systemPrompt + "\n\n" + userPrompt
-          }]
-        }],
-        generationConfig: {
-          response_mime_type: "application/json",
-          temperature: 0.9,
-        }
-      })
-    });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: systemPrompt + "\n\n" + userPrompt
+            }]
+          }],
+          generationConfig: {
+            response_mime_type: "application/json",
+            temperature: 0.9,
+          }
+        })
+      });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Gemini API Error: ${response.status} ${errText}`);
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini API Error: ${response.status} ${errText}`);
+      }
+
+      const data = await response.json();
+      content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    } catch (e) {
+      // If Gemini is misconfigured or the model is unavailable, fall back to other providers.
+      console.warn('[AI QUIZ] Gemini generation failed; falling back', {
+        model: geminiModel,
+        error: String(e?.message || e),
+      });
+      content = '';
     }
+  }
 
-    const data = await response.json();
-    content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  // Prefer Cloudflare Workers AI when available (no external API key required).
+  if (!content && env?.AI) {
+    try {
+      const out = await env.AI.run(aiModel, {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.9,
+        max_tokens: 900,
+      });
 
-  } else if (openaiApiKey) {
+      const text =
+        out?.response ??
+        out?.result ??
+        out?.output_text ??
+        out?.text ??
+        (typeof out === 'string' ? out : JSON.stringify(out));
+      content = String(text);
+    } catch (e) {
+      console.warn('[AI QUIZ] Workers AI generation failed; falling back', {
+        model: aiModel,
+        error: String(e?.message || e),
+      });
+      content = '';
+    }
+  }
+
+  if (!content && openaiApiKey) {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiApiKey}` },
@@ -459,7 +623,9 @@ async function generateAIPuzzle(env, language, level) {
     });
     const data = await response.json();
     content = data?.choices?.[0]?.message?.content ?? '';
-  } else if (groqApiKey) {
+  }
+
+  if (!content && groqApiKey) {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
@@ -475,13 +641,14 @@ async function generateAIPuzzle(env, language, level) {
     });
     const data = await response.json();
     content = data?.choices?.[0]?.message?.content ?? '';
-  } else {
+  }
+
+  if (!content) {
     throw new Error('No AI provider configured');
   }
 
-  // Parse the JSON response
-  const cleanContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
-  const parsed = JSON.parse(cleanContent);
+  // Parse the JSON response (models may include extra text; salvage embedded JSON when possible)
+  const parsed = safeParseJsonFromModelOutput(content);
 
   // Validate the puzzle has required fields
   if (!parsed.question || !Array.isArray(parsed.options) || parsed.options.length < 2) {
@@ -522,6 +689,7 @@ export async function submitAnswer(request, env) {
 
   const body = await request.json();
   const { roomId, puzzleIndex, answerIndex, steps, timeTaken } = body;
+  const safeTimeTaken = Number.isFinite(Number(timeTaken)) ? Number(timeTaken) : 0;
 
   // Support both formats: answerIndex (new quiz) or steps (legacy)
   if (!roomId || puzzleIndex === undefined) {
@@ -551,6 +719,9 @@ export async function submitAnswer(request, env) {
 
     const puzzle = JSON.parse(puzzleRow.puzzle_json);
 
+    // If the client is using quiz answers, require quiz-shaped puzzles
+    const normalizedQuiz = normalizeQuizPuzzle(puzzle);
+
     // Normalize correctIndex to number if present
     if (puzzle.correctIndex !== undefined && puzzle.correctIndex !== null) {
       puzzle.correctIndex = Number(puzzle.correctIndex);
@@ -568,9 +739,16 @@ export async function submitAnswer(request, env) {
       puzzleKeys: Object.keys(puzzle)
     });
 
-    if (answerIndex !== undefined && typeof puzzle.correctIndex === 'number') {
+    if (answerIndex !== undefined) {
+      if (!normalizedQuiz) {
+        console.log('[ERROR] Invalid quiz puzzle format (answerIndex provided)', {
+          answerIndex,
+          puzzleKeys: Object.keys(puzzle),
+        });
+        return errorResponse('Invalid puzzle format', 400);
+      }
       // New quiz format: compare answerIndex with correctIndex
-      isCorrect = Number(answerIndex) === Number(puzzle.correctIndex);
+      isCorrect = Number(answerIndex) === Number(normalizedQuiz.correctIndex);
     } else if (steps && Array.isArray(puzzle.steps)) {
       // Legacy format: compare steps array
       const correctSteps = puzzle.steps.map((s) => s.word);
@@ -629,7 +807,7 @@ export async function submitAnswer(request, env) {
     await env.DB.prepare(
       'INSERT INTO room_results (room_id, user_id, puzzle_id, puzzle_index, is_correct, time_taken) VALUES (?, ?, ?, ?, ?, ?)'
     )
-      .bind(roomId, user.id, puzzleId, puzzleIndex, isCorrect, timeTaken)
+      .bind(roomId, user.id, puzzleId, puzzleIndex, isCorrect, safeTimeTaken)
       .run();
 
     let points = 0;
@@ -639,17 +817,17 @@ export async function submitAnswer(request, env) {
       // Calculate points based on speed and if first
       if (isFirstCorrect) {
         // Bonus for being first
-        points = Math.max(500, 2000 - Math.floor(timeTaken / 50));
+        points = Math.max(500, 2000 - Math.floor(safeTimeTaken / 50));
         rank = 1;
       } else {
         // Regular points for correct answer
-        points = Math.max(100, 1000 - Math.floor(timeTaken / 100));
+        points = Math.max(100, 1000 - Math.floor(safeTimeTaken / 100));
 
         // Get rank (how many solved before this user)
         const fasterCount = await env.DB.prepare(
           'SELECT COUNT(*) AS c FROM room_results WHERE room_id = ? AND puzzle_index = ? AND is_correct = 1 AND time_taken < ?'
         )
-          .bind(roomId, puzzleIndex, timeTaken)
+          .bind(roomId, puzzleIndex, safeTimeTaken)
           .first();
         rank = fasterCount.c + 1;
       }
@@ -672,7 +850,7 @@ export async function submitAnswer(request, env) {
             userId: user.id,
             username: user.username,
             puzzleIndex: puzzleIndex,
-            timeTaken: timeTaken
+            timeTaken: safeTimeTaken
           })
         }));
       }
@@ -705,7 +883,8 @@ export async function submitAnswer(request, env) {
           await env.DB.prepare('UPDATE rooms SET current_puzzle_index = ? WHERE id = ?')
             .bind(puzzleIndex + 1, roomId)
             .run();
-          nextPuzzle = JSON.parse(nextPuzzleRow.puzzle_json);
+          // Never leak correctIndex in next puzzle payloads.
+          nextPuzzle = toPublicPuzzle(JSON.parse(nextPuzzleRow.puzzle_json));
 
           // Notify Durable Object about next puzzle
           const doId = env.ROOM_DO.idFromName(roomId.toString());
@@ -744,6 +923,8 @@ export async function submitAnswer(request, env) {
       isFirstCorrect,
       points,
       rank,
+      // Reveal correctIndex only after answering (anti-cheat)
+      correctIndex: normalizedQuiz ? Number(normalizedQuiz.correctIndex) : null,
       nextPuzzle,
       gameFinished,
     });
@@ -1093,7 +1274,28 @@ export async function forceNextPuzzle(request, env) {
       .bind(nextIdx, roomId)
       .run();
 
-    const nextPuzzle = JSON.parse(nextRow.puzzle_json);
+    let nextPuzzle = parseAndNormalizeQuizJson(nextRow.puzzle_json);
+    if (!nextPuzzle) {
+      console.warn('[REPAIR PUZZLE] Invalid next puzzle; regenerating', {
+        roomId,
+        puzzleIndex: nextIdx,
+      });
+      try {
+        const repaired = normalizeQuizPuzzle(
+          await generateAIPuzzle(env, room.language || 'ar', room.difficulty || 1)
+        );
+        if (!repaired) return errorResponse('Next puzzle invalid', 500);
+        await env.DB.prepare('UPDATE room_puzzles SET puzzle_json = ? WHERE room_id = ? AND puzzle_index = ?')
+          .bind(JSON.stringify(repaired), roomId, nextIdx)
+          .run();
+        nextPuzzle = repaired;
+      } catch (e) {
+        return errorResponse('Next puzzle invalid', 500);
+      }
+    }
+
+    // Never leak correctIndex in forced-next payloads.
+    const publicNextPuzzle = toPublicPuzzle(nextPuzzle);
 
     const doId = env.ROOM_DO.idFromName(roomId.toString());
     const roomObject = env.ROOM_DO.get(doId);
@@ -1101,14 +1303,14 @@ export async function forceNextPuzzle(request, env) {
       method: 'POST',
       body: JSON.stringify({
         type: 'next_puzzle',
-        puzzle: nextPuzzle,
+        puzzle: publicNextPuzzle,
         puzzleIndex: nextIdx,
         roomId: roomId,
         timePerPuzzle: room.time_per_puzzle || 60
       })
     }));
 
-    return jsonResponse({ success: true, nextPuzzle });
+    return jsonResponse({ success: true, nextPuzzle: publicNextPuzzle });
   } catch (e) {
     return errorResponse(e.message, 500);
   }

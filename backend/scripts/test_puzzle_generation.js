@@ -56,10 +56,17 @@ async function startGame(roomId) {
         },
         body: JSON.stringify({ roomId }),
     });
-    const data = await res.json();
+    const text = await res.text();
+    const data = (() => {
+        try { return JSON.parse(text); } catch (_) { return { raw: text }; }
+    })();
+    if (!res.ok) {
+        console.log(`❌ Start game failed (${res.status})`);
+        console.log(data);
+        throw new Error(`Start game failed: ${res.status}`);
+    }
     console.log(`✅ Game started`);
-    console.log(`   Current puzzle: ${data.currentPuzzle?.question || 'N/A'}`);
-    return data.currentPuzzle;
+    return data;
 }
 
 async function getRoomStatus(roomId) {
@@ -72,7 +79,15 @@ async function getRoomStatus(roomId) {
             'Authorization': `Bearer ${TOKEN}`,
         },
     });
-    const data = await res.json();
+    const text = await res.text();
+    const data = (() => {
+        try { return JSON.parse(text); } catch (_) { return { raw: text }; }
+    })();
+    if (!res.ok) {
+        console.log(`❌ Room status failed (${res.status})`);
+        console.log(data);
+        throw new Error(`Room status failed: ${res.status}`);
+    }
 
     if (data.currentPuzzle) {
         console.log(`✅ Puzzle fetched from database:`);
@@ -85,11 +100,11 @@ async function getRoomStatus(roomId) {
         console.log('⚠️  No current puzzle');
     }
 
-    return data.currentPuzzle;
+    return data;
 }
 
-async function submitAnswer(roomId, optionIndex) {
-    console.log(`\n✍️ Submitting answer (option ${optionIndex})...`);
+async function submitAnswer(roomId, puzzleIndex, answerIndex) {
+    console.log(`\n✍️ Submitting answer (puzzle ${puzzleIndex}, option ${answerIndex})...`);
 
     const res = await fetch(`${BASE}/rooms/answer`, {
         method: 'POST',
@@ -99,14 +114,21 @@ async function submitAnswer(roomId, optionIndex) {
         },
         body: JSON.stringify({
             roomId,
-            optionIndex
+            puzzleIndex,
+            answerIndex
         }),
     });
-    const data = await res.json();
-    console.log(`✅ Answer submitted: ${data.message || 'Success'}`);
-    if (data.isCorrect !== undefined) {
-        console.log(`   Is Correct: ${data.isCorrect}`);
+    const text = await res.text();
+    const data = (() => {
+        try { return JSON.parse(text); } catch (_) { return { raw: text }; }
+    })();
+    if (!res.ok) {
+        console.log(`❌ Answer submit failed (${res.status})`);
+        console.log(data);
+        throw new Error(`Answer submit failed: ${res.status}`);
     }
+    console.log(`✅ Answer submitted`);
+    if (data.isCorrect !== undefined) console.log(`   Is Correct: ${data.isCorrect}`);
     return data;
 }
 
@@ -122,15 +144,16 @@ async function runTests() {
         const roomId = await createRoom();
 
         // Step 3: Start game (generates AI puzzles)
-        const firstPuzzle = await startGame(roomId);
+        await startGame(roomId);
 
         // Step 4: Fetch room status (retrieves from DB)
         await new Promise(r => setTimeout(r, 1000)); // Wait a bit for backend logs
-        const fetchedPuzzle = await getRoomStatus(roomId);
+        const status = await getRoomStatus(roomId);
 
         // Step 5: Submit answer
-        if (fetchedPuzzle) {
-            await submitAnswer(roomId, fetchedPuzzle.correctIndex);
+        if (status.currentPuzzle) {
+            const puzzleIndex = status.room?.current_puzzle_index ?? 0;
+            await submitAnswer(roomId, puzzleIndex, status.currentPuzzle.correctIndex);
         }
 
         console.log('\n' + '='.repeat(50));

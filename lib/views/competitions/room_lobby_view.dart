@@ -910,19 +910,21 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                 ...options.asMap().entries.map((e) {
                   final idx = e.key;
                   final opt = e.value?.toString() ?? '';
+                  final lastAnswerCorrect = provider.lastAnswerCorrect;
+                  final hasSelection = provider.selectedAnswerIndex != null;
+                  final hasResult = lastAnswerCorrect != null;
                   final isSelected = provider.selectedAnswerIndex == idx;
                   final isCorrect = provider.correctAnswerIndex == idx;
-                  final showResult = provider.selectedAnswerIndex != null;
+                  // Keep disabling taps once a selection is made, even while pending
+                  final showResult = hasSelection;
 
                   Color? tileColor;
-                  if (showResult) {
-                    if (isSelected && provider.lastAnswerCorrect == true) {
+                  if (hasResult) {
+                    if (isSelected && lastAnswerCorrect == true) {
                       tileColor = Colors.green.shade100;
-                    } else if (isSelected &&
-                        provider.lastAnswerCorrect == false) {
+                    } else if (isSelected && lastAnswerCorrect == false) {
                       tileColor = Colors.red.shade100;
-                    } else if (isCorrect &&
-                        provider.lastAnswerCorrect == false) {
+                    } else if (isCorrect && lastAnswerCorrect == false) {
                       tileColor = Colors.green.shade50;
                     }
                   }
@@ -930,22 +932,22 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                   return ListTile(
                     tileColor: tileColor,
                     leading: CircleAvatar(
-                      backgroundColor: showResult && isCorrect
+                      backgroundColor: hasResult && isCorrect
                           ? Colors.green
-                          : (showResult &&
+                          : (hasResult &&
                                     isSelected &&
-                                    !provider.lastAnswerCorrect!
+                                    lastAnswerCorrect == false
                                 ? Colors.red
                                 : Theme.of(context).primaryColorLight),
-                      child: showResult && isCorrect
+                      child: hasResult && isCorrect
                           ? const Icon(
                               Icons.check,
                               color: Colors.white,
                               size: 20,
                             )
-                          : (showResult &&
+                          : (hasResult &&
                                     isSelected &&
-                                    !provider.lastAnswerCorrect!
+                                    lastAnswerCorrect == false
                                 ? const Icon(
                                     Icons.close,
                                     color: Colors.white,
@@ -956,12 +958,12 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                     title: Text(
                       opt,
                       style: TextStyle(
-                        fontWeight: showResult && (isCorrect || isSelected)
+                        fontWeight: hasResult && (isCorrect || isSelected)
                             ? FontWeight.bold
                             : FontWeight.normal,
                       ),
                     ),
-                    trailing: showResult && isCorrect
+                    trailing: hasResult && isCorrect
                         ? const Icon(Icons.check_circle, color: Colors.green)
                         : null,
                     enabled: !showResult,
@@ -1082,7 +1084,15 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     sortedParticipants.sort((a, b) {
       final scoreA = (a['score'] as num?)?.toInt() ?? 0;
       final scoreB = (b['score'] as num?)?.toInt() ?? 0;
-      return scoreB.compareTo(scoreA);
+      if (scoreA != scoreB) return scoreB.compareTo(scoreA);
+
+      final solvedA = (a['puzzles_solved'] as num?)?.toInt() ?? 0;
+      final solvedB = (b['puzzles_solved'] as num?)?.toInt() ?? 0;
+      if (solvedA != solvedB) return solvedB.compareTo(solvedA);
+
+      final nameA = a['username']?.toString() ?? '';
+      final nameB = b['username']?.toString() ?? '';
+      return nameA.compareTo(nameB);
     });
 
     showDialog(

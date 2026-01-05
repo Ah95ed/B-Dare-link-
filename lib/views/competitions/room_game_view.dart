@@ -388,13 +388,6 @@ class _RoomGameViewState extends State<RoomGameView> {
     final endWord = puzzle['endWord']?.toString() ?? '';
     final hint = puzzle['hint']?.toString() ?? '';
 
-    List<Map<String, dynamic>> steps = [];
-    if (puzzle['steps'] != null && puzzle['steps'] is List) {
-      steps = (puzzle['steps'] as List)
-          .map((s) => Map<String, dynamic>.from(s))
-          .toList();
-    }
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(

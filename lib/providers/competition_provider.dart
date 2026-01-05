@@ -68,6 +68,67 @@ class CompetitionProvider with ChangeNotifier {
       _authProvider != null &&
       _authProvider!.userId.toString() == _hostId;
 
+  String? _participantId(Map<String, dynamic> p) {
+    final v = p['userId'] ?? p['user_id'] ?? p['user'];
+    return v?.toString();
+  }
+
+  Map<String, dynamic> _normalizeParticipantFromApi(Map<String, dynamic> p) {
+    final out = Map<String, dynamic>.from(p);
+    out['userId'] = (p['userId'] ?? p['user_id'])?.toString();
+    final ir = p['isReady'] ?? p['is_ready'];
+    out['isReady'] = ir == true || ir == 1 || ir == '1';
+    return out;
+  }
+
+  void _mergeRoomParticipantsFromRealtime(List<dynamic> incomingDyn) {
+    final incoming = incomingDyn
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    final byIdExisting = <String, Map<String, dynamic>>{};
+    for (final p in _roomParticipants) {
+      final id = _participantId(p);
+      if (id != null) byIdExisting[id] = p;
+    }
+
+    final merged = <Map<String, dynamic>>[];
+    for (final inc in incoming) {
+      final id = _participantId(inc);
+      if (id == null) continue;
+      final existing = byIdExisting[id];
+      final out = existing != null
+          ? Map<String, dynamic>.from(existing)
+          : <String, dynamic>{};
+      // realtime updates: username + isReady (do not clobber score fields)
+      out['userId'] = id;
+      out['username'] = inc['username'] ?? out['username'];
+      if (inc.containsKey('isReady')) out['isReady'] = inc['isReady'] == true;
+      merged.add(out);
+    }
+    // Keep any existing participants that weren't in realtime list (rare, but defensive)
+    for (final p in _roomParticipants) {
+      final id = _participantId(p);
+      if (id == null) continue;
+      if (merged.any((m) => _participantId(m) == id)) continue;
+      merged.add(p);
+    }
+
+    _roomParticipants = merged;
+    _roomParticipants.sort((a, b) {
+      final scoreA = (a['score'] as num?)?.toInt() ?? 0;
+      final scoreB = (b['score'] as num?)?.toInt() ?? 0;
+      if (scoreA != scoreB) return scoreB.compareTo(scoreA);
+      final solvedA = (a['puzzles_solved'] as num?)?.toInt() ?? 0;
+      final solvedB = (b['puzzles_solved'] as num?)?.toInt() ?? 0;
+      if (solvedA != solvedB) return solvedB.compareTo(solvedA);
+      return (a['username']?.toString() ?? '').compareTo(
+        b['username']?.toString() ?? '',
+      );
+    });
+  }
+
   // Normalize puzzle to always have question/options/type for UI
   Map<String, dynamic> _normalizePuzzle(Map<String, dynamic> puzzle) {
     final normalized = Map<String, dynamic>.from(puzzle);
@@ -133,9 +194,12 @@ class CompetitionProvider with ChangeNotifier {
       );
       _currentRoom = result['room'];
       _connectRealtime();
+      _errorMessage = null;
       notifyListeners();
     } catch (e) {
-      rethrow;
+      _errorMessage = 'فشل إنشاء الغرفة: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
     }
   }
 
@@ -153,7 +217,9 @@ class CompetitionProvider with ChangeNotifier {
       // Capture error message for UI feedback
       _errorMessage = e.toString();
       notifyListeners();
-      rethrow;
+      debugPrint(_errorMessage);
+      // Do not rethrow to avoid crashing the UI
+      return;
     }
   }
 
@@ -200,23 +266,23 @@ class CompetitionProvider with ChangeNotifier {
               _realtime.connect(wsUrl, token);
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          debugPrint('Reconnect attempt failed: $e');
+        }
       });
       return;
     }
     switch (event['type']) {
       case 'init':
         _messages = List<Map<String, dynamic>>.from(event['messages'] ?? []);
-        _roomParticipants = List<Map<String, dynamic>>.from(
-          event['participants'] ?? [],
-        );
+        _mergeRoomParticipantsFromRealtime(event['participants'] ?? []);
         _hostId = event['hostId']?.toString();
 
         // Find my own ready status in the participants list
         final myId = _authProvider?.userId?.toString();
         if (myId != null) {
           final me = _roomParticipants.firstWhere(
-            (p) => p['userId']?.toString() == myId,
+            (p) => _participantId(p) == myId,
             orElse: () => {},
           );
           _isReady = me['isReady'] == true;
@@ -234,15 +300,11 @@ class CompetitionProvider with ChangeNotifier {
         break;
       case 'user_joined':
       case 'user_left':
-        _roomParticipants = List<Map<String, dynamic>>.from(
-          event['participants'] ?? [],
-        );
+        _mergeRoomParticipantsFromRealtime(event['participants'] ?? []);
         _hostId = event['hostId']?.toString();
         break;
       case 'ready_status':
-        _roomParticipants = List<Map<String, dynamic>>.from(
-          event['participants'] ?? [],
-        );
+        _mergeRoomParticipantsFromRealtime(event['participants'] ?? []);
         final myId = _authProvider?.userId?.toString();
         if (event['userId']?.toString() == myId && myId != null) {
           _isReady = event['isReady'] ?? false;
@@ -250,9 +312,7 @@ class CompetitionProvider with ChangeNotifier {
         break;
 
       case 'user_kicked':
-        _roomParticipants = List<Map<String, dynamic>>.from(
-          event['participants'] ?? [],
-        );
+        _mergeRoomParticipantsFromRealtime(event['participants'] ?? []);
         break;
 
       case 'kicked':
@@ -276,19 +336,12 @@ class CompetitionProvider with ChangeNotifier {
           _currentPuzzle = _normalizePuzzle(
             Map<String, dynamic>.from(event['puzzle']),
           );
-          debugPrint('âœ… Puzzle loaded: ${_currentPuzzle!['question']}');
+          debugPrint('✅ Puzzle loaded: ${_currentPuzzle!['question']}');
           debugPrint(
-            'âœ… Options count: ${(_currentPuzzle!['options'] as List?)?.length ?? 0}',
+            '✅ Options count: ${(_currentPuzzle!['options'] as List?)?.length ?? 0}',
           );
-          final ci = int.tryParse((_currentPuzzle!['correctIndex']).toString());
-          final opts = (_currentPuzzle!['options'] as List?) ?? const [];
-          if (ci != null && ci >= 0 && ci < opts.length) {
-            debugPrint('âœ… Correct answer: ${opts[ci]} (index $ci)');
-          }
         } else {
-          debugPrint(
-            'âš ï¸ Puzzle missing in game_started, fetching from API',
-          );
+          debugPrint('⚠️ Puzzle missing in game_started, fetching from API');
         }
         // Always refresh to ensure we have the puzzle
         refreshRoomStatus();
@@ -322,12 +375,7 @@ class CompetitionProvider with ChangeNotifier {
           _currentPuzzle = _normalizePuzzle(
             Map<String, dynamic>.from(event['puzzle']),
           );
-          final ci = int.tryParse((_currentPuzzle!['correctIndex']).toString());
-          final opts = (_currentPuzzle!['options'] as List?) ?? const [];
           debugPrint('✨ New puzzle: ${_currentPuzzle!['question']}');
-          if (ci != null && ci >= 0 && ci < opts.length) {
-            debugPrint('âœ… Correct answer: ${opts[ci]} (index $ci)');
-          }
         }
         _puzzleStartTime = DateTime.now();
         final gs2 = event['gameState'];
@@ -414,8 +462,21 @@ class CompetitionProvider with ChangeNotifier {
       final result = await _service.getRoomStatus(_currentRoom!['id']);
       _currentRoom = result['room'];
       _roomParticipants = List<Map<String, dynamic>>.from(
-        result['participants'] ?? [],
+        (result['participants'] ?? []).map(
+          (p) => _normalizeParticipantFromApi(Map<String, dynamic>.from(p)),
+        ),
       );
+      _roomParticipants.sort((a, b) {
+        final scoreA = (a['score'] as num?)?.toInt() ?? 0;
+        final scoreB = (b['score'] as num?)?.toInt() ?? 0;
+        if (scoreA != scoreB) return scoreB.compareTo(scoreA);
+        final solvedA = (a['puzzles_solved'] as num?)?.toInt() ?? 0;
+        final solvedB = (b['puzzles_solved'] as num?)?.toInt() ?? 0;
+        if (solvedA != solvedB) return solvedB.compareTo(solvedA);
+        return (a['username']?.toString() ?? '').compareTo(
+          b['username']?.toString() ?? '',
+        );
+      });
 
       // Get current puzzle from API result if game is active
       final puzzle = result['currentPuzzle'];
@@ -424,23 +485,24 @@ class CompetitionProvider with ChangeNotifier {
       );
       if (puzzle != null) {
         final normalized = _normalizePuzzle(Map<String, dynamic>.from(puzzle));
-        debugPrint('📄 Puzzle question: ${puzzle['question']}');
-        debugPrint('📄 Puzzle options: ${puzzle['options']}');
-        final ci = int.tryParse((puzzle['correctIndex']).toString());
         final opts = (normalized['options'] as List?) ?? const [];
-        if (ci != null && ci >= 0 && ci < opts.length) {
-          debugPrint('✅ Correct answer: ${opts[ci]} (index $ci)');
+        final q = normalized['question']?.toString().trim() ?? '';
+        debugPrint('📄 Puzzle question (normalized): $q');
+        debugPrint('📄 Puzzle options count: ${opts.length}');
+
+        // If server sent an empty puzzle, don't overwrite a valid current one
+        if (opts.isEmpty && _currentPuzzle != null) {
+          debugPrint(
+            '⚠️ Received puzzle without options; keeping existing puzzle',
+          );
+          notifyListeners();
+          return;
         }
 
-        // Only update puzzle if game is active (status = 'active')
+        // Only clear when explicitly inactive and no puzzle
         final roomStatus = _currentRoom!['status']?.toString() ?? 'unknown';
-        if (roomStatus == 'active') {
-          _updateGameState(_currentRoom!, puzzle: normalized);
-        } else {
-          // Clear puzzle if game hasn't started
-          _currentPuzzle = null;
-          _updateGameState(_currentRoom!, puzzle: null);
-        }
+        _gameStarted = roomStatus == 'active' || puzzle != null;
+        _updateGameState(_currentRoom!, puzzle: normalized);
         notifyListeners();
         return;
       }
@@ -450,7 +512,9 @@ class CompetitionProvider with ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      debugPrint('âŒ Error refreshing room status: $e');
+      debugPrint('❌ Error refreshing room status: $e');
+      _errorMessage = 'فشل تحديث حالة الغرفة: $e';
+      notifyListeners();
     }
   }
 
@@ -491,6 +555,9 @@ class CompetitionProvider with ChangeNotifier {
       // The game_started event will come via WebSocket after puzzles are generated
       // Also pull status to hydrate puzzle if event is delayed
       await refreshRoomStatus();
+      // Optimistically mark started to allow UI while waiting for WS event
+      _gameStarted = true;
+      notifyListeners();
     } catch (e) {
       debugPrint('Error starting game: $e');
       _errorMessage = 'فشل بدء اللعبة: $e';
@@ -560,7 +627,9 @@ class CompetitionProvider with ChangeNotifier {
       _isReady = ready;
       notifyListeners();
     } catch (e) {
-      rethrow;
+      _errorMessage = 'تعذر تحديث الجاهزية: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
     }
   }
 
@@ -600,7 +669,9 @@ class CompetitionProvider with ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      rethrow;
+      _errorMessage = 'تعذر إرسال الإجابة: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
     }
   }
 
@@ -613,6 +684,21 @@ class CompetitionProvider with ChangeNotifier {
         : 0;
 
     try {
+      // Validate puzzle shape before sending to backend to avoid "Invalid puzzle format"
+      final opts = (_currentPuzzle!['options'] as List?) ?? const [];
+      if (opts.isEmpty) {
+        _errorMessage =
+            'لا توجد خيارات متاحة لهذا السؤال، يرجى تحديث السؤال أو انتظار الإدارة لإرسال لغز صالح.';
+        notifyListeners();
+        await refreshRoomStatus();
+        return;
+      }
+      if (answerIndex < 0 || answerIndex >= opts.length) {
+        _errorMessage = 'اختيار غير صالح، يرجى إعادة المحاولة.';
+        notifyListeners();
+        return;
+      }
+
       // تحديث الإجابة المختارة فوراً لعرض النتيجة للمستخدم
       _selectedAnswerIndex = answerIndex;
       notifyListeners();
@@ -622,11 +708,19 @@ class CompetitionProvider with ChangeNotifier {
 
       final status = _currentRoom?['status']?.toString() ?? 'unknown';
 
-      // يجب أن تكون اللعبة نشطة لإرسال الإجابة
-      if (status != 'active') {
+      // يجب أن تكون اللعبة نشطة لإرسال الإجابة، أو يوجد لغز حالي مع بدء محلي
+      if (status != 'active' && !_gameStarted) {
         _errorMessage =
             'لا يمكن إرسال الإجابة لأن اللعبة لم تبدأ بعد (الحالة: $status)';
         notifyListeners();
+        return;
+      }
+
+      // Guard: ensure the puzzleIndex we send is within known total puzzles
+      if (_totalPuzzles > 0 && submissionPuzzleIndex >= _totalPuzzles) {
+        _errorMessage = 'رقم اللغز غير صالح، يرجى تحديث حالة الغرفة.';
+        notifyListeners();
+        await refreshRoomStatus();
         return;
       }
 
@@ -639,6 +733,9 @@ class CompetitionProvider with ChangeNotifier {
       );
 
       _lastAnswerCorrect = result['isCorrect'] == true;
+      if (result['correctIndex'] != null) {
+        _correctAnswerIndex = int.tryParse(result['correctIndex'].toString());
+      }
 
       if (result['isCorrect'] == true) {
         _score += result['points'] as int? ?? 0;
@@ -648,13 +745,6 @@ class CompetitionProvider with ChangeNotifier {
         );
       } else {
         debugPrint('Incorrect answer');
-        // حفظ الإجابة الصحيحة لعرضها
-        if (_currentPuzzle != null) {
-          final ci = int.tryParse((_currentPuzzle!['correctIndex']).toString());
-          if (ci != null) {
-            _correctAnswerIndex = ci;
-          }
-        }
       }
 
       // If server already returned next puzzle, hydrate immediately for snappy UX
@@ -680,7 +770,8 @@ class CompetitionProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Error submitting quiz answer: $e');
-      rethrow;
+      _errorMessage = 'تعذر إرسال إجابة الاختبار: $e';
+      notifyListeners();
     }
   }
 
@@ -701,7 +792,9 @@ class CompetitionProvider with ChangeNotifier {
       await _service.joinCompetition(competitionId);
       await loadActiveCompetitions();
     } catch (e) {
-      rethrow;
+      _errorMessage = 'فشل الانضمام للمسابقة: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
     }
   }
 
@@ -731,6 +824,11 @@ class CompetitionProvider with ChangeNotifier {
   Future<void> deleteRoom() async {
     if (_currentRoom != null) {
       try {
+        if (!isHost) {
+          _errorMessage = 'فقط صاحب الغرفة يمكنه حذفها.';
+          notifyListeners();
+          return;
+        }
         await _service.deleteRoom(_currentRoom!['id']);
         _resetRoomState();
         loadMyRooms();

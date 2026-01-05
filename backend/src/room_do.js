@@ -1,6 +1,13 @@
 // room_do.js – Durable Object for Group Rooms
 import { CORS_HEADERS } from './utils.js';
 
+function toPublicPuzzle(puzzle) {
+  if (!puzzle || typeof puzzle !== 'object') return puzzle;
+  const copy = Array.isArray(puzzle) ? puzzle.slice() : { ...puzzle };
+  delete copy.correctIndex;
+  return copy;
+}
+
 export class GroupRoom {
   constructor(state, env) {
     this.state = state;
@@ -56,7 +63,7 @@ export class GroupRoom {
       this.gameState.status = 'active';
       this.gameState.currentPuzzleIndex = data.puzzleIndex || 0;
       this.gameState.totalPuzzles = data.totalPuzzles || 5;
-      this.gameState.currentPuzzle = data.puzzle;
+      this.gameState.currentPuzzle = toPublicPuzzle(data.puzzle);
       this.gameState.solvedBy = null;
       this.gameState.timePerPuzzle = this.timePerPuzzle;
       this.gameState.puzzleEndsAt = Date.now() + (this.timePerPuzzle * 1000);
@@ -68,7 +75,7 @@ export class GroupRoom {
       this.broadcast({
         type: 'game_started',
         gameState: this.gameState,
-        puzzle: data.puzzle,
+        puzzle: toPublicPuzzle(data.puzzle),
         puzzleIndex: data.puzzleIndex,
         totalPuzzles: data.totalPuzzles
       });
@@ -103,7 +110,7 @@ export class GroupRoom {
       this.roomId = data.roomId ?? this.roomId;
       this.timePerPuzzle = data.timePerPuzzle ?? this.timePerPuzzle;
       this.gameState.currentPuzzleIndex = data.puzzleIndex;
-      this.gameState.currentPuzzle = data.puzzle;
+      this.gameState.currentPuzzle = toPublicPuzzle(data.puzzle);
       this.gameState.solvedBy = null;
       this.gameState.timePerPuzzle = this.timePerPuzzle;
       this.gameState.puzzleEndsAt = Date.now() + (this.timePerPuzzle * 1000);
@@ -112,7 +119,7 @@ export class GroupRoom {
       await this.state.storage.setAlarm(new Date(this.gameState.puzzleEndsAt));
       this.broadcast({
         type: 'new_puzzle',
-        puzzle: data.puzzle,
+        puzzle: toPublicPuzzle(data.puzzle),
         puzzleIndex: data.puzzleIndex,
         gameState: this.gameState
       });
@@ -157,6 +164,28 @@ export class GroupRoom {
     if (url.pathname.includes('/ws')) {
       if (request.headers.get('Upgrade') !== 'websocket') {
         return new Response('Expected Upgrade: websocket', { status: 426 });
+      }
+
+      // Capture room context from query params
+      const qsRoomId = url.searchParams.get('roomId');
+      if (qsRoomId) {
+        this.roomId = qsRoomId;
+      }
+
+      // Ensure hostId matches the actual room owner in DB.
+      // This keeps client-side host controls consistent with backend authorization.
+      if ((!this.hostId || String(this.hostId).length === 0) && this.roomId) {
+        try {
+          const row = await this.env.DB.prepare('SELECT created_by FROM rooms WHERE id = ?')
+            .bind(this.roomId)
+            .first();
+          if (row?.created_by !== null && row?.created_by !== undefined) {
+            this.hostId = String(row.created_by);
+            await this.state.storage.put('hostId', this.hostId);
+          }
+        } catch (e) {
+          // If DB lookup fails, fall back to legacy behavior in handleSession.
+        }
       }
 
       const userId = request.headers.get('X-User-Id');
@@ -219,7 +248,7 @@ export class GroupRoom {
 
         await this.env.DB.prepare('UPDATE rooms SET current_puzzle_index = ? WHERE id = ?').bind(nextIndex, this.roomId).run();
         this.gameState.currentPuzzleIndex = nextIndex;
-        this.gameState.currentPuzzle = nextPuzzle;
+        this.gameState.currentPuzzle = toPublicPuzzle(nextPuzzle);
         this.gameState.solvedBy = null;
         this.gameState.timePerPuzzle = this.timePerPuzzle;
         this.gameState.puzzleEndsAt = Date.now() + (this.timePerPuzzle * 1000);
@@ -227,7 +256,7 @@ export class GroupRoom {
         await this.state.storage.setAlarm(new Date(this.gameState.puzzleEndsAt));
 
         // Broadcast next puzzle and new timer
-        this.broadcast({ type: 'new_puzzle', puzzle: nextPuzzle, puzzleIndex: nextIndex, gameState: this.gameState });
+        this.broadcast({ type: 'new_puzzle', puzzle: toPublicPuzzle(nextPuzzle), puzzleIndex: nextIndex, gameState: this.gameState });
         this.broadcast({ type: 'timer_started', endsAt: this.gameState.puzzleEndsAt, durationSec: this.timePerPuzzle });
       } else {
         // Finish game
@@ -261,11 +290,11 @@ export class GroupRoom {
     // Safety: ensure userId is a string for comparisons
     userId = userId.toString();
 
-    // First one to join is the host if not already set
+    // If hostId wasn't loaded from DB for any reason, fall back to first-join.
     if (!this.hostId) {
       this.hostId = userId;
       await this.state.storage.put('hostId', this.hostId);
-      console.log(`Host assigned: ${userId}`);
+      console.log(`Host assigned (fallback): ${userId}`);
     }
 
     const session = { ws, userId, username };
@@ -312,12 +341,6 @@ export class GroupRoom {
     ws.onclose = () => {
       console.log(`Connection closed for user ${userId}`);
       this.sessions = this.sessions.filter(s => s !== session);
-
-      // If host left, assign new host if anyone left
-      if (this.hostId === userId && this.sessions.length > 0) {
-        this.hostId = this.sessions[0].userId;
-        console.log(`Host reassigned to: ${this.hostId}`);
-      }
 
       this.broadcast({
         type: 'user_left',
@@ -391,12 +414,12 @@ export class GroupRoom {
 
       case 'next_puzzle':
         this.gameState.currentPuzzleIndex = data.puzzleIndex;
-        this.gameState.currentPuzzle = data.puzzle;
+        this.gameState.currentPuzzle = toPublicPuzzle(data.puzzle);
         this.gameState.solvedBy = null;
         await this.state.storage.put('gameState', this.gameState);
         this.broadcast({
           type: 'new_puzzle',
-          puzzle: data.puzzle,
+          puzzle: toPublicPuzzle(data.puzzle),
           puzzleIndex: data.puzzleIndex,
           gameState: this.gameState
         });
