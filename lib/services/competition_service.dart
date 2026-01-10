@@ -279,6 +279,85 @@ class CompetitionService {
     }
   }
 
+  // Room Settings
+  Future<Map<String, dynamic>> getRoomSettings(int roomId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/rooms/settings?roomId=$roomId'),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to get room settings: ${response.body}');
+    }
+  }
+
+  Future<void> updateRoomSettings(
+    int roomId,
+    Map<String, dynamic> settings,
+  ) async {
+    final token = await _getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/rooms/settings'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'roomId': roomId, ...settings}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update room settings: ${response.body}');
+    }
+  }
+
+  // Hints
+  Future<Map<String, dynamic>> getHint(int roomId, int puzzleIndex) async {
+    final token = await _getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/rooms/hint'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'roomId': roomId, 'puzzleIndex': puzzleIndex}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to get hint: ${response.body}');
+    }
+  }
+
+  // Report Bad Puzzle
+  Future<void> reportBadPuzzle(
+    int roomId,
+    int puzzleIndex,
+    String reportType,
+    String? details,
+  ) async {
+    final token = await _getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/rooms/report'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'roomId': roomId,
+        'puzzleIndex': puzzleIndex,
+        'reportType': reportType,
+        'details': details,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to report puzzle: ${response.body}');
+    }
+  }
+
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, dynamic> body,
@@ -298,5 +377,37 @@ class CompetitionService {
     } else {
       throw Exception('POST $path failed: ${response.body}');
     }
+  }
+
+  // Manager API methods
+  Future<void> skipPuzzle(int roomId) async {
+    await _post('/manager/skip-puzzle', {'roomId': roomId});
+  }
+
+  Future<void> resetScores(int roomId) async {
+    await _post('/manager/reset-scores', {'roomId': roomId});
+  }
+
+  Future<void> changeDifficulty(int roomId, int difficulty) async {
+    await _post('/manager/change-difficulty', {
+      'roomId': roomId,
+      'difficulty': difficulty,
+    });
+  }
+
+  Future<void> freezePlayer(int roomId, String userId, bool freeze) async {
+    await _post('/manager/freeze', {
+      'roomId': roomId,
+      'userId': userId,
+      'freeze': freeze,
+    });
+  }
+
+  Future<void> kickPlayer(int roomId, String userId) async {
+    await _post('/manager/kick', {'roomId': roomId, 'userId': userId});
+  }
+
+  Future<void> promoteToCoManager(int roomId, String userId) async {
+    await _post('/manager/promote', {'roomId': roomId, 'userId': userId});
   }
 }

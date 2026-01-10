@@ -22,6 +22,24 @@ import {
   reopenRoom,
   forceNextPuzzle,
 } from './competitions.js';
+import {
+  getRoomSettings,
+  updateRoomSettings,
+  getHint,
+  reportBadPuzzle,
+  getPuzzleReports,
+} from './settings.js';
+import {
+  kickPlayer,
+  freezePlayer,
+  resetScores,
+  skipPuzzle,
+  changeDifficulty,
+  transferManager,
+  promoteToCoManager,
+  getManagerLogs,
+  getDetailedStats,
+} from './manager_permissions.js';
 import { GroupRoom } from './room_do.js';
 
 export { GroupRoom };
@@ -147,6 +165,52 @@ export default {
       }
       if (path === '/rooms/next' && request.method === 'POST') {
         return await forceNextPuzzle(request, env);
+      }
+
+      // ---------- Room Settings & Features ----------
+      if (path === '/rooms/settings' && request.method === 'GET') {
+        return await getRoomSettings(request, env);
+      }
+      if (path === '/rooms/settings' && request.method === 'POST') {
+        return await updateRoomSettings(request, env);
+      }
+      if (path === '/rooms/hint' && request.method === 'POST') {
+        return await getHint(request, env);
+      }
+      if (path === '/rooms/report' && request.method === 'POST') {
+        return await reportBadPuzzle(request, env);
+      }
+      if (path === '/rooms/reports' && request.method === 'GET') {
+        return await getPuzzleReports(request, env);
+      }
+
+      // ---------- Manager Permissions ----------
+      if (path === '/manager/kick' && request.method === 'POST') {
+        return await kickPlayer(request, env);
+      }
+      if (path === '/manager/freeze' && request.method === 'POST') {
+        return await freezePlayer(request, env);
+      }
+      if (path === '/manager/reset-scores' && request.method === 'POST') {
+        return await resetScores(request, env);
+      }
+      if (path === '/manager/skip-puzzle' && request.method === 'POST') {
+        return await skipPuzzle(request, env);
+      }
+      if (path === '/manager/change-difficulty' && request.method === 'POST') {
+        return await changeDifficulty(request, env);
+      }
+      if (path === '/manager/transfer' && request.method === 'POST') {
+        return await transferManager(request, env);
+      }
+      if (path === '/manager/promote' && request.method === 'POST') {
+        return await promoteToCoManager(request, env);
+      }
+      if (path === '/manager/logs' && request.method === 'GET') {
+        return await getManagerLogs(request, env);
+      }
+      if (path === '/manager/detailed-stats' && request.method === 'GET') {
+        return await getDetailedStats(request, env);
       }
 
       // WebSocket for Rooms (Real-time Chat & Game)

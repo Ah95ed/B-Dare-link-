@@ -37,6 +37,25 @@ class _RoomGameViewState extends State<RoomGameView> {
     }
   }
 
+  // Helper to get current user role
+  String? _getCurrentUserRole(CompetitionProvider provider) {
+    try {
+      // Find the first participant (current user)
+      final participant = provider.roomParticipants.isNotEmpty
+          ? provider.roomParticipants.first
+          : null;
+      return participant?['role'] as String?;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Check if current user is manager
+  bool _isManager(CompetitionProvider provider) {
+    final role = _getCurrentUserRole(provider);
+    return role == 'manager' || role == 'co_manager';
+  }
+
   @override
   Widget build(BuildContext context) {
     final competitionProvider = context.watch<CompetitionProvider>();
@@ -61,6 +80,10 @@ class _RoomGameViewState extends State<RoomGameView> {
           IconButton(
             icon: const Icon(Icons.leaderboard),
             onPressed: () => _showLeaderboard(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => _showSettingsDialog(context, competitionProvider),
           ),
         ],
       ),
@@ -274,6 +297,31 @@ class _RoomGameViewState extends State<RoomGameView> {
           ],
 
           const SizedBox(height: 24),
+
+          // Help & Report Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Get Hint Button
+              ElevatedButton.icon(
+                onPressed: () => _getHint(context, _provider),
+                icon: const Icon(Icons.lightbulb),
+                label: const Text('احصل على مساعدة'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+              ),
+              // Report Bad Question Button
+              ElevatedButton.icon(
+                onPressed: () => _reportBadQuestion(context, _provider),
+                icon: const Icon(Icons.flag),
+                label: const Text('سؤال غير واضح'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade400,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
 
           // Options
           Expanded(
@@ -517,6 +565,766 @@ class _RoomGameViewState extends State<RoomGameView> {
             }),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _getHint(
+    BuildContext context,
+    CompetitionProvider provider,
+  ) async {
+    try {
+      final result = await provider.getHint(
+        provider.currentRoomId ?? 0,
+        provider.currentPuzzleIndex,
+      );
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('💡 المساعدة'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(result['hint'] ?? 'لا توجد مساعدة متاحة'),
+                const SizedBox(height: 12),
+                Text(
+                  'المساعدات المتبقية: ${result['hintsRemaining'] ?? 0}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('حسناً'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+      }
+    }
+  }
+
+  Future<void> _reportBadQuestion(
+    BuildContext context,
+    CompetitionProvider provider,
+  ) async {
+    final reasonController = TextEditingController();
+    const reportTypes = [
+      'bad_wording',
+      'wrong_answer',
+      'unclear',
+      'offensive',
+      'duplicate',
+      'other',
+    ];
+    const reportLabels = {
+      'bad_wording': 'خطأ في الصياغة',
+      'wrong_answer': 'الإجابة الصحيحة خاطئة',
+      'unclear': 'السؤال غير واضح',
+      'offensive': 'محتوى مسيء',
+      'duplicate': 'سؤال مكرر',
+      'other': 'أخرى',
+    };
+
+    String selectedType = 'unclear';
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('⚠️ الإبلاغ عن سؤال'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('نوع المشكلة:'),
+              const SizedBox(height: 12),
+              DropdownButton<String>(
+                value: selectedType,
+                isExpanded: true,
+                items: reportTypes.map((type) {
+                  return DropdownMenuItem(
+                    value: type,
+                    child: Text(reportLabels[type] ?? type),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => selectedType = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              const Text('تفاصيل إضافية (اختياري):'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'اشرح المشكلة...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  await provider.reportBadPuzzle(
+                    provider.currentRoomId ?? 0,
+                    provider.currentPuzzleIndex,
+                    selectedType,
+                    reasonController.text,
+                  );
+
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('شكراً على تقريرك. سيتم مراجعته قريباً.'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('إرسال التقرير'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Settings Dialog
+  void _showSettingsDialog(BuildContext context, CompetitionProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => FutureBuilder<Map<String, dynamic>>(
+          future: provider.getRoomSettings(provider.currentRoomId ?? 0),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const AlertDialog(
+                content: SizedBox(
+                  height: 100,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return AlertDialog(
+                title: const Text('خطأ'),
+                content: Text('فشل تحميل الإعدادات: ${snapshot.error}'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('حسناً'),
+                  ),
+                ],
+              );
+            }
+
+            final settings = snapshot.data ?? {};
+
+            return AlertDialog(
+              title: const Text('⚙️ إعدادات الغرفة'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // المساعدات (Hints)
+                    _buildSettingSection('المساعدات', [
+                      SwitchListTile(
+                        title: const Text('تفعيل المساعدات'),
+                        subtitle: const Text('السماح للاعبين بطلب مساعدات'),
+                        value: settings['hints_enabled'] ?? true,
+                        onChanged: (value) {
+                          setState(() {
+                            settings['hints_enabled'] = value;
+                          });
+                        },
+                      ),
+                      if (settings['hints_enabled'] ?? true) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 8),
+                              Text(
+                                'عدد المساعدات: ${settings['hints_per_player'] ?? 3}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              Slider(
+                                value: (settings['hints_per_player'] ?? 3)
+                                    .toDouble(),
+                                min: 0,
+                                max: 10,
+                                divisions: 10,
+                                onChanged: (value) {
+                                  setState(() {
+                                    settings['hints_per_player'] = value
+                                        .toInt();
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'خصم النقاط: ${settings['hint_penalty_percent'] ?? 10}%',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              Slider(
+                                value: (settings['hint_penalty_percent'] ?? 10)
+                                    .toDouble(),
+                                min: 0,
+                                max: 50,
+                                divisions: 10,
+                                onChanged: (value) {
+                                  setState(() {
+                                    settings['hint_penalty_percent'] = value;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ]),
+                    const SizedBox(height: 16),
+                    // الخيارات
+                    _buildSettingSection('الخيارات', [
+                      SwitchListTile(
+                        title: const Text('خلط الخيارات'),
+                        subtitle: const Text('إعادة ترتيب خيارات الإجابة'),
+                        value: settings['shuffle_options'] ?? true,
+                        onChanged: (value) {
+                          setState(() {
+                            settings['shuffle_options'] = value;
+                          });
+                        },
+                      ),
+                      SwitchListTile(
+                        title: const Text('عرض الترتيب الحي'),
+                        subtitle: const Text(
+                          'إظهار ترتيب اللاعبين أثناء اللعبة',
+                        ),
+                        value: settings['show_rankings_live'] ?? true,
+                        onChanged: (value) {
+                          setState(() {
+                            settings['show_rankings_live'] = value;
+                          });
+                        },
+                      ),
+                      SwitchListTile(
+                        title: const Text('السماح بالإبلاغ عن أسئلة سيئة'),
+                        subtitle: const Text('يمكن للاعبين الإبلاغ عن مشاكل'),
+                        value: settings['allow_report_bad_puzzle'] ?? true,
+                        onChanged: (value) {
+                          setState(() {
+                            settings['allow_report_bad_puzzle'] = value;
+                          });
+                        },
+                      ),
+                    ]),
+                    const SizedBox(height: 16),
+                    // الوقت
+                    _buildSettingSection('الوقت والسرعة', [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'الانتقال التلقائي: ${settings['auto_advance_seconds'] ?? 2} ثانية',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            Slider(
+                              value: (settings['auto_advance_seconds'] ?? 2)
+                                  .toDouble(),
+                              min: 0,
+                              max: 10,
+                              divisions: 10,
+                              label:
+                                  '${settings['auto_advance_seconds'] ?? 2}s',
+                              onChanged: (value) {
+                                setState(() {
+                                  settings['auto_advance_seconds'] = value
+                                      .toInt();
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'الحد الأدنى للوقت: ${settings['min_time_per_puzzle'] ?? 5} ثانية',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            Slider(
+                              value: (settings['min_time_per_puzzle'] ?? 5)
+                                  .toDouble(),
+                              min: 0,
+                              max: 30,
+                              divisions: 6,
+                              label: '${settings['min_time_per_puzzle'] ?? 5}s',
+                              onChanged: (value) {
+                                setState(() {
+                                  settings['min_time_per_puzzle'] = value
+                                      .toInt();
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ]),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('إلغاء'),
+                ),
+                if (_isManager(provider)) ...[
+                  PopupMenuButton(
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'skip',
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _skipPuzzle(context, provider);
+                        },
+                        child: const Row(
+                          children: [
+                            Icon(Icons.skip_next),
+                            SizedBox(width: 8),
+                            Text('تخطي السؤال'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'reset',
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _resetScores(context, provider);
+                        },
+                        child: const Row(
+                          children: [
+                            Icon(Icons.restart_alt),
+                            SizedBox(width: 8),
+                            Text('إعادة تعيين النقاط'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'difficulty',
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _showDifficultyDialog(context, provider);
+                        },
+                        child: const Row(
+                          children: [
+                            Icon(Icons.engineering),
+                            SizedBox(width: 8),
+                            Text('تغيير الصعوبة'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'players',
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _showPlayersDialog(context, provider);
+                        },
+                        child: const Row(
+                          children: [
+                            Icon(Icons.people),
+                            SizedBox(width: 8),
+                            Text('إدارة اللاعبين'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    child: const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.admin_panel_settings),
+                          SizedBox(width: 4),
+                          Text('أدوات المدير'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.save),
+                  label: const Text('حفظ'),
+                  onPressed: () async {
+                    try {
+                      await provider.updateRoomSettings(
+                        provider.currentRoomId ?? 0,
+                        settings,
+                      );
+
+                      if (mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('تم حفظ الإعدادات بنجاح'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('خطأ: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // Helper to build setting sections
+  Widget _buildSettingSection(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 16, bottom: 8),
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue,
+            ),
+          ),
+        ),
+        ...children,
+      ],
+    );
+  }
+
+  // Skip Puzzle (Manager Only)
+  void _skipPuzzle(BuildContext context, CompetitionProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('⏭️ تخطي السؤال'),
+        content: const Text(
+          'هل تريد فعلاً تخطي السؤال الحالي والانتقال للسؤال التالي؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await provider.skipPuzzle(provider.currentRoomId ?? 0);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('تم تخطي السؤال بنجاح'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                }
+              }
+            },
+            child: const Text('تخطي'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Reset Scores (Manager Only)
+  void _resetScores(BuildContext context, CompetitionProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('⚠️ إعادة تعيين النقاط'),
+        content: const Text(
+          'سيتم إعادة تعيين نقاط جميع اللاعبين إلى 0. هل أنت متأكد؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await provider.resetScores(provider.currentRoomId ?? 0);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('تم إعادة تعيين النقاط بنجاح'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                }
+              }
+            },
+            child: const Text('إعادة تعيين'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Change Difficulty (Manager Only)
+  void _showDifficultyDialog(
+    BuildContext context,
+    CompetitionProvider provider,
+  ) {
+    int newDifficulty = provider.currentDifficulty ?? 3;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('📊 تغيير الصعوبة'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('اختر مستوى الصعوبة الجديد:'),
+              const SizedBox(height: 16),
+              Text(
+                'الصعوبة: $newDifficulty / 10',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Slider(
+                value: newDifficulty.toDouble(),
+                min: 1,
+                max: 10,
+                divisions: 9,
+                label: '$newDifficulty',
+                onChanged: (value) {
+                  setState(() => newDifficulty = value.toInt());
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await provider.changeDifficulty(
+                    provider.currentRoomId ?? 0,
+                    newDifficulty,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('تم تغيير الصعوبة إلى $newDifficulty'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                  }
+                }
+              },
+              child: const Text('تطبيق'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Manage Players (Manager Only)
+  void _showPlayersDialog(BuildContext context, CompetitionProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('👥 إدارة اللاعبين'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: provider.roomParticipants.length,
+            itemBuilder: (context, index) {
+              final participant = provider.roomParticipants[index];
+              final isFrozen = participant['is_frozen'] ?? false;
+              final role = participant['role'] ?? 'player';
+
+              return ListTile(
+                leading: CircleAvatar(
+                  child: Text(
+                    (participant['username'] ?? '?')[0].toUpperCase(),
+                  ),
+                ),
+                title: Text(
+                  participant['username'] ?? 'اللاعب ${index + 1}',
+                  style: TextStyle(
+                    decoration: participant['is_kicked'] ?? false
+                        ? TextDecoration.lineThrough
+                        : null,
+                  ),
+                ),
+                subtitle: Text('النقاط: ${participant['score'] ?? 0}'),
+                trailing: PopupMenuButton(
+                  itemBuilder: (context) => [
+                    if (!isFrozen)
+                      PopupMenuItem(
+                        value: 'freeze',
+                        child: const Row(
+                          children: [
+                            Icon(Icons.lock, color: Colors.blue),
+                            SizedBox(width: 8),
+                            Text('تجميد'),
+                          ],
+                        ),
+                      )
+                    else
+                      PopupMenuItem(
+                        value: 'unfreeze',
+                        child: const Row(
+                          children: [
+                            Icon(Icons.lock_open, color: Colors.green),
+                            SizedBox(width: 8),
+                            Text('إلغاء التجميد'),
+                          ],
+                        ),
+                      ),
+                    if (role == 'player')
+                      PopupMenuItem(
+                        value: 'promote',
+                        child: const Row(
+                          children: [
+                            Icon(
+                              Icons.admin_panel_settings,
+                              color: Colors.orange,
+                            ),
+                            SizedBox(width: 8),
+                            Text('ترقية لمدير'),
+                          ],
+                        ),
+                      ),
+                    PopupMenuItem(
+                      value: 'kick',
+                      child: const Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('طرد'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (value) async {
+                    try {
+                      if (value == 'freeze') {
+                        await provider.freezePlayer(
+                          provider.currentRoomId ?? 0,
+                          participant['user_id'],
+                          true,
+                        );
+                      } else if (value == 'unfreeze') {
+                        await provider.freezePlayer(
+                          provider.currentRoomId ?? 0,
+                          participant['user_id'],
+                          false,
+                        );
+                      } else if (value == 'kick') {
+                        await provider.kickPlayer(
+                          provider.currentRoomId ?? 0,
+                          participant['user_id'],
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                      }
+                    }
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إغلاق'),
+          ),
+        ],
       ),
     );
   }

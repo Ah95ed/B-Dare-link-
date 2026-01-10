@@ -9,6 +9,8 @@ binding = "AI"
 [[d1_databases]]
 binding = "DB"
 database_name = "wonder-link-db"
+database_id = "6ebf2d71-a3b7-47fa-b900-17a1424b9c72"
+migrations_dir = "migrations"
 
 [vars]
 AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"

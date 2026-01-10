@@ -71,10 +71,53 @@ export async function createRoom(request, env) {
     const roomId = result.meta.last_row_id;
     console.log('Room created with ID:', roomId);
 
-    // Add creator as participant
-    await env.DB.prepare('INSERT INTO room_participants (room_id, user_id, is_ready) VALUES (?, ?, ?)')
-      .bind(roomId, user.id, 1) // Host starts as ready
+    // Add creator as participant with manager role
+    await env.DB.prepare('INSERT INTO room_participants (room_id, user_id, is_ready, role) VALUES (?, ?, ?, ?)')
+      .bind(roomId, user.id, 1, 'manager') // Creator is manager
       .run();
+
+    // Create default room settings
+    await env.DB.prepare(`
+      INSERT INTO room_settings (
+        room_id, 
+        hints_enabled, 
+        hints_per_player, 
+        hint_penalty_percent,
+        allow_report_bad_puzzle,
+        auto_advance_seconds,
+        shuffle_options,
+        show_rankings_live,
+        allow_skip_puzzle,
+        min_time_per_puzzle,
+        manager_can_skip_puzzle,
+        manager_can_reset_scores,
+        manager_can_freeze_players,
+        manager_can_kick_players,
+        manager_can_change_difficulty,
+        allow_co_managers,
+        show_detailed_stats_to_all
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      roomId,
+      1, // hints_enabled
+      3, // hints_per_player
+      10, // hint_penalty_percent
+      1, // allow_report_bad_puzzle
+      2, // auto_advance_seconds
+      1, // shuffle_options
+      1, // show_rankings_live
+      0, // allow_skip_puzzle
+      5, // min_time_per_puzzle
+      1, // manager_can_skip_puzzle
+      1, // manager_can_reset_scores
+      1, // manager_can_freeze_players
+      1, // manager_can_kick_players
+      1, // manager_can_change_difficulty
+      1, // allow_co_managers
+      0  // show_detailed_stats_to_all
+    ).run();
+
+    console.log('Room settings created for room:', roomId);
 
     const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(roomId).first();
 
@@ -119,9 +162,9 @@ export async function joinRoom(request, env) {
       return errorResponse('Room is full', 400);
     }
 
-    // Add participant
-    await env.DB.prepare('INSERT INTO room_participants (room_id, user_id, is_ready) VALUES (?, ?, ?)')
-      .bind(room.id, user.id, 0) // Join as not ready
+    // Add participant as regular player
+    await env.DB.prepare('INSERT INTO room_participants (room_id, user_id, is_ready, role) VALUES (?, ?, ?, ?)')
+      .bind(room.id, user.id, 0, 'player') // Join as player, not ready
       .run();
 
     return jsonResponse({ success: true, room }, 200);
@@ -247,7 +290,7 @@ export async function getRoomStatus(request, env) {
           });
           try {
             const repaired = normalizeQuizPuzzle(
-              await generateAIPuzzle(env, room.language || 'ar', room.difficulty || 1)
+              await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
             );
             if (repaired) {
               await env.DB.prepare('UPDATE room_puzzles SET puzzle_json = ? WHERE id = ?')
@@ -286,7 +329,7 @@ export async function getRoomStatus(request, env) {
   }
 }
 
-// Set ready status
+// Set ready status (no auto-start; host must start manually)
 export async function setReady(request, env) {
   const user = await getUserFromRequest(request, env);
   if (!user) return errorResponse('Unauthorized', 401);
@@ -308,17 +351,13 @@ export async function setReady(request, env) {
       .bind(isReady, roomId, user.id)
       .run();
 
-    // Check if all participants are ready
+    // Check if all participants are ready (informational only)
     const participants = await env.DB.prepare('SELECT is_ready FROM room_participants WHERE room_id = ?')
       .bind(roomId)
       .all();
     const allReady = participants.results.every((p) => p.is_ready);
 
-    if (allReady && participants.results.length >= 2) {
-      // Start the room game
-      await startRoomGame(env, roomId);
-    }
-
+    // Do NOT auto-start; only host triggers start via /rooms/start
     return jsonResponse({ success: true, allReady });
   } catch (e) {
     return errorResponse(e.message, 500);
@@ -350,125 +389,84 @@ async function startRoomGame(env, roomId) {
   const ensureRoomPuzzleCount = async () => {
     // Fill remaining puzzles from AI if needed
     while (puzzlesData.length < puzzleCount) {
-      const aiRaw = await generateAIPuzzle(env, language, difficulty);
+      const aiRaw = await generatePuzzleWithRetry(env, language, difficulty);
       const normalized = normalizeQuizPuzzle(aiRaw);
       if (!normalized) throw new Error('AI generated invalid puzzle format');
       pushPuzzle(normalized, 'ai_fill');
     }
   };
 
-  if (puzzleSource === 'database') {
-    // Get random puzzles from database
+  // Helpers to fetch puzzles from DB or AI
+  const fillFromDatabase = async (sourceTag = 'db_primary') => {
     const puzzles = await env.DB.prepare(
       'SELECT id, json FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT ?'
     )
       .bind(difficulty, language, puzzleCount * 5)
       .all();
 
-    if (puzzles.results.length === 0) {
-      console.warn('No puzzles found for requested level/lang, attempting fallback.');
+    if (puzzles.results.length > 0) {
+      for (const p of puzzles.results) {
+        if (puzzlesData.length >= puzzleCount) break;
+        const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
+        if (normalized) pushPuzzle(normalized, sourceTag);
+      }
+    }
 
-      // Try to fetch any puzzle regardless of level/lang as a quick fallback
+    // Fallback to any language/level if still short
+    if (puzzlesData.length < puzzleCount) {
       const anyFallback = await env.DB.prepare(
         'SELECT id, json FROM puzzles ORDER BY RANDOM() LIMIT ?'
       )
         .bind(puzzleCount)
         .all();
 
-      if (anyFallback.results.length > 0) {
-        for (const p of anyFallback.results) {
-          if (puzzlesData.length >= puzzleCount) break;
-          const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
-          if (normalized) {
-            pushPuzzle(normalized, 'db_any');
-          }
-        }
-      } else {
-        // As a last resort, try to generate puzzles via AI if configured
-        console.warn('No puzzles in DB at all; attempting AI generation fallback');
-        for (let i = 0; i < puzzleCount; i++) {
-          try {
-            const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
-            const normalized = normalizeQuizPuzzle(aiPuzzle);
-            if (normalized) pushPuzzle(normalized, 'ai_fallback');
-          } catch (e) {
-            console.error('AI fallback generation failed:', e);
-          }
-        }
-      }
-    } else {
-      // Validate each puzzle; fallback to AI if malformed
-      for (const p of puzzles.results) {
+      for (const p of anyFallback.results || []) {
         if (puzzlesData.length >= puzzleCount) break;
-        try {
-          const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
-          if (normalized) {
-            pushPuzzle(normalized, 'db_level_lang');
-          } else {
-            const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
-            const aiNorm = normalizeQuizPuzzle(aiPuzzle);
-            if (aiNorm) pushPuzzle(aiNorm, 'ai_replace_bad_db');
-          }
-        } catch (e) {
-          console.warn('DB puzzle parse/normalize failed, using AI', e);
-          try {
-            const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
-            const aiNorm = normalizeQuizPuzzle(aiPuzzle);
-            if (aiNorm) pushPuzzle(aiNorm, 'ai_after_db_error');
-          } catch (err) {
-            console.warn('AI fallback failed after DB error', err);
-          }
-        }
+        const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
+        if (normalized) pushPuzzle(normalized, sourceTag === 'db_primary' ? 'db_any' : sourceTag);
       }
     }
-  } else if (puzzleSource === 'ai') {
-    // Generate puzzles using AI (multiple calls)
+  };
+
+  const fillFromAI = async () => {
     for (let i = 0; i < puzzleCount; i++) {
-      try {
-        const aiPuzzle = await generateAIPuzzle(env, language, difficulty);
-        const normalized = normalizeQuizPuzzle(aiPuzzle);
-        if (!normalized) throw new Error('AI generated invalid puzzle format');
-        pushPuzzle(normalized, 'ai');
-      } catch (e) {
-        console.error('AI puzzle generation failed:', e);
-        // Fallback to database puzzle
-        const fallback = await env.DB.prepare(
-          'SELECT id, json FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT 1'
-        )
-          .bind(difficulty, language)
-          .first();
-        if (fallback) {
-          const normalized = parseAndNormalizeQuizJson(fallback.json, { puzzleId: fallback.id });
-          if (normalized) {
-            pushPuzzle(normalized, 'db_fallback');
-          }
-        }
+      const aiRaw = await generatePuzzleWithRetry(env, language, difficulty);
+      const normalized = normalizeQuizPuzzle(aiRaw, { puzzleId: null });
+      if (!normalized) {
+        console.warn('AI generated invalid puzzle, skipping');
+        continue;
       }
+      pushPuzzle(normalized, 'ai');
     }
+  };
+
+  // Primary fill based on puzzleSource with fallback to DB
+  try {
+    if (puzzleSource === 'database') {
+      await fillFromDatabase('db_primary');
+    } else if (puzzleSource === 'ai') {
+      await fillFromAI();
+    } else {
+      // manual or unknown: try DB first
+      await fillFromDatabase('db_primary');
+    }
+  } catch (e) {
+    console.error('Primary puzzle fill failed, attempting DB fallback', e);
+    await fillFromDatabase('db_fallback');
   }
-  // 'manual' puzzles would be pre-stored when room is created
+
+  // Ensure we always have enough valid puzzles; if AI top-up fails, try DB fallback once
+  try {
+    await ensureRoomPuzzleCount();
+  } catch (e) {
+    console.error('AI top-up failed, attempting DB fallback to reach quota', e);
+    await fillFromDatabase('ai_topup_fallback');
+    await ensureRoomPuzzleCount();
+  }
 
   if (puzzlesData.length === 0) {
-    // Final fallback: try any puzzles from DB
-    const anyFallback = await env.DB.prepare(
-      'SELECT id, json FROM puzzles ORDER BY RANDOM() LIMIT ?'
-    )
-      .bind(puzzleCount)
-      .all();
-
-    for (const p of anyFallback.results || []) {
-      if (puzzlesData.length >= puzzleCount) break;
-      const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
-      if (normalized) pushPuzzle(normalized, 'db_final');
-    }
-
-    if (puzzlesData.length === 0) {
-      throw new Error('No puzzles available');
-    }
+    throw new Error('No puzzles available (AI and database fallbacks failed)');
   }
-
-  // Ensure we always have enough valid puzzles
-  await ensureRoomPuzzleCount();
 
   // Defensive cleanup: remove any previous state for this room
   await env.DB.prepare('DELETE FROM room_results WHERE room_id = ?').bind(roomId).run();
@@ -510,11 +508,40 @@ async function startRoomGame(env, roomId) {
   }));
 }
 
+// Helper to generate puzzle with retry logic for quality
+// CRITICAL: Will retry up to 3 times to get a high-quality puzzle
+async function generatePuzzleWithRetry(env, language, level, maxRetries = 3) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[PUZZLE GEN] Attempt ${attempt}/${maxRetries}`);
+      const puzzle = await generateAIPuzzle(env, language, level);
+      console.log(`[PUZZLE GEN] ✓ Success on attempt ${attempt}`);
+      return puzzle;
+    } catch (error) {
+      lastError = error;
+      console.warn(`[PUZZLE GEN] ✗ Attempt ${attempt} failed:`, String(error?.message || error));
+
+      if (attempt < maxRetries) {
+        // Wait a bit before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+      }
+    }
+  }
+
+  // All retries exhausted
+  console.error(`[PUZZLE GEN] All ${maxRetries} attempts failed`);
+  throw lastError || new Error(`Could not generate acceptable puzzle after ${maxRetries} attempts`);
+}
+
 // Helper function to generate AI puzzle (Quiz format for competitions)
+// With validation and fallback to database
 async function generateAIPuzzle(env, language, level) {
+  const validator = await import('./puzzle_validator.js');
+
   // Decide quiz type: 'wonder_link' (pair-link) or generic 'quiz'
   const quizType = (env?.QUIZ_TYPE || 'wonder_link').toLowerCase();
-
   const prompts = await import('./prompt.js');
   const useWonderLink = quizType === 'wonder_link' || quizType === 'link';
 
@@ -530,22 +557,20 @@ async function generateAIPuzzle(env, language, level) {
   const groqApiKey = env?.GROQ_API_KEY;
   const groqModel = env?.GROQ_MODEL || 'llama-3.1-8b-instant';
   const aiModel = env?.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
-
-  // Gemini is optional and must be configured via env; do not hardcode API keys.
   const geminiApiKey = env?.GEMINI_API_KEY;
-  // Use a conservative default model name that supports generateContent in v1beta.
   const geminiModel = env?.GEMINI_MODEL || 'gemini-1.5-flash';
 
   let content = '';
+  let aiProvider = 'none';
 
+  // Try Gemini first
   if (geminiApiKey) {
-    // Use Gemini
-    const modelPath = String(geminiModel).startsWith('models/')
-      ? String(geminiModel)
-      : `models/${geminiModel}`;
-    const url = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${geminiApiKey}`;
-
     try {
+      const modelPath = String(geminiModel).startsWith('models/')
+        ? String(geminiModel)
+        : `models/${geminiModel}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${geminiApiKey}`;
+
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -557,7 +582,7 @@ async function generateAIPuzzle(env, language, level) {
           }],
           generationConfig: {
             response_mime_type: "application/json",
-            temperature: 0.9,
+            temperature: 0.7, // Reduced from 0.9 for more consistent output
           }
         })
       });
@@ -569,8 +594,8 @@ async function generateAIPuzzle(env, language, level) {
 
       const data = await response.json();
       content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      aiProvider = 'gemini';
     } catch (e) {
-      // If Gemini is misconfigured or the model is unavailable, fall back to other providers.
       console.warn('[AI QUIZ] Gemini generation failed; falling back', {
         model: geminiModel,
         error: String(e?.message || e),
@@ -579,7 +604,7 @@ async function generateAIPuzzle(env, language, level) {
     }
   }
 
-  // Prefer Cloudflare Workers AI when available (no external API key required).
+  // Try Cloudflare Workers AI
   if (!content && env?.AI) {
     try {
       const out = await env.AI.run(aiModel, {
@@ -587,7 +612,7 @@ async function generateAIPuzzle(env, language, level) {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0.9,
+        temperature: 0.7,
         max_tokens: 900,
       });
 
@@ -598,6 +623,7 @@ async function generateAIPuzzle(env, language, level) {
         out?.text ??
         (typeof out === 'string' ? out : JSON.stringify(out));
       content = String(text);
+      aiProvider = 'workers-ai';
     } catch (e) {
       console.warn('[AI QUIZ] Workers AI generation failed; falling back', {
         model: aiModel,
@@ -607,79 +633,108 @@ async function generateAIPuzzle(env, language, level) {
     }
   }
 
+  // Try OpenAI
   if (!content && openaiApiKey) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiApiKey}` },
-      body: JSON.stringify({
-        model: openaiModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.9,
-        max_tokens: 900,
-      }),
-    });
-    const data = await response.json();
-    content = data?.choices?.[0]?.message?.content ?? '';
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiApiKey}` },
+        body: JSON.stringify({
+          model: openaiModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 900,
+        }),
+      });
+      const data = await response.json();
+      content = data?.choices?.[0]?.message?.content ?? '';
+      aiProvider = 'openai';
+    } catch (e) {
+      console.warn('[AI QUIZ] OpenAI generation failed', { error: String(e?.message || e) });
+      content = '';
+    }
   }
 
+  // Try Groq
   if (!content && groqApiKey) {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
-      body: JSON.stringify({
-        model: groqModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.9,
-        max_tokens: 1000,
-      }),
-    });
-    const data = await response.json();
-    content = data?.choices?.[0]?.message?.content ?? '';
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 1000,
+        }),
+      });
+      const data = await response.json();
+      content = data?.choices?.[0]?.message?.content ?? '';
+      aiProvider = 'groq';
+    } catch (e) {
+      console.warn('[AI QUIZ] Groq generation failed', { error: String(e?.message || e) });
+      content = '';
+    }
   }
 
   if (!content) {
     throw new Error('No AI provider configured');
   }
 
-  // Parse the JSON response (models may include extra text; salvage embedded JSON when possible)
+  // Parse the JSON response
   const parsed = safeParseJsonFromModelOutput(content);
 
-  // Validate the puzzle has required fields
-  if (!parsed.question || !Array.isArray(parsed.options) || parsed.options.length < 2) {
-    console.error('Invalid puzzle from AI:', parsed);
-    throw new Error('AI generated invalid puzzle format');
-  }
-  if (parsed.correctIndex === undefined || parsed.correctIndex === null) {
-    console.error('Missing correctIndex in AI puzzle:', parsed);
-    throw new Error('AI puzzle missing correctIndex');
+  // Validate the puzzle with our validator
+  const validation = validator.validatePuzzle(parsed, language);
+  const quality = validator.ratePuzzleQuality(parsed, language);
+
+  console.log('[AI PUZZLE GENERATED]', {
+    aiProvider,
+    language,
+    level,
+    valid: validation.valid,
+    qualityScore: quality,
+    errors: validation.errors,
+    warnings: validation.warnings,
+  });
+
+  // If validation fails, log error and throw
+  if (!validation.valid) {
+    console.error('[AI PUZZLE VALIDATION FAILED]', {
+      aiProvider,
+      errors: validation.errors,
+      puzzle: parsed
+    });
+    throw new Error(`AI puzzle validation failed: ${validation.errors.join('; ')}`);
   }
 
-  try {
-    const cidx = Number(parsed.correctIndex);
-    const ans = Array.isArray(parsed.options) && cidx >= 0 && cidx < parsed.options.length
-      ? parsed.options[cidx]
-      : 'N/A';
-    console.log('[AI QUIZ]', {
-      language,
-      level,
-      category: parsed.category || 'quiz',
-      question: parsed.question,
-      correctIndex: parsed.correctIndex,
-      correctAnswer: ans
+  // If quality score is too low, REJECT the puzzle completely
+  if (quality < 85) {
+    console.error('[AI PUZZLE REJECTED - LOW QUALITY]', {
+      aiProvider,
+      qualityScore: quality,
+      threshold: 85,
+      warnings: validation.warnings,
+      question: parsed?.question?.substring(0, 100),
     });
-  } catch (_) { /* ignore logging errors */ }
+    throw new Error(`AI puzzle quality too low (${quality}/100). Minimum required: 85`);
+  }
+
+  // Sanitize the puzzle
+  const sanitized = validator.sanitizePuzzle(parsed);
 
   // Ensure category is set for wonder_link
   if (useWonderLink) {
-    parsed.category = parsed.category || 'wonder_link';
+    sanitized.category = sanitized.category || 'wonder_link';
   }
-  return parsed;
+
+  return sanitized;
 }
 
 // Submit answer (supports both quiz format and legacy steps format)
@@ -705,6 +760,15 @@ export async function submitAnswer(request, env) {
 
     if (room.status !== 'active') {
       return errorResponse('Room is not active', 400);
+    }
+
+    // Check if player is frozen
+    const participant = await env.DB.prepare(
+      'SELECT is_frozen FROM room_participants WHERE room_id = ? AND user_id = ?'
+    ).bind(roomId, user.id).first();
+
+    if (participant && participant.is_frozen) {
+      return errorResponse('You are frozen by the manager', 403);
     }
 
     // Allow answering any puzzle that exists in the room and hasn't been answered by this user yet
@@ -869,8 +933,9 @@ export async function submitAnswer(request, env) {
     let nextPuzzle = null;
     let gameFinished = false;
 
+    // Auto-advance to next puzzle if ALL participants have answered (regardless of correctness)
     if (finished.c >= participants.c) {
-      // All finished, move to next puzzle
+      // All answered, move to next puzzle
       if (puzzleIndex < room.puzzle_count - 1) {
         // Get next puzzle from room_puzzles
         const nextPuzzleRow = await env.DB.prepare(
@@ -1282,7 +1347,7 @@ export async function forceNextPuzzle(request, env) {
       });
       try {
         const repaired = normalizeQuizPuzzle(
-          await generateAIPuzzle(env, room.language || 'ar', room.difficulty || 1)
+          await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
         );
         if (!repaired) return errorResponse('Next puzzle invalid', 500);
         await env.DB.prepare('UPDATE room_puzzles SET puzzle_json = ? WHERE room_id = ? AND puzzle_index = ?')

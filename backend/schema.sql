@@ -120,11 +120,58 @@ CREATE TABLE room_participants (
   puzzles_solved INTEGER DEFAULT 0,
   current_puzzle_index INTEGER DEFAULT 0,
   is_ready BOOLEAN DEFAULT FALSE,
+  hints_used INTEGER DEFAULT 0, -- Number of hints used in this room
+  hints_available INTEGER DEFAULT 3, -- Number of hints still available
+  role TEXT DEFAULT 'player', -- 'manager', 'co_manager', 'player'
+  is_frozen BOOLEAN DEFAULT FALSE, -- Manager can freeze a player
+  is_kicked BOOLEAN DEFAULT FALSE, -- Manager kicked this player
   joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (room_id) REFERENCES rooms(id),
   FOREIGN KEY (user_id) REFERENCES users(id),
   UNIQUE(room_id, user_id)
 );
+
+-- Room Settings (إعدادات متقدمة للغرفة)
+CREATE TABLE room_settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id INTEGER NOT NULL UNIQUE,
+  hints_enabled BOOLEAN DEFAULT TRUE,
+  hints_per_player INTEGER DEFAULT 3,
+  hint_penalty_percent REAL DEFAULT 10, -- Reduce correct answer points by X% if hint used
+  allow_report_bad_puzzle BOOLEAN DEFAULT TRUE,
+  auto_advance_seconds INTEGER DEFAULT 2, -- Auto advance to next after answer
+  shuffle_options BOOLEAN DEFAULT TRUE, -- Shuffle answer options
+  show_rankings_live BOOLEAN DEFAULT TRUE, -- Show live rankings during game
+  allow_skip_puzzle BOOLEAN DEFAULT FALSE,
+  min_time_per_puzzle INTEGER DEFAULT 5, -- Minimum time before allowing next puzzle
+  
+  -- Manager-specific settings
+  manager_can_skip_puzzle BOOLEAN DEFAULT TRUE, -- Only manager can skip
+  manager_can_reset_scores BOOLEAN DEFAULT TRUE, -- Manager can reset all scores
+  manager_can_freeze_players BOOLEAN DEFAULT TRUE, -- Manager can freeze/unfreeze players
+  manager_can_kick_players BOOLEAN DEFAULT TRUE, -- Manager can kick players
+  manager_can_change_difficulty BOOLEAN DEFAULT TRUE, -- Manager can change difficulty mid-game
+  allow_co_managers BOOLEAN DEFAULT TRUE, -- Allow multiple co-managers
+  show_detailed_stats_to_all BOOLEAN DEFAULT FALSE, -- If false, only manager sees detailed stats
+  
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (room_id) REFERENCES rooms(id)
+);
+
+-- Bad Puzzle Reports (تقارير الأسئلة السيئة)
+CREATE TABLE puzzle_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id INTEGER NOT NULL,
+  puzzle_index INTEGER NOT NULL,
+  puzzle_json TEXT, -- Store the puzzle JSON for reference
+  user_id INTEGER NOT NULL,
+  report_type TEXT NOT NULL, -- 'bad_wording', 'wrong_answer', 'unclear', 'offensive', 'duplicate', 'other'
+  details TEXT, -- Optional details
+  reported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (room_id) REFERENCES rooms(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 
 -- Competition Results (نتائج المسابقات)
 CREATE TABLE competition_results (
@@ -163,6 +210,29 @@ CREATE INDEX idx_rooms_code ON rooms(code);
 CREATE INDEX idx_rooms_status ON rooms(status);
 CREATE INDEX idx_competition_participants_comp ON competition_participants(competition_id);
 CREATE INDEX idx_room_participants_room ON room_participants(room_id);
+CREATE INDEX idx_room_participants_role ON room_participants(room_id, role);
 CREATE INDEX idx_competition_results_comp ON competition_results(competition_id, user_id);
 CREATE INDEX idx_room_results_room ON room_results(room_id, user_id);
+CREATE INDEX idx_puzzle_reports_room ON puzzle_reports(room_id);
+CREATE INDEX idx_puzzle_reports_user ON puzzle_reports(user_id);
+
+-- Manager Action Logs (سجل تصرفات المدير للشفافية)
+CREATE TABLE manager_actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id INTEGER NOT NULL,
+  manager_user_id INTEGER NOT NULL,
+  action_type TEXT NOT NULL, -- 'kick', 'freeze', 'unfreeze', 'reset_scores', 'skip_puzzle', 'change_difficulty', 'transfer_manager', 'change_settings'
+  target_user_id INTEGER, -- If action targets a specific user
+  details TEXT, -- JSON with additional details
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (room_id) REFERENCES rooms(id),
+  FOREIGN KEY (manager_user_id) REFERENCES users(id),
+  FOREIGN KEY (target_user_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_manager_actions_room ON manager_actions(room_id);
+CREATE INDEX idx_manager_actions_manager ON manager_actions(manager_user_id);
+
+PRAGMA foreign_keys = ON;
+
 

@@ -60,8 +60,8 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     final currentUserId = authProvider.user?['id']?.toString();
     final isHost = competitionProvider.isHost;
 
-    // عرض نتائج اللعبة عند الانتهاء (فقط للمسؤول)
-    if (competitionProvider.gameFinished && !_hasShownResults && isHost) {
+    // عرض نتائج اللعبة عند الانتهاء (الآن للجميع، مع زر إعادة الفتح للمسؤول فقط)
+    if (competitionProvider.gameFinished && !_hasShownResults) {
       _hasShownResults = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showGameResults(context, competitionProvider);
@@ -766,18 +766,22 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
 
                     return StreamBuilder<int>(
                       stream: Stream.periodic(const Duration(seconds: 1), (_) {
+                        final puzzleEnd = context
+                            .read<CompetitionProvider>()
+                            .puzzleEndsAt;
+                        if (puzzleEnd == null) return 0;
                         final now = DateTime.now();
-                        final remaining = provider.puzzleEndsAt!
-                            .difference(now)
-                            .inSeconds;
+                        final remaining = puzzleEnd.difference(now).inSeconds;
                         return remaining > 0 ? remaining : 0;
                       }),
                       builder: (context, snapshot) {
+                        final puzzleEnd = context
+                            .read<CompetitionProvider>()
+                            .puzzleEndsAt;
+                        if (puzzleEnd == null) return const SizedBox.shrink();
                         final remaining =
                             snapshot.data ??
-                            provider.puzzleEndsAt!
-                                .difference(DateTime.now())
-                                .inSeconds;
+                            puzzleEnd.difference(DateTime.now()).inSeconds;
                         final secs = remaining > 0 ? remaining : 0;
                         return Align(
                           alignment: Alignment.centerLeft,
@@ -910,12 +914,15 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                 ...options.asMap().entries.map((e) {
                   final idx = e.key;
                   final opt = e.value?.toString() ?? '';
+                  final selectedIdx = provider.selectedAnswerIndex;
                   final lastAnswerCorrect = provider.lastAnswerCorrect;
-                  final hasSelection = provider.selectedAnswerIndex != null;
-                  final hasResult = lastAnswerCorrect != null;
-                  final isSelected = provider.selectedAnswerIndex == idx;
-                  final isCorrect = provider.correctAnswerIndex == idx;
-                  // Keep disabling taps once a selection is made, even while pending
+                  final correctIdx = provider.correctAnswerIndex;
+
+                  // Only show selection/result if we have an actual answer (selectedIdx != null)
+                  final hasSelection = selectedIdx != null;
+                  final hasResult = hasSelection && lastAnswerCorrect != null;
+                  final isSelected = selectedIdx == idx;
+                  final isCorrect = correctIdx == idx;
                   final showResult = hasSelection;
 
                   Color? tileColor;

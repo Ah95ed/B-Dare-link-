@@ -363,6 +363,7 @@ class CompetitionProvider with ChangeNotifier {
         _solvedByUsername = event['username'];
         break;
       case 'new_puzzle':
+        debugPrint('🆕 NEW_PUZZLE event received - clearing answer state');
         _currentPuzzleIndex =
             event['gameState']['currentPuzzleIndex'] ??
             event['puzzleIndex'] ??
@@ -371,6 +372,9 @@ class CompetitionProvider with ChangeNotifier {
         _selectedAnswerIndex = null;
         _lastAnswerCorrect = null;
         _correctAnswerIndex = null;
+        debugPrint(
+          '✅ Answer state cleared: selectedIdx=$_selectedAnswerIndex, lastCorrect=$_lastAnswerCorrect, correctIdx=$_correctAnswerIndex',
+        );
         if (event['puzzle'] != null) {
           _currentPuzzle = _normalizePuzzle(
             Map<String, dynamic>.from(event['puzzle']),
@@ -501,7 +505,7 @@ class CompetitionProvider with ChangeNotifier {
 
         // Only clear when explicitly inactive and no puzzle
         final roomStatus = _currentRoom!['status']?.toString() ?? 'unknown';
-        _gameStarted = roomStatus == 'active' || puzzle != null;
+        _gameStarted = roomStatus == 'active';
         _updateGameState(_currentRoom!, puzzle: normalized);
         notifyListeners();
         return;
@@ -604,7 +608,9 @@ class CompetitionProvider with ChangeNotifier {
   Future<void> toggleReady(bool ready) async {
     if (_currentRoom == null) return;
     try {
-      // Call API to set ready - this triggers game start if all are ready
+      _isReady = ready;
+      notifyListeners();
+      // Call API to set ready (no auto-start; host will start manually)
       await _service.setReady(_currentRoom!['id'], ready);
       // Also notify via WebSocket for immediate UI update
       _realtime.send({'type': 'toggle_ready', 'isReady': ready});
@@ -744,7 +750,10 @@ class CompetitionProvider with ChangeNotifier {
           'Correct! Points: ${result['points']}, First: ${result['isFirstCorrect']}',
         );
       } else {
-        debugPrint('Incorrect answer');
+        debugPrint('❌ Incorrect answer - auto-advancing after 2 seconds');
+        // Wait 2 seconds to show wrong answer, then auto-advance
+        await Future.delayed(const Duration(seconds: 2));
+        await nextPuzzle();
       }
 
       // If server already returned next puzzle, hydrate immediately for snappy UX
@@ -867,6 +876,89 @@ class CompetitionProvider with ChangeNotifier {
         debugPrint('Error kicking user: $e');
       }
     }
+  }
+
+  Future<Map<String, dynamic>> getRoomSettings(int roomId) async {
+    return _service.getRoomSettings(roomId);
+  }
+
+  Future<void> updateRoomSettings(
+    int roomId,
+    Map<String, dynamic> settings,
+  ) async {
+    await _service.updateRoomSettings(roomId, settings);
+  }
+
+  Future<Map<String, dynamic>> getHint(int roomId, int puzzleIndex) async {
+    return _service.getHint(roomId, puzzleIndex);
+  }
+
+  Future<void> reportBadPuzzle(
+    int roomId,
+    int puzzleIndex,
+    String reportType,
+    String details,
+  ) async {
+    await _service.reportBadPuzzle(roomId, puzzleIndex, reportType, details);
+  }
+
+  int? get currentRoomId => _currentRoom?['id'] as int?;
+  int? get currentDifficulty => _currentRoom?['difficulty'] as int?;
+
+  // Manager actions
+  Future<void> skipPuzzle(int roomId) async {
+    await _service.skipPuzzle(roomId);
+    notifyListeners();
+  }
+
+  Future<void> resetScores(int roomId) async {
+    await _service.resetScores(roomId);
+    // Reset local scores
+    _score = 0;
+    _puzzlesSolved = 0;
+    for (var participant in _roomParticipants) {
+      participant['score'] = 0;
+    }
+    notifyListeners();
+  }
+
+  Future<void> changeDifficulty(int roomId, int difficulty) async {
+    await _service.changeDifficulty(roomId, difficulty);
+    if (_currentRoom != null) {
+      _currentRoom!['difficulty'] = difficulty;
+    }
+    notifyListeners();
+  }
+
+  Future<void> freezePlayer(int roomId, String userId, bool freeze) async {
+    await _service.freezePlayer(roomId, userId, freeze);
+    // Update local participant
+    final participantIndex = _roomParticipants.indexWhere(
+      (p) => p['user_id'] == userId,
+    );
+    if (participantIndex >= 0) {
+      _roomParticipants[participantIndex]['is_frozen'] = freeze;
+    }
+    notifyListeners();
+  }
+
+  Future<void> kickPlayer(int roomId, String userId) async {
+    await _service.kickPlayer(roomId, userId);
+    // Remove from local participants
+    _roomParticipants.removeWhere((p) => p['user_id'] == userId);
+    notifyListeners();
+  }
+
+  Future<void> promoteToCoManager(int roomId, String userId) async {
+    await _service.promoteToCoManager(roomId, userId);
+    // Update local participant
+    final participantIndex = _roomParticipants.indexWhere(
+      (p) => p['user_id'] == userId,
+    );
+    if (participantIndex >= 0) {
+      _roomParticipants[participantIndex]['role'] = 'co_manager';
+    }
+    notifyListeners();
   }
 
   void _resetRoomState() {

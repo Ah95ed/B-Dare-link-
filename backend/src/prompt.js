@@ -19,46 +19,56 @@ export function buildSystemPrompt({ language = 'en', level = 1 } = {}) {
   const { min, max } = stepsMinMax(level);
 
   if (isArabic) {
-    // Keep prompts in English to avoid encoding issues, but require Arabic content.
-    return `You generate puzzles for the game "Wonder Link" in ARABIC.
+    // CRITICAL: Enforce PURE ARABIC ONLY - NO MIXING WHATSOEVER
+    return `You generate puzzles for the game "Wonder Link" in PURE ARABIC ONLY.
 
-Puzzle goal: connect two semantically distant Arabic words via a chain of clear, logical intermediate steps.
+⚠️ CRITICAL REQUIREMENTS (MUST OBEY):
 
-Level: ${level}
-Difficulty: ${difficulty}
-Steps (steps.length): ${min}-${max}
+1️⃣ ARABIC PURITY - NO EXCEPTIONS:
+   - EVERY single word MUST be 100% Arabic Modern Standard Arabic (MSA)
+   - ZERO English letters, abbreviations, or Romanized words
+   - NO mixing Arabic with Latin letters (a, b, c, d, etc.)
+   - NO transliteration (e.g., "2" for ع)
+   - If you cannot write it in Arabic, DO NOT include it
+   - All options, all steps, all hints: PURE ARABIC
 
-Hard constraints:
-- All words must be Arabic (Modern Standard Arabic), common and readable.
-- startWord/endWord must be real concepts/objects, not UI/meta words.
-- Do NOT use any of these words anywhere: "بداية", "نهاية", "كلمة", "خطوة", "لغز", "سؤال", "جواب", "إجابة", "رابط", "سلسلة", "مستوى", "مرحلة".
-- Each step must relate to BOTH the previous and next step (meaning/cause/use/part-whole/shared domain).
-- Avoid trivial links (pure synonym-only, single-letter changes, overly generic words like "شيء/حاجة/مفهوم").
-- Avoid proper nouns and sensitive topics.
+2️⃣ CHARACTER VALIDATION:
+   - Use only valid Arabic Unicode (U+0600 to U+06FF)
+   - NO corrupted characters
+   - NO garbled text
+   - NO weird symbols or encoding errors
+   - Test: Each character should be readable Arabic
 
-Examples of the desired logic (do NOT reuse the same words; make new ones):
-- "بحر" -> "بخار" -> "غيوم" -> "مطر" -> "عشب" -> "خروف"
-- "ثلج" -> "برد" -> "معطف" -> "شتاء" -> "مدفأة"
+3️⃣ PUZZLE REQUIREMENTS:
+   - Puzzle goal: Connect two Arabic words via ${min}-${max} logical steps
+   - Difficulty: ${difficulty} (level ${level})
+   - All words must be common, everyday, readable Arabic
+   - startWord/endWord: Real objects/concepts, NOT meta words
+   - FORBIDDEN words: بداية, نهاية, كلمة, خطوة, لغز, سؤال, جواب, إجابة, رابط
+   - Each step relates to BOTH previous and next (meaning/cause/use/part-whole)
+   - Avoid generic words: شيء, حاجة, مفهوم, فكرة
 
-Options for each step:
-- Exactly 3 options: [correct word + 2 plausible distractors].
-- options MUST include step.word exactly.
-- No duplicates; do not include startWord/endWord in options (unless it is the correct step.word; avoid that).
-- Distractors should match the domain and part-of-speech (convincing, not random).
+4️⃣ OPTIONS FORMAT:
+   - Exactly 3 options per step [correct + 2 distractors]
+   - options MUST contain step.word exactly
+   - No duplicates within a step
+   - Distractors must be plausible Arabic words in same domain
+   - All three options MUST be pure Arabic
 
-Hint:
-- A general hint (Arabic) that helps without revealing any solution word.
+5️⃣ HINT REQUIREMENT:
+   - One general Arabic hint
+   - Helps without revealing solution
+   - Pure Arabic only
 
-Output:
-- Return ONLY valid JSON (no Markdown, no extra text).
-- Do not add extra keys beyond:
+OUTPUT STRICTLY:
+Return ONLY valid JSON (no Markdown, no extra text):
 {
-  "startWord": "...",
-  "endWord": "...",
+  "startWord": "كلمة عربية",
+  "endWord": "كلمة عربية أخرى",
   "steps": [
-    { "word": "...", "options": ["...", "...", "..."] }
+    { "word": "كلمة عربية", "options": ["خيار عربي", "خيار عربي", "خيار عربي"] }
   ],
-  "hint": "..."
+  "hint": "تلميح باللغة العربية النقية"
 }`;
   }
 
@@ -129,82 +139,106 @@ export function buildQuizSystemPrompt({ language = 'ar', level = 1 } = {}) {
   const difficulty = difficultyLabel(level);
 
   if (isArabic) {
-    return `You are a quiz master generating fun trivia questions in ARABIC for a speed-based multiplayer game.
+    return `أنت منشئ أسئلة لعبة تربية ذكية متعددة اللاعبين. هدفك: توليد أسئلة عالية الجودة بالعربية الفصحى فقط.
 
-Generate ONE question with 4 multiple choice options.
+المطلوب: سؤال واحد مع 4 خيارات اختيار من متعدد.
 
-Level: ${level}
-Difficulty: ${difficulty}
+المستوى: ${level}
+درجة الصعوبة: ${difficulty}
 
-Requirements:
-- Question must be in Arabic (Modern Standard Arabic)
-- Question should be interesting, engaging, and suitable for all ages
-- Categories: general knowledge, science, geography, history, culture, logic puzzles, riddles
-- Exactly 4 options, only ONE is correct
-- Options should be plausible (not obviously wrong)
-- correctIndex is 0-3 indicating which option is correct
-- Include a short hint that helps without giving away the answer
+القواعد الصارمة (يجب تطبيقها بدون استثناء):
+1. السؤال والخيارات بالعربية الفصحى النقية فقط - بدون خلط بأحرف إنجليزية أبداً
+2. تجنب الأخطاء الإملائية والنحوية - استخدم همزة وتشكيل صحيح
+3. السؤال يجب أن يكون واضح ومفهوم تماماً، وليس غامض
+4. الخيارات الأربعة مختلفة تماماً ولا تكرار
+5. الخيار الصحيح يجب أن يكون فيه (في الفهرس المحدد بـ correctIndex)
+6. الخيارات الأخرى معقولة وليست عشوائية ولا سخيفة
+7. التلميح يساعد بلطف بدون كشف الإجابة
+8. correctIndex يجب أن يكون 0 أو 1 أو 2 أو 3 فقط
 
-Topics to cover (vary randomly):
-- ألغاز ذكاء وتفكير
-- معلومات عامة
-- جغرافيا وعواصم
-- تاريخ وحضارات
-- علوم وطبيعة
-- رياضيات وأرقام
-- ثقافة عربية وإسلامية
+المواضيع (تنوع عشوائي):
+- معلومات عامة وثقافة عربية
+- جغرافيا وعواصم دول عربية
+- تاريخ الحضارات والإسلام
+- علوم الطبيعة والبيولوجيا
+- رياضيات ومنطق وألغاز
+- الأدب والشعر العربي
+- التكنولوجيا والاختراعات
 
-Output ONLY valid JSON:
+الإخراج: فقط JSON صحيح بدون أي نص إضافي:
 {
-  "question": "نص السؤال بالعربية",
-  "options": ["خيار1", "خيار2", "خيار3", "خيار4"],
+  "question": "نص السؤال بالعربية الفصحى",
+  "options": ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"],
   "correctIndex": 0,
-  "hint": "تلميح مساعد",
-  "category": "الفئة"
+  "hint": "تلميح موجز ومفيد",
+  "category": "category_name"
 }`;
   }
 
-  return `You are a quiz master generating fun trivia questions in ENGLISH for a speed-based multiplayer game.
+  return `You are creating high-quality trivia questions in ENGLISH for a speed-based multiplayer game.
 
-Generate ONE question with 4 multiple choice options.
+Generate ONE question with exactly 4 multiple choice options.
 
 Level: ${level}
 Difficulty: ${difficulty}
 
-Requirements:
-- Question should be interesting, engaging, and suitable for all ages
-- Categories: general knowledge, science, geography, history, culture, logic puzzles, riddles
-- Exactly 4 options, only ONE is correct
-- Options should be plausible (not obviously wrong)
-- correctIndex is 0-3 indicating which option is correct
-- Include a short hint
+Hard Requirements (must follow):
+1. Question and all options in ENGLISH only - no mixing languages
+2. Proper spelling and grammar throughout
+3. Question must be clear and unambiguous
+4. All 4 options must be distinct with no repetition
+5. Exactly one correct answer at the index specified by correctIndex
+6. Wrong options must be plausible, not silly or obvious
+7. Hint should help without giving away the answer
+8. correctIndex must be 0, 1, 2, or 3 only
 
-Output ONLY valid JSON:
+Topics (rotate randomly):
+- General knowledge and world facts
+- Geography and capitals
+- History and civilizations
+- Science and nature
+- Math and logic puzzles
+- Literature and art
+- Technology and innovation
+
+Output ONLY valid JSON with no extra text:
 {
-  "question": "Question text",
-  "options": ["Option1", "Option2", "Option3", "Option4"],
+  "question": "Question text in English",
+  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
   "correctIndex": 0,
-  "hint": "Helpful hint",
-  "category": "Category"
+  "hint": "Brief helpful hint",
+  "category": "category_name"
 }`;
 }
 
 export function buildQuizUserPrompt({ language = 'ar', level = 1, seed } = {}) {
   const isArabic = language === 'ar';
   const difficulty = difficultyLabel(level);
-  const seedLine = seed == null ? '' : `\nVariation seed: ${seed}`;
+  const seedLine = seed == null ? '' : `\nرقم الاختلاف: ${seed}`;
 
   if (isArabic) {
-    return `Generate a fresh, unique ARABIC quiz question for level ${level} (${difficulty}).
-Make it engaging and fun! Don't repeat common questions.
-The question should challenge players but be fair.
-Shuffle the correct answer position randomly.${seedLine}`;
+    return `أنشئ سؤال ذكي جديد بالعربية الفصحى فقط، المستوى ${level} (${difficulty}).
+
+تذكر القواعس الحتمية:
+- أي خلط بالإنجليزية = رفض صريح ❌
+- أي أخطاء إملائية = رفض صريح ❌
+- كل الخيارات يجب أن تكون مختلفة تماماً
+- السؤال يجب أن يكون واضح جداً وليس غامض
+- الخيار الصحيح يجب أن يكون واحد من الأربعة
+
+اكتب السؤال بجودة عالية جداً. تجنب التكرار من الأسئلة السابقة.${seedLine}`;
   }
 
-  return `Generate a fresh, unique ENGLISH quiz question for level ${level} (${difficulty}).
-Make it engaging and fun! Don't repeat common questions.
-The question should challenge players but be fair.
-Shuffle the correct answer position randomly.${seedLine}`;
+  return `Generate a fresh, high-quality ENGLISH quiz question for level ${level} (${difficulty}).
+
+Strict requirements:
+- No language mixing - ENGLISH ONLY ✓
+- No spelling or grammar errors ✓
+- All 4 options must be distinct ✓
+- Question must be clear and unambiguous ✓
+- Exactly one correct answer ✓
+
+Create a unique, engaging question. Do not repeat previous topics.${seedLine}`;
 }
 
 // ============= WONDER LINK QUIZ (pair-link multiple-choice) =============
@@ -214,70 +248,92 @@ export function buildLinkQuizSystemPrompt({ language = 'ar', level = 1 } = {}) {
   const difficulty = difficultyLabel(level);
 
   if (isArabic) {
-    return `أنت منشئ ألغاز لُعبة متعددة اللاعبين سريعة الإيقاع، هدفها اكتشاف "الرابط العجيب" بين شيئين.
+    return `أنت منشئ لغز "الرابط العجيب" في لعبة متعددة لاعبين سريعة. الهدف: اكتشاف الرابط المخفي بين عنصرين عربيين.
 
-المطلوب: إنشاء سؤال اختيار من متعدد (4 خيارات) يسأل: ما الرابط بين عنصرين عربيين واضحين (مثل: باب خشب، شجرة)؟
+المطلوب: سؤال واحد مع 4 خيارات اختيار من متعدد.
 
 المستوى: ${level}
-الدرجة: ${difficulty}
+درجة الصعوبة: ${difficulty}
 
-الشروط:
-- صِغ السؤال بالعربية الفصحى، بصيغة: "ما الرابط بين \"X\" و\"Y\"؟".
-- اختر عنصرين ملموسين أو مفاهيم يومية مفهومة (بدون أسماء علم حساسة).
-- أنشئ 4 خيارات واضحة ومقنعة، خيار واحد صحيح فقط.
-- اجعل الخيارات الأخرى مشتتات plausibly related وليست عشوائية.
-- اذكر تلميحًا قصيرًا يساعد دون كشف الإجابة.
-- يُستحسن تضمين تفسير مختصر (explanation) للجابة الصحيحة.
+القواعد الصارمة (إلزامية):
+1. السؤال والخيارات بالعربية الفصحى النقية - بدون إنجليزية أبداً
+2. بدون أخطاء إملائية أو نحوية
+3. صيغة السؤال: "ما الرابط بين \"العنصر الأول\" و\"العنصر الثاني\"؟"
+4. اختر عنصرين عربيين يوميين واضحين (ليسا أسماء علم)
+5. الرابط يجب أن يكون منطقياً وليس عشوائياً
+6. الخيارات الأربعة واضحة ومختلفة تماماً
+7. الخيار الصحيح يجب أن يكون في المكان المحدد بـ correctIndex
+8. التلميح يساعد بدون كشف الإجابة
+9. التفسير يشرح لماذا هذا هو الرابط الصحيح
 
-الصيغَة JSON فقط (بدون أي نص زائد):
+الإخراج: JSON صحيح فقط بدون نص إضافي:
 {
-  "question": "ما الرابط بين \"باب خشب\" و\"شجرة\"؟",
-  "options": ["خيار1", "خيار2", "خيار3", "خيار4"],
+  "question": "ما الرابط بين \"باب خشبي\" و\"شجرة\"؟",
+  "options": ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"],
   "correctIndex": 0,
   "hint": "تلميح موجز",
   "category": "wonder_link",
-  "pair": { "a": "باب خشب", "b": "شجرة" },
-  "explanation": "لماذا هذا هو الرابط الصحيح"
+  "pair": { "a": "باب خشبي", "b": "شجرة" },
+  "explanation": "شرح الرابط المنطقي"
 }`;
   }
 
-  return `You create fast-paced multiplayer "Wonder Link" multiple-choice questions.
+  return `You create fast-paced multiplayer "Wonder Link" multiple-choice questions in ENGLISH.
 
-Task: Ask for the link between two everyday items (e.g., wooden door and tree). Provide 4 options with exactly one correct.
+Task: Ask for the link between two everyday items. Provide 4 options with exactly one correct.
 
 Level: ${level}
 Difficulty: ${difficulty}
 
-Requirements:
-- Question in the form: "What is the link between \"X\" and \"Y\"?"
-- Pick two concrete or common concepts; avoid sensitive proper nouns.
-- Provide 4 plausible options; exactly one is correct.
-- Include a short hint and a brief explanation for the correct answer.
+Hard Requirements (must follow):
+1. Question and all options in ENGLISH only - no other languages
+2. Proper spelling and grammar throughout
+3. Question format: "What is the link between \"Item A\" and \"Item B\"?"
+4. Pick two concrete, everyday concepts (no proper nouns)
+5. The link must be logical and interesting
+6. All 4 options must be distinct and plausible
+7. Exactly one correct answer at the specified correctIndex
+8. Hint should help without revealing the answer
+9. Explanation clarifies why the link is valid
 
-Output JSON only:
+Output ONLY valid JSON:
 {
   "question": "What is the link between \"wooden door\" and \"tree\"?",
   "options": ["Option1", "Option2", "Option3", "Option4"],
   "correctIndex": 0,
-  "hint": "Short hint",
+  "hint": "Brief hint",
   "category": "wonder_link",
   "pair": { "a": "wooden door", "b": "tree" },
-  "explanation": "Why the correct link is valid"
+  "explanation": "Why this link is correct"
 }`;
 }
 
 export function buildLinkQuizUserPrompt({ language = 'ar', level = 1, seed } = {}) {
   const isArabic = language === 'ar';
   const difficulty = difficultyLabel(level);
-  const seedLine = seed == null ? '' : `\nSeed: ${seed}`;
+  const seedLine = seed == null ? '' : `\nرقم الاختلاف: ${seed}`;
 
   if (isArabic) {
-    return `ولّد سؤالَ رابطٍ عجيب بالعربية، مستوى ${level} (${difficulty}).
-اختر عنصرين عربيين واضحين وغير حسّاسين، واكتب السؤال بصيغة: ما الرابط بين "X" و"Y"؟
-قدّم 4 خيارات مقنعة، واحد فقط صحيح، مع تلميحٍ موجز وتفسير مختصر للصواب.${seedLine}`;
+    return `أنشئ لغز رابط عجيب جديد بالعربية الفصحى فقط، المستوى ${level} (${difficulty}).
+
+القواعد الحتمية:
+✗ أي إنجليزية = رفض
+✗ أي أخطاء = رفض
+✓ عربي فصيح نقي
+✓ رابط منطقي وذكي
+✓ خيارات واضحة ومختلفة
+
+ولّد لغز جديد، تجنب التكرار.${seedLine}`;
   }
 
-  return `Generate a Wonder Link MCQ in ENGLISH for level ${level} (${difficulty}).
-Pick two everyday items; ask "What is the link between \"X\" and \"Y\"?"
-Provide 4 plausible options (one correct), a short hint, and a brief explanation.${seedLine}`;
+  return `Generate a fresh "Wonder Link" MCQ in ENGLISH for level ${level} (${difficulty}).
+
+Strict rules:
+✗ NO other languages - ENGLISH ONLY
+✗ NO spelling errors
+✓ Logical, interesting link
+✓ 4 distinct, plausible options
+✓ One correct answer
+
+Create a unique puzzle, avoid repetition.${seedLine}`;
 }
