@@ -32,10 +32,19 @@ function hasLanguageMixing(text) {
 
     const arabicCount = (text.match(/[\u0600-\u06FF]/g) || []).length;
     const latinCount = (text.match(/[a-zA-Z]/g) || []).length;
+    const numberCount = (text.match(/[0-9]/g) || []).length;
 
     // ZERO TOLERANCE: even 1 Latin letter in Arabic text = mixing
     if (arabicCount > 0 && latinCount > 0) {
+        console.warn(`🚫 Language mixing detected: Arabic chars=${arabicCount}, Latin chars=${latinCount}`);
         return true; // ANY mixing is rejected
+    }
+
+    // Even numbers mixed with Arabic can be suspicious (unless natural)
+    const onlyArabicOrNumbers = /^[\u0600-\u06FF0-9\s\-\.،؛:؟!]+$/.test(text);
+    if (arabicCount > 0 && !onlyArabicOrNumbers) {
+        console.warn(`🚫 Invalid characters in Arabic text: ${text}`);
+        return true;
     }
 
     return false;
@@ -176,7 +185,20 @@ export function validatePuzzle(puzzle, language = 'en', options = {}) {
         }
         const hintValidation = validateLanguage(puzzle.hint, language);
         if (!hintValidation.valid) {
-            warnings.push(`Hint language issue: ${hintValidation.error}`);
+            // Hint is shown to users; treat any language/corruption issues as hard errors.
+            errors.push(`Hint error: ${hintValidation.error}`);
+        }
+    }
+
+    // Validate explanation (optional)
+    if (puzzle.explanation) {
+        if (typeof puzzle.explanation !== 'string') {
+            errors.push('Explanation must be a string');
+        } else {
+            const expValidation = validateLanguage(puzzle.explanation, language);
+            if (!expValidation.valid) {
+                errors.push(`Explanation error: ${expValidation.error}`);
+            }
         }
     }
 

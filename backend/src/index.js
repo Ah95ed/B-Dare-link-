@@ -152,13 +152,13 @@ export default {
         return await setReady(request, env);
       }
       if (path === '/rooms/answer' && request.method === 'POST') {
-        return await submitAnswer(request, env);
+        return await submitAnswer(request, env, ctx);
       }
       if (path === '/rooms/leaderboard' && request.method === 'GET') {
         return await getLeaderboard(request, env);
       }
       if (path === '/rooms/start' && request.method === 'POST') {
-        return await manualStartGame(request, env);
+        return await manualStartGame(request, env, ctx);
       }
       if (path === '/rooms/reopen' && request.method === 'POST') {
         return await reopenRoom(request, env);

@@ -11,5 +11,6 @@
     "java.checkstyle.enabled": true,
     "java.checkstyle.suppressions": "",
     "java.checkstyle.autoFix": true,
-    "java.debug.settings.onBuildFailureProceed": true
+    "java.debug.settings.onBuildFailureProceed": true,
+    "chat.editor.fontSize": 18
 }

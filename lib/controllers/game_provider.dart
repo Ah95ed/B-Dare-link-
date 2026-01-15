@@ -101,7 +101,8 @@ class GameProvider extends ChangeNotifier {
     final word = w.trim();
     if (word.isEmpty) return true;
     final lower = word.toLowerCase();
-    return _bannedMetaWordsAr.contains(word) || _bannedMetaWordsEn.contains(lower);
+    return _bannedMetaWordsAr.contains(word) ||
+        _bannedMetaWordsEn.contains(lower);
   }
 
   bool _isValidPuzzle(GamePuzzle p) {
@@ -157,11 +158,7 @@ class GameProvider extends ChangeNotifier {
         final starsToSync = completedLevelId == null
             ? starsEarned
             : (prefs.getInt('stars_level_$completedLevelId') ?? starsEarned);
-        await _authProvider!.syncProgress(
-          syncLevel,
-          _score,
-          starsToSync,
-        );
+        await _authProvider!.syncProgress(syncLevel, _score, starsToSync);
       }
 
       notifyListeners();
@@ -339,6 +336,7 @@ class GameProvider extends ChangeNotifier {
   void _loadPuzzle() {
     final puzzle = currentPuzzle;
     if (puzzle != null) {
+      _errorMessage = null;
       _timeLimit = _timeLimitForLevel(_currentLevel?.id ?? 1);
       _currentRound = GameRound(
         startWord: _isArabic ? puzzle.startWordAr : puzzle.startWordEn,
@@ -378,7 +376,11 @@ class GameProvider extends ChangeNotifier {
       incrementScore(500);
       _stopTimer();
       final starsEarned = _calculateStarsForLevel();
-      await _saveProgress(_currentLevel!.id + 1, completedLevelId: _currentLevel!.id, starsEarned: starsEarned);
+      await _saveProgress(
+        _currentLevel!.id + 1,
+        completedLevelId: _currentLevel!.id,
+        starsEarned: starsEarned,
+      );
       // Mark completion and move index past the last puzzle so currentPuzzle becomes null.
       _isLevelComplete = true;
       _currentPuzzleIndex = _currentLevel!.puzzles.length;
@@ -496,6 +498,19 @@ class GameProvider extends ChangeNotifier {
     decrementLives();
     _errorMessage = _isArabic ? "انتهى الوقت!" : "Time's Up!";
     notifyListeners();
+
+    // Auto-advance to avoid getting stuck on the same puzzle after timeout.
+    // If the player is out of lives, keep the game over state on the same screen.
+    if (_isGameOver) {
+      _stopTimer();
+      return;
+    }
+
+    // Give the user a brief moment to see the timeout message.
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (_isGameOver || _isLevelComplete) return;
+      advancePuzzle();
+    });
   }
 
   @override

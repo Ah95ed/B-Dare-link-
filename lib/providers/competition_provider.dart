@@ -9,6 +9,9 @@ class CompetitionProvider with ChangeNotifier {
   final RealtimeService _realtime = RealtimeService();
   AuthProvider? _authProvider;
 
+  Future<void>? _refreshInFlight;
+  DateTime? _lastRefreshAt;
+
   void setAuthProvider(AuthProvider auth) {
     _authProvider = auth;
   }
@@ -325,25 +328,16 @@ class CompetitionProvider with ChangeNotifier {
       case 'game_started':
         debugPrint('🎮 Game started event received');
         _gameStarted = true;
-        _currentPuzzleIndex = event['puzzleIndex'] ?? 0;
+        _currentPuzzleIndex = event['puzzleIndex'] ?? _currentPuzzleIndex;
         _totalPuzzles = event['totalPuzzles'] ?? 5;
         _solvedByUsername = null;
         _gameFinished = false;
         _selectedAnswerIndex = null;
         _lastAnswerCorrect = null;
         _correctAnswerIndex = null;
-        if (event['puzzle'] != null) {
-          _currentPuzzle = _normalizePuzzle(
-            Map<String, dynamic>.from(event['puzzle']),
-          );
-          debugPrint('✅ Puzzle loaded: ${_currentPuzzle!['question']}');
-          debugPrint(
-            '✅ Options count: ${(_currentPuzzle!['options'] as List?)?.length ?? 0}',
-          );
-        } else {
-          debugPrint('⚠️ Puzzle missing in game_started, fetching from API');
-        }
-        // Always refresh to ensure we have the puzzle
+
+        // IMPORTANT: We don't trust WS puzzle payload for per-user progression.
+        // Always hydrate from API which returns the per-user current puzzle/index.
         refreshRoomStatus();
         _puzzleStartTime = DateTime.now();
         // Read timer info from gameState if present
@@ -367,7 +361,7 @@ class CompetitionProvider with ChangeNotifier {
         _currentPuzzleIndex =
             event['gameState']['currentPuzzleIndex'] ??
             event['puzzleIndex'] ??
-            0;
+            _currentPuzzleIndex;
         _solvedByUsername = null;
         _selectedAnswerIndex = null;
         _lastAnswerCorrect = null;
@@ -375,12 +369,9 @@ class CompetitionProvider with ChangeNotifier {
         debugPrint(
           '✅ Answer state cleared: selectedIdx=$_selectedAnswerIndex, lastCorrect=$_lastAnswerCorrect, correctIdx=$_correctAnswerIndex',
         );
-        if (event['puzzle'] != null) {
-          _currentPuzzle = _normalizePuzzle(
-            Map<String, dynamic>.from(event['puzzle']),
-          );
-          debugPrint('✨ New puzzle: ${_currentPuzzle!['question']}');
-        }
+
+        // IMPORTANT: Always hydrate from API (per-user current puzzle/index).
+        refreshRoomStatus();
         _puzzleStartTime = DateTime.now();
         final gs2 = event['gameState'];
         if (gs2 != null && gs2['puzzleEndsAt'] != null) {
@@ -418,7 +409,10 @@ class CompetitionProvider with ChangeNotifier {
     if (gameState == null) return;
     _gameStarted = gameState['status'] == 'active';
     _gameFinished = gameState['status'] == 'finished';
-    _currentPuzzleIndex = gameState['currentPuzzleIndex'] ?? 0;
+    _currentPuzzleIndex =
+        gameState['currentPuzzleIndex'] ??
+        gameState['current_puzzle_index'] ??
+        _currentPuzzleIndex;
     // Safety defaults to avoid null UI
     if (_currentPuzzle != null) {
       _currentPuzzle = _normalizePuzzle(_currentPuzzle!);
@@ -459,12 +453,52 @@ class CompetitionProvider with ChangeNotifier {
   bool get isConnected => _realtime.isConnected;
   bool get isConnecting => _realtime.isConnecting;
 
-  Future<void> refreshRoomStatus() async {
-    if (_currentRoom == null) return;
+  Future<void> refreshRoomStatus({bool bypassThrottle = false}) {
+    if (_currentRoom == null) return Future.value();
+
+    // Avoid overlapping refresh calls (common when WS + UI both trigger refresh).
+    if (_refreshInFlight != null) return _refreshInFlight!;
+
+    // Throttle overly-frequent refresh bursts (except when explicitly bypassed after answer submission).
+    final now = DateTime.now();
+    final last = _lastRefreshAt;
+    if (!bypassThrottle &&
+        last != null &&
+        now.difference(last) < const Duration(milliseconds: 350)) {
+      return Future.value();
+    }
+    _lastRefreshAt = now;
+
+    final f = _doRefreshRoomStatus();
+    _refreshInFlight = f;
+    return f.whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  Future<void> _doRefreshRoomStatus() async {
     try {
       debugPrint('🔄 Refreshing room status for room ${_currentRoom!['id']}');
+      final prevPuzzleIndex = _currentPuzzleIndex;
       final result = await _service.getRoomStatus(_currentRoom!['id']);
       _currentRoom = result['room'];
+
+      // Prefer per-user puzzle index from backend (prevents repeats after wrong answers)
+      final idxRaw =
+          result['currentPuzzleIndex'] ?? result['current_puzzle_index'];
+      if (idxRaw != null) {
+        _currentPuzzleIndex =
+            int.tryParse(idxRaw.toString()) ?? _currentPuzzleIndex;
+      }
+
+      // If the server advanced the puzzle index, clear previous answer UI state
+      // so the next question is interactive and doesn't appear "stuck".
+      if (_currentPuzzleIndex != prevPuzzleIndex) {
+        _selectedAnswerIndex = null;
+        _lastAnswerCorrect = null;
+        _correctAnswerIndex = null;
+      }
+
       _roomParticipants = List<Map<String, dynamic>>.from(
         (result['participants'] ?? []).map(
           (p) => _normalizeParticipantFromApi(Map<String, dynamic>.from(p)),
@@ -484,36 +518,49 @@ class CompetitionProvider with ChangeNotifier {
 
       // Get current puzzle from API result if game is active
       final puzzle = result['currentPuzzle'];
+      final roomStatus = _currentRoom!['status']?.toString() ?? 'unknown';
       debugPrint(
-        '📊 Room status: ${_currentRoom!['status']}, puzzle: ${puzzle != null ? 'present' : 'null'}',
+        '📊 Room status: $roomStatus, puzzle: ${puzzle != null ? 'present' : 'null'}',
       );
+
       if (puzzle != null) {
         final normalized = _normalizePuzzle(Map<String, dynamic>.from(puzzle));
         final opts = (normalized['options'] as List?) ?? const [];
         final q = normalized['question']?.toString().trim() ?? '';
-        debugPrint('📄 Puzzle question (normalized): $q');
-        debugPrint('📄 Puzzle options count: ${opts.length}');
 
-        // If server sent an empty puzzle, don't overwrite a valid current one
-        if (opts.isEmpty && _currentPuzzle != null) {
-          debugPrint(
-            '⚠️ Received puzzle without options; keeping existing puzzle',
-          );
+        // ✅ LOG PUZZLE CHANGE FOR DEBUGGING
+        debugPrint('🔄 PUZZLE REFRESH: Index=$_currentPuzzleIndex');
+        debugPrint('📄 Question: $q');
+        debugPrint('📄 Options: ${opts.length}');
+        debugPrint('📄 Puzzle ID: ${normalized['puzzleId'] ?? 'N/A'}');
+
+        // Validate puzzle has valid options
+        if (opts.isEmpty) {
+          debugPrint('⚠️ Received puzzle without options');
+          if (_currentPuzzle != null &&
+              (_currentPuzzle!['options'] as List?)?.isNotEmpty == true) {
+            debugPrint('⚠️ Keeping existing valid puzzle');
+            notifyListeners();
+            return;
+          }
+          // If no valid current puzzle, log and keep trying
+          debugPrint('⚠️ No valid puzzle available');
           notifyListeners();
           return;
         }
 
-        // Only clear when explicitly inactive and no puzzle
-        final roomStatus = _currentRoom!['status']?.toString() ?? 'unknown';
+        // Update puzzle successfully
         _gameStarted = roomStatus == 'active';
+        // _updateGameState reads currentPuzzleIndex from gameState (camelCase) which room doesn't have.
+        // We already set _currentPuzzleIndex above from result['currentPuzzleIndex'].
         _updateGameState(_currentRoom!, puzzle: normalized);
+        debugPrint('✅ Puzzle loaded successfully: ${opts.length} options');
         notifyListeners();
         return;
       }
-      _updateGameState(
-        _currentRoom!,
-        puzzle: puzzle != null ? Map<String, dynamic>.from(puzzle) : null,
-      );
+
+      // No puzzle from server - update without puzzle
+      _updateGameState(_currentRoom!, puzzle: null);
       notifyListeners();
     } catch (e) {
       debugPrint('❌ Error refreshing room status: $e');
@@ -750,30 +797,55 @@ class CompetitionProvider with ChangeNotifier {
           'Correct! Points: ${result['points']}, First: ${result['isFirstCorrect']}',
         );
       } else {
-        debugPrint('❌ Incorrect answer - auto-advancing after 2 seconds');
-        // Wait 2 seconds to show wrong answer, then auto-advance
-        await Future.delayed(const Duration(seconds: 2));
-        await nextPuzzle();
+        debugPrint('Incorrect answer');
       }
 
-      // If server already returned next puzzle, hydrate immediately for snappy UX
+      // الانتقال التلقائي للسؤال التالي (السيرفر يرسله الآن مباشرة)
       if (result['nextPuzzle'] != null) {
-        _currentPuzzleIndex = (_currentPuzzleIndex + 1);
+        // Never guess the next index locally; backend may skip answered puzzles.
+        if (result['nextPuzzleIndex'] != null) {
+          _currentPuzzleIndex =
+              int.tryParse(result['nextPuzzleIndex'].toString()) ??
+              _currentPuzzleIndex;
+        }
         _currentPuzzle = _normalizePuzzle(
           Map<String, dynamic>.from(result['nextPuzzle']),
         );
         _puzzleStartTime = DateTime.now();
-        _puzzleEndsAt =
-            null; // will be updated by timer_started/new_puzzle events
+        _puzzleEndsAt = null;
+
+        final nextQ = _currentPuzzle?['question'] ?? 'N/A';
+        debugPrint('✅ NEXT PUZZLE FROM SUBMIT: $nextQ');
+        debugPrint('📊 New index: $_currentPuzzleIndex');
+
+        // إعادة تعيين حالة الإجابة بعد ثانية واحدة لعرض النتيجة
+        // لكن نخبر المستمعين فوراً بأن اللغز تغير
+        notifyListeners();
+
+        Future.delayed(const Duration(milliseconds: 1200), () {
+          _selectedAnswerIndex = null;
+          _lastAnswerCorrect = null;
+          _correctAnswerIndex = null;
+          notifyListeners();
+        });
+      } else {
+        // ⚠️ Server didn't return nextPuzzle - this shouldn't happen but let's handle it
+        debugPrint(
+          '⚠️ WARNING: Server did not return nextPuzzle, will retry via refreshRoomStatus',
+        );
+        _errorMessage = 'تحديث اللغز قيد التنفيذ...';
+        // تأكد من عدم ترك المستخدم معلقاً
+        notifyListeners();
       }
 
       // If game finished, mark and refresh leaderboard
       if (result['gameFinished'] == true) {
         _gameFinished = true;
-        await refreshRoomStatus();
+        // Bypass throttle to immediately fetch final state
+        await refreshRoomStatus(bypassThrottle: true);
       } else {
-        // Fallback: pull fresh state so next_puzzle moves if server advanced
-        await refreshRoomStatus();
+        // Bypass throttle to immediately fetch next puzzle if nextPuzzle wasn't in response
+        await refreshRoomStatus(bypassThrottle: true);
       }
 
       notifyListeners();
@@ -831,20 +903,28 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   Future<void> deleteRoom() async {
-    if (_currentRoom != null) {
-      try {
-        if (!isHost) {
-          _errorMessage = 'فقط صاحب الغرفة يمكنه حذفها.';
-          notifyListeners();
-          return;
-        }
-        await _service.deleteRoom(_currentRoom!['id']);
-        _resetRoomState();
-        loadMyRooms();
-      } catch (e) {
-        _errorMessage = 'فشل في حذف المجموعة: $e';
+    if (_currentRoom == null) return;
+
+    try {
+      if (!isHost) {
+        _errorMessage = 'فقط صاحب الغرفة يمكنه حذفها.';
         notifyListeners();
+        return;
       }
+
+      final roomId = _currentRoom!['id'];
+      debugPrint('🗑️ Deleting room $roomId...');
+
+      await _service.deleteRoom(roomId);
+
+      debugPrint('✅ Room deleted successfully');
+      _resetRoomState();
+      await loadMyRooms();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌ Error deleting room: $e');
+      _errorMessage = 'فشل في حذف المجموعة: $e';
+      notifyListeners();
     }
   }
 

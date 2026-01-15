@@ -10,13 +10,27 @@ export const JWT_SECRET = "CHANGE_ME_IN_PROD_TO_A_REAL_SECRET_KEY"; // In prod u
 export function jsonResponse(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json', ...extraHeaders },
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': 'application/json',
+      // Never cache gameplay responses; prevents stale puzzles/status from edge/client caches.
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      Pragma: 'no-cache',
+      Expires: '0',
+      ...extraHeaders,
+    },
   });
 }
 
 export function errorResponse(message, status = 400) {
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      Pragma: 'no-cache',
+      Expires: '0',
+    },
   });
 }

@@ -13,6 +13,15 @@ function stepsMinMax(level) {
   return { min: 4, max: 5 };
 }
 
+function linkChainMinMax(level) {
+  const n = Number(level) || 1;
+  // For Wonder Link MCQ: number of intermediate nodes (excluding endpoints).
+  // Keep it readable on mobile, but scale with difficulty.
+  if (n <= 3) return { min: 3, max: 4 };
+  if (n <= 6) return { min: 4, max: 5 };
+  return { min: 5, max: 6 };
+}
+
 export function buildSystemPrompt({ language = 'en', level = 1 } = {}) {
   const isArabic = language === 'ar';
   const difficulty = difficultyLabel(level);
@@ -61,7 +70,7 @@ export function buildSystemPrompt({ language = 'en', level = 1 } = {}) {
    - Pure Arabic only
 
 OUTPUT STRICTLY:
-Return ONLY valid JSON (no Markdown, no extra text):
+Return ONLY valid JSON (no Markdown, no headings, no prose):
 {
   "startWord": "كلمة عربية",
   "endWord": "كلمة عربية أخرى",
@@ -81,6 +90,8 @@ Difficulty: ${difficulty}
 Steps (steps.length): ${min}-${max}
 
 Hard constraints:
+- Language purity: ENGLISH ONLY. Do not mix Arabic or any other script.
+- Do not repeat or restate the question; write it once clearly.
 - startWord/endWord must be real concepts/objects, not UI/meta words (e.g., "start", "end", "word", "step", "puzzle", "question", "answer").
 - Each step must relate to BOTH the previous and next step (meaning/cause/use/part-whole/shared domain).
 - Avoid trivial links (pure synonym-only, single-letter changes, overly generic words like "thing/concept").
@@ -96,7 +107,7 @@ Hint:
 - A general hint that helps without revealing any solution word.
 
 Output:
-- Return ONLY valid JSON (no Markdown, no extra text).
+- Return ONLY valid JSON (no Markdown, no extra text, no explanations outside JSON).
 - Do not add extra keys beyond:
 {
   "startWord": "...",
@@ -119,13 +130,17 @@ export function buildUserPrompt({ language = 'en', level = 1, seed } = {}) {
 Use common Modern Standard Arabic words; prefer single-word steps (max 2 words).
 Steps length must be within ${min}-${max}.
 Make the link non-obvious but fair and logically defensible; distractors must be plausible, not random.
-Avoid UI/meta words like: بداية/نهاية/خطوة/لغز.${seedLine}`;
+Avoid UI/meta words like: بداية/نهاية/خطوة/لغز.
+لا تكرر نص السؤال؛ اكتبه مرة واحدة فقط وباللغة العربية حصراً.
+Return JSON only; never add Markdown or comments.${seedLine}`;
   }
 
   return `Create a fresh, non-repetitive ENGLISH puzzle for level ${level} (${difficulty}).
 Use common everyday words; prefer single-word steps (max 2 words).
 Steps length must be within ${min}-${max}.
-Make the link non-obvious but fair and logically defensible; distractors must be plausible, not random.${seedLine}`;
+Make the link non-obvious but fair and logically defensible; distractors must be plausible, not random.
+Do not repeat the question text; state it once. ENGLISH only—no mixed languages.
+Return JSON only; no Markdown or extra text.${seedLine}`;
 }
 
 export function expectedStepsMinMax(level) {
@@ -146,15 +161,19 @@ export function buildQuizSystemPrompt({ language = 'ar', level = 1 } = {}) {
 المستوى: ${level}
 درجة الصعوبة: ${difficulty}
 
+⚠️ تحذير صارم جداً: أي حرف إنجليزي أو خليط لغات سيسبب رفض فوري للسؤال
+
 القواعد الصارمة (يجب تطبيقها بدون استثناء):
-1. السؤال والخيارات بالعربية الفصحى النقية فقط - بدون خلط بأحرف إنجليزية أبداً
+1. كل كلمة في السؤال والخيارات والتلميح بالعربية الفصحى النقية فقط - لا توجد أحرف إنجليزية أبداً
 2. تجنب الأخطاء الإملائية والنحوية - استخدم همزة وتشكيل صحيح
 3. السؤال يجب أن يكون واضح ومفهوم تماماً، وليس غامض
-4. الخيارات الأربعة مختلفة تماماً ولا تكرار
-5. الخيار الصحيح يجب أن يكون فيه (في الفهرس المحدد بـ correctIndex)
-6. الخيارات الأخرى معقولة وليست عشوائية ولا سخيفة
-7. التلميح يساعد بلطف بدون كشف الإجابة
-8. correctIndex يجب أن يكون 0 أو 1 أو 2 أو 3 فقط
+4. لا تكرر السؤال أو تعيده بصيغ مختلفة؛ اكتبه مرة واحدة فقط
+5. الخيارات الأربعة مختلفة تماماً ولا تكرار
+6. الخيار الصحيح يجب أن يكون فيه (في الفهرس المحدد بـ correctIndex)
+7. الخيارات الأخرى معقولة وليست عشوائية ولا سخيفة
+8. التلميح يساعد بلطف بدون كشف الإجابة - وبالعربية الفصحى فقط
+9. correctIndex يجب أن يكون 0 أو 1 أو 2 أو 3 فقط
+10. تحقق قبل الإرسال: لا توجد أحرف انجليزية في أي حقل (ليس حتى في التلميح)
 
 المواضيع (تنوع عشوائي):
 - معلومات عامة وثقافة عربية
@@ -186,6 +205,7 @@ Hard Requirements (must follow):
 1. Question and all options in ENGLISH only - no mixing languages
 2. Proper spelling and grammar throughout
 3. Question must be clear and unambiguous
+4. Do not repeat or restate the question; write it once.
 4. All 4 options must be distinct with no repetition
 5. Exactly one correct answer at the index specified by correctIndex
 6. Wrong options must be plausible, not silly or obvious
@@ -219,14 +239,14 @@ export function buildQuizUserPrompt({ language = 'ar', level = 1, seed } = {}) {
   if (isArabic) {
     return `أنشئ سؤال ذكي جديد بالعربية الفصحى فقط، المستوى ${level} (${difficulty}).
 
-تذكر القواعس الحتمية:
+تذكر القواعد الحتمية:
 - أي خلط بالإنجليزية = رفض صريح ❌
 - أي أخطاء إملائية = رفض صريح ❌
 - كل الخيارات يجب أن تكون مختلفة تماماً
 - السؤال يجب أن يكون واضح جداً وليس غامض
 - الخيار الصحيح يجب أن يكون واحد من الأربعة
 
-اكتب السؤال بجودة عالية جداً. تجنب التكرار من الأسئلة السابقة.${seedLine}`;
+اكتب السؤال بجودة عالية جداً. تجنب التكرار من الأسئلة السابقة. لا تكرر نص السؤال أو تدمج لغتين. أخرج JSON فقط بلا أي نص إضافي.${seedLine}`;
   }
 
   return `Generate a fresh, high-quality ENGLISH quiz question for level ${level} (${difficulty}).
@@ -238,7 +258,7 @@ Strict requirements:
 - Question must be clear and unambiguous ✓
 - Exactly one correct answer ✓
 
-Create a unique, engaging question. Do not repeat previous topics.${seedLine}`;
+Create a unique, engaging question. Do not repeat previous topics. Do not repeat the question text or mix languages. Output JSON only, no prose.${seedLine}`;
 }
 
 // ============= WONDER LINK QUIZ (pair-link multiple-choice) =============
@@ -246,94 +266,154 @@ Create a unique, engaging question. Do not repeat previous topics.${seedLine}`;
 export function buildLinkQuizSystemPrompt({ language = 'ar', level = 1 } = {}) {
   const isArabic = language === 'ar';
   const difficulty = difficultyLabel(level);
+  const { min, max } = linkChainMinMax(level);
 
   if (isArabic) {
-    return `أنت منشئ لغز "الرابط العجيب" في لعبة متعددة لاعبين سريعة. الهدف: اكتشاف الرابط المخفي بين عنصرين عربيين.
+    return `أنت منشئ لغز "الرابط العجيب" في لعبة متعددة لاعبين سريعة.
+
+الفكرة (هندسة المنطق الشامل):
+- بدلاً من تلاعب لغوي أو معلومات ثقافية ضيقة، ابنِ الرابط كعملية/سيناريو عالمي (Script) أو منطق إجرائي (Procedural Process Logic).
+- استعمل سيناريوهات مشتركة بين البشر: من الطبيعة (دورات الماء/الكربون/الغذاء)، من التصنيع (تحويل المواد الخام)، من المزرعة إلى المائدة، من الجسم البشري، من التكنولوجيا، ومن المنهج العلمي.
+- الهدف: رابط قابل للفهم عالمياً ولا يعتمد على أسماء علم أو خصوصيات ثقافية.
 
 المطلوب: سؤال واحد مع 4 خيارات اختيار من متعدد.
 
 المستوى: ${level}
 درجة الصعوبة: ${difficulty}
+طول السلسلة الصحيحة (عدد الكلمات بين الطرفين فقط): ${min}-${max}
 
 القواعد الصارمة (إلزامية):
-1. السؤال والخيارات بالعربية الفصحى النقية - بدون إنجليزية أبداً
-2. بدون أخطاء إملائية أو نحوية
-3. صيغة السؤال: "ما الرابط بين \"العنصر الأول\" و\"العنصر الثاني\"؟"
-4. اختر عنصرين عربيين يوميين واضحين (ليسا أسماء علم)
-5. الرابط يجب أن يكون منطقياً وليس عشوائياً
-6. الخيارات الأربعة واضحة ومختلفة تماماً
-7. الخيار الصحيح يجب أن يكون في المكان المحدد بـ correctIndex
-8. التلميح يساعد بدون كشف الإجابة
-9. التفسير يشرح لماذا هذا هو الرابط الصحيح
+1) العربية: السؤال والخيارات والتلميح والشرح بالعربية الفصحى فقط (بدون أي أحرف إنجليزية).
+2) بدون أخطاء إملائية أو نحوية. تجنب التشكيل الزائد.
+3) لا تكرر السؤال أو تعيده؛ اكتبه مرة واحدة فقط وبالعربية فقط.
+3) صيغة السؤال ثابتة: "ما الرابط بين \"A\" و\"B\"؟".
+4) اختر A و B كشيئين/مفهومين يوميين واضحين (ليسا أسماء علم، ولا مصطلحات تقنية نادرة جداً).
+5) الحل الصحيح ليس كلمة واحدة عامة، بل "سلسلة منطقية" من كلمات وسيطة تربط A بـ B.
+6) كل خيار في options يجب أن يكون "سلسلة" من ${min}-${max} كلمات وسيطة تفصل بينها علامة " → " (مسافة-سهم-مسافة)، وعدد الأسهم = عدد الكلمات الوسيطة - 1.
+   مثال شكل الخيار: "بخار → غيوم → مطر → نباتات".
+7) خيار واحد فقط صحيح منطقياً. الخيارات الخاطئة يجب أن تكون معقولة لكنها تتضمن خللاً واحداً واضحاً عند التفكير:
+   - ترتيب خاطئ لخطوة
+   - خطوة مفقودة ضرورية
+   - خطوة غير مرتبطة فعلياً بالطرفين
+   - قفزة سببية غير صحيحة
+8) لا تكرر نفس الكلمات في أكثر من خيار (قدر الإمكان) ولا تستخدم كلمات عامة مثل: شيء، أمر، مفهوم، عملية.
+9) التلميح يساعد على اكتشاف "نوع السيناريو" دون ذكر كلمات السلسلة.
+10) الشرح: اشرح الرابط الصحيح خطوة بخطوة بجمل قصيرة (حد أقصى 3 جمل إجمالاً، وبحد أقصى 280 حرفاً، بدون تعداد نقطي أو Markdown).
+11) linkSteps يجب أن تطابق الكلمات الوسيطة في الخيار الصحيح وبنفس الترتيب (طول ${min}-${max}، كلمات فريدة قدر الإمكان).
 
-الإخراج: JSON صحيح فقط بدون نص إضافي:
+الإخراج: JSON صحيح فقط بدون أي نص إضافي (لا Markdown):
 {
-  "question": "ما الرابط بين \"باب خشبي\" و\"شجرة\"؟",
-  "options": ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"],
+  "question": "ما الرابط بين \"البحر\" و\"الخروف\"؟",
+  "options": [
+    "بخار → غيوم → مطر → نباتات",
+    "خيار سلسلة خاطئة",
+    "خيار سلسلة خاطئة",
+    "خيار سلسلة خاطئة"
+  ],
   "correctIndex": 0,
   "hint": "تلميح موجز",
   "category": "wonder_link",
-  "pair": { "a": "باب خشبي", "b": "شجرة" },
-  "explanation": "شرح الرابط المنطقي"
+  "pair": { "a": "البحر", "b": "الخروف" },
+  "linkSteps": ["بخار", "غيوم", "مطر", "نباتات"],
+  "domain": "دورات طبيعية",
+  "scriptType": "سيناريو قوي",
+  "explanation": "شرح الرابط المنطقي (≤280 حرفاً، ≤3 جمل)"
 }`;
   }
 
   return `You create fast-paced multiplayer "Wonder Link" multiple-choice questions in ENGLISH.
 
-Task: Ask for the link between two everyday items. Provide 4 options with exactly one correct.
+Core idea (comprehensive logic engineering):
+- Build links via globally-understood scripts/processes (procedural logic), not wordplay or culture-specific trivia.
+- Prefer: natural cycles, manufacturing pipelines, farm-to-table, human body systems, technology evolution, scientific method.
+
+Task: Ask for the link between two everyday concepts. Provide 4 options with exactly one correct.
 
 Level: ${level}
 Difficulty: ${difficulty}
+Correct chain length (intermediate nodes only): ${min}-${max}
 
 Hard Requirements (must follow):
-1. Question and all options in ENGLISH only - no other languages
-2. Proper spelling and grammar throughout
-3. Question format: "What is the link between \"Item A\" and \"Item B\"?"
-4. Pick two concrete, everyday concepts (no proper nouns)
-5. The link must be logical and interesting
-6. All 4 options must be distinct and plausible
-7. Exactly one correct answer at the specified correctIndex
-8. Hint should help without revealing the answer
-9. Explanation clarifies why the link is valid
+1) ENGLISH only for question/options/hint/explanation.
+2) Do not repeat the question; write it once. No mixed languages.
+2) Question format exactly: "What is the link between \"A\" and \"B\"?"
+3) Pick A and B as concrete, common concepts (no proper nouns).
+4) Each option must be a CHAIN of ${min}-${max} intermediate words separated by " → ".
+   Example: "evaporation → clouds → rain → plants".
+5) Exactly ONE option is logically correct. Wrong options must be plausible but contain ONE clear flaw (wrong order, missing step, bad causal jump, irrelevant step).
+6) Avoid generic words (thing, stuff, concept) and avoid repeating the same step words across options.
+7) Hint should point to the script type/domain without revealing any chain word.
+8) Explanation should briefly justify each transition in the correct chain (≤3 sentences, ≤280 characters, no Markdown/lists).
+9) linkSteps must mirror the correct chain words in order, with ${min}-${max} unique-ish intermediate words.
 
 Output ONLY valid JSON:
 {
-  "question": "What is the link between \"wooden door\" and \"tree\"?",
-  "options": ["Option1", "Option2", "Option3", "Option4"],
+  "question": "What is the link between \"sea\" and \"sheep\"?",
+  "options": [
+    "evaporation → clouds → rain → plants",
+    "wrong chain option",
+    "wrong chain option",
+    "wrong chain option"
+  ],
   "correctIndex": 0,
   "hint": "Brief hint",
   "category": "wonder_link",
-  "pair": { "a": "wooden door", "b": "tree" },
-  "explanation": "Why this link is correct"
+  "pair": { "a": "sea", "b": "sheep" },
+  "linkSteps": ["evaporation", "clouds", "rain", "plants"],
+  "domain": "natural cycles",
+  "scriptType": "strong script",
+  "explanation": "Why this chain links A to B (≤280 chars)"
 }`;
 }
 
 export function buildLinkQuizUserPrompt({ language = 'ar', level = 1, seed } = {}) {
   const isArabic = language === 'ar';
   const difficulty = difficultyLabel(level);
-  const seedLine = seed == null ? '' : `\nرقم الاختلاف: ${seed}`;
+  const { min, max } = linkChainMinMax(level);
+  const seedLineAr = seed == null ? '' : `\nرقم الاختلاف: ${seed}`;
+  const seedLineEn = seed == null ? '' : `\nDiversity seed: ${seed}`;
 
   if (isArabic) {
-    return `أنشئ لغز رابط عجيب جديد بالعربية الفصحى فقط، المستوى ${level} (${difficulty}).
+    return `أنشئ لغز "الرابط العجيب" جديداً بالعربية الفصحى فقط، المستوى ${level} (${difficulty}).
 
 القواعد الحتمية:
-✗ أي إنجليزية = رفض
-✗ أي أخطاء = رفض
-✓ عربي فصيح نقي
-✓ رابط منطقي وذكي
-✓ خيارات واضحة ومختلفة
+✗ أي أحرف إنجليزية في السؤال/الخيارات/التلميح/الشرح = رفض
+✗ أي أخطاء إملائية أو نحوية = رفض
+✓ رابط منطقي مبني على سيناريو/عملية عالمية (منطق إجرائي)
+✓ 4 خيارات سلاسل مغرية لكن خيار واحد فقط صحيح
 
-ولّد لغز جديد، تجنب التكرار.${seedLine}`;
+التوجيهات (هندسة المنطق الشامل):
+1) اختر مجالاً واحداً واضحاً: دورات طبيعية، تصنيع وتحويل مواد، زراعة وغذاء، جسم الإنسان، تكنولوجيا يومية، منهج علمي.
+2) اختر طرفين A و B مختلفين في النوع وغير متجاورين بديهياً.
+3) اصنع السلسلة الصحيحة ككلمات وسيطة عددها ${min}-${max} تفصل بينها علامة " → ".
+4) اجعل كل الخيارات الأربعة سلاسل بنفس النمط والطول تقريباً.
+5) خيار واحد فقط صحيح. كل خيار خاطئ يحتوي خللاً واحداً فقط (ترتيب خاطئ/خطوة مفقودة/قفزة سببية غير صحيحة/خطوة غير مرتبطة).
+6) تجنب التكرار والكلمات العامة جداً، وحاول عدم إعادة استخدام نفس الكلمات عبر الخيارات.
+7) التلميح يلمّح للمجال أو نوع السيناريو دون ذكر أي كلمة من السلسلة.
+8) الشرح يبرر الانتقالات في السلسلة الصحيحة بخلاصة لا تتجاوز 3 جمل ولا 280 حرفاً.
+9) linkSteps تطابق كلمات الخيار الصحيح وبنفس الترتيب.
+
+أخرج JSON فقط بلا أي نص أو Markdown إضافي. لا تكرر نص السؤال ولا تخلط اللغات.${seedLineAr}`;
   }
 
   return `Generate a fresh "Wonder Link" MCQ in ENGLISH for level ${level} (${difficulty}).
 
 Strict rules:
-✗ NO other languages - ENGLISH ONLY
-✗ NO spelling errors
-✓ Logical, interesting link
-✓ 4 distinct, plausible options
-✓ One correct answer
+✗ ENGLISH ONLY for question/options/hint/explanation
+✗ No spelling/grammar errors
+✓ Link must be procedural/script-based (globally understood)
+✓ 4 tempting chain options, exactly one correct
 
-Create a unique puzzle, avoid repetition.${seedLine}`;
+Guidance:
+1) Pick ONE domain: natural cycles, manufacturing pipelines, farm-to-table, human body systems, everyday technology, scientific method.
+2) Choose A and B that look unrelated and are different in type.
+3) Correct chain must have ${min}-${max} intermediate words separated by " → ".
+4) All four options must be chains of similar length.
+5) Exactly ONE correct; each wrong chain has exactly ONE plausible flaw.
+6) Avoid generic words and avoid repeating the same step words across options.
+7) Hint points to the domain/script without revealing any chain word.
+8) Explanation justifies each transition in the correct chain (≤3 sentences, ≤280 chars).
+9) linkSteps mirrors the correct chain words in order.
+
+Do not repeat the question text. Output JSON only—no Markdown, no prose outside the object. ENGLISH only; no mixed languages.${seedLineEn}`;
 }

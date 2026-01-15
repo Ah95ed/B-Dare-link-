@@ -150,9 +150,12 @@ export async function generateLevel(request, env, headers) {
 
   const bankMin = Math.max(0, Number(env?.PUZZLE_BANK_MIN ?? 30));
 
-  // Cache path: once we have a puzzle bank in D1, serve a random cached puzzle
-  // so new users don't trigger AI generation.
-  if (env?.DB && !fresh) {
+  // 🚫 D1 CACHE DISABLED: Always generate fresh puzzles to avoid repeating questions
+  // استخدام D1 cache يسبب تكرار الأسئلة. تم تعطيل الكاش تماماً لمنع هذه المشكلة
+  // Set fresh=true to always bypass D1 cache and generate new puzzles
+  const cacheDisabled = true; // 🚫 Change to 'false' to re-enable D1 cache
+
+  if (false && env?.DB && !fresh) { // Always false - cache disabled
     try {
       const countRow = await env.DB
         .prepare('SELECT COUNT(*) AS c FROM puzzles WHERE level = ? AND lang = ?')
@@ -413,7 +416,7 @@ Return ONLY {"ok":true,"reason":"..."} or {"ok":false,"reason":"..."} with a sho
     try {
       const parsed = JSON.parse(out);
       if (typeof parsed?.ok === 'boolean') return { ok: parsed.ok, reason: String(parsed.reason ?? '') };
-    } catch (_) {}
+    } catch (_) { }
     return { ok: false, reason: 'critic_invalid_json' };
   };
 
@@ -433,12 +436,12 @@ Return ONLY {"ok":true,"reason":"..."} or {"ok":false,"reason":"..."} with a sho
           ...(attempt === 0
             ? []
             : [
-                {
-                  role: 'user',
-                  content:
-                    'Previous output was weak/illogical or violated rules. Retry with a coherent, realistic chain and return JSON only.',
-                },
-              ]),
+              {
+                role: 'user',
+                content:
+                  'Previous output was weak/illogical or violated rules. Retry with a coherent, realistic chain and return JSON only.',
+              },
+            ]),
         ],
         temperature: 0.7,
         purpose: 'generate',

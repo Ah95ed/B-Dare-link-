@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
 import '../../providers/auth_provider.dart';
+import 'room_settings_view.dart';
 
 class RoomLobbyView extends StatefulWidget {
   const RoomLobbyView({super.key});
@@ -863,48 +864,29 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           width: 2,
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              Icon(
-                                provider.lastAnswerCorrect!
-                                    ? Icons.check_circle
-                                    : Icons.cancel,
-                                color: provider.lastAnswerCorrect!
-                                    ? Colors.green
-                                    : Colors.red,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                provider.lastAnswerCorrect!
-                                    ? 'إجابة صحيحة! أحسنت 🎉'
-                                    : 'إجابة خاطئة ❌',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: provider.lastAnswerCorrect!
-                                      ? Colors.green.shade800
-                                      : Colors.red.shade800,
-                                ),
-                              ),
-                            ],
+                          Icon(
+                            provider.lastAnswerCorrect!
+                                ? Icons.check_circle
+                                : Icons.cancel,
+                            color: provider.lastAnswerCorrect!
+                                ? Colors.green
+                                : Colors.red,
                           ),
-                          if (!provider.lastAnswerCorrect! &&
-                              provider.correctAnswerIndex != null &&
-                              provider.correctAnswerIndex! < options.length)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Text(
-                                'الإجابة الصحيحة: ${options[provider.correctAnswerIndex!]}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.green.shade800,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                          const SizedBox(width: 8),
+                          Text(
+                            provider.lastAnswerCorrect!
+                                ? 'إجابة صحيحة! أحسنت 🎉'
+                                : 'إجابة خاطئة ❌',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: provider.lastAnswerCorrect!
+                                  ? Colors.green.shade800
+                                  : Colors.red.shade800,
                             ),
+                          ),
                         ],
                       ),
                     );
@@ -916,13 +898,10 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                   final opt = e.value?.toString() ?? '';
                   final selectedIdx = provider.selectedAnswerIndex;
                   final lastAnswerCorrect = provider.lastAnswerCorrect;
-                  final correctIdx = provider.correctAnswerIndex;
-
                   // Only show selection/result if we have an actual answer (selectedIdx != null)
                   final hasSelection = selectedIdx != null;
                   final hasResult = hasSelection && lastAnswerCorrect != null;
                   final isSelected = selectedIdx == idx;
-                  final isCorrect = correctIdx == idx;
                   final showResult = hasSelection;
 
                   Color? tileColor;
@@ -931,46 +910,37 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       tileColor = Colors.green.shade100;
                     } else if (isSelected && lastAnswerCorrect == false) {
                       tileColor = Colors.red.shade100;
-                    } else if (isCorrect && lastAnswerCorrect == false) {
-                      tileColor = Colors.green.shade50;
                     }
                   }
 
                   return ListTile(
                     tileColor: tileColor,
                     leading: CircleAvatar(
-                      backgroundColor: hasResult && isCorrect
-                          ? Colors.green
-                          : (hasResult &&
-                                    isSelected &&
-                                    lastAnswerCorrect == false
-                                ? Colors.red
-                                : Theme.of(context).primaryColorLight),
-                      child: hasResult && isCorrect
-                          ? const Icon(
-                              Icons.check,
+                      backgroundColor: hasResult && isSelected
+                          ? (lastAnswerCorrect == true
+                                ? Colors.green
+                                : Colors.red)
+                          : Theme.of(context).primaryColorLight,
+                      child: hasResult && isSelected
+                          ? Icon(
+                              lastAnswerCorrect == true
+                                  ? Icons.check
+                                  : Icons.close,
                               color: Colors.white,
                               size: 20,
                             )
-                          : (hasResult &&
-                                    isSelected &&
-                                    lastAnswerCorrect == false
-                                ? const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 20,
-                                  )
-                                : Text((idx + 1).toString())),
+                          : Text((idx + 1).toString()),
                     ),
                     title: Text(
                       opt,
                       style: TextStyle(
-                        fontWeight: hasResult && (isCorrect || isSelected)
+                        fontWeight: hasResult && isSelected
                             ? FontWeight.bold
                             : FontWeight.normal,
                       ),
                     ),
-                    trailing: hasResult && isCorrect
+                    trailing:
+                        hasResult && isSelected && lastAnswerCorrect == true
                         ? const Icon(Icons.check_circle, color: Colors.green)
                         : null,
                     enabled: !showResult,
@@ -1039,20 +1009,18 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
   }
 
   void _showSettingsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('إعدادات الغرفة'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [Text('قريباً: إمكانية تغيير عدد الألغاز والوقت')],
+    final provider = context.read<CompetitionProvider>();
+    final room = provider.currentRoom;
+
+    if (room == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RoomSettingsView(
+          roomId: room['id'] as int,
+          isCreator: provider.isHost,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إغلاق'),
-          ),
-        ],
       ),
     );
   }
@@ -1072,9 +1040,12 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              context.read<CompetitionProvider>().deleteRoom();
-              Navigator.pop(context);
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              await context.read<CompetitionProvider>().deleteRoom();
+              if (context.mounted) {
+                Navigator.pop(context); // Exit room view
+              }
             },
             child: const Text('حذف', style: TextStyle(color: Colors.white)),
           ),

@@ -259,6 +259,8 @@ export async function getRoomStatus(request, env) {
   if (!roomId) return errorResponse('roomId required', 400);
 
   try {
+    const validator = await import('./puzzle_validator.js');
+
     const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(roomId).first();
     if (!room) return errorResponse('Room not found', 404);
 
@@ -269,60 +271,143 @@ export async function getRoomStatus(request, env) {
       .bind(roomId)
       .all();
 
-    // Get current puzzle if active (from room_puzzles)
+    // Per-user current puzzle: use room_participants.current_puzzle_index first.
+    // This prevents repeats (especially after wrong answers) because each answer advances the participant.
     let currentPuzzle = null;
-    if (room.status === 'active' && room.current_puzzle_index !== null) {
-      const puzzleRow = await env.DB.prepare(
-        'SELECT id, puzzle_json, solved_by FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
-      )
-        .bind(roomId, room.current_puzzle_index)
-        .first();
-      if (puzzleRow) {
-        const normalized = parseAndNormalizeQuizJson(puzzleRow.puzzle_json);
+    let currentPuzzleIndex = null;
+    let globalCurrentPuzzle = null;
+    let globalCurrentPuzzleIndex = room.current_puzzle_index ?? null;
 
-        // If we ever end up with a bad puzzle in a room (from old data/fallbacks), repair in-place.
-        if (!normalized) {
-          console.warn('[REPAIR PUZZLE] Invalid stored puzzle; regenerating', {
+    if (room.status === 'active') {
+      const me = await env.DB.prepare(
+        'SELECT current_puzzle_index FROM room_participants WHERE room_id = ? AND user_id = ?'
+      )
+        .bind(roomId, user.id)
+        .first();
+
+      // If participant index is missing (older rooms), compute first unanswered index.
+      if (me && me.current_puzzle_index != null) {
+        currentPuzzleIndex = Number(me.current_puzzle_index);
+      } else {
+        const answeredPuzzles = await env.DB.prepare(
+          'SELECT DISTINCT puzzle_index FROM room_results WHERE room_id = ? AND user_id = ?'
+        )
+          .bind(roomId, user.id)
+          .all();
+        const answered = new Set(answeredPuzzles.results.map(r => r.puzzle_index));
+        for (let i = 0; i < room.puzzle_count; i++) {
+          if (!answered.has(i)) {
+            currentPuzzleIndex = i;
+            break;
+          }
+        }
+        if (currentPuzzleIndex === null) {
+          currentPuzzleIndex = room.puzzle_count; // finished
+        }
+      }
+
+      // Load user's current puzzle if within range
+      if (Number.isFinite(currentPuzzleIndex) && currentPuzzleIndex < room.puzzle_count) {
+        let puzzleRow = await env.DB.prepare(
+          'SELECT id, puzzle_json, solved_by FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
+        )
+          .bind(roomId, currentPuzzleIndex)
+          .first();
+
+        // If the puzzle row doesn't exist yet (fast players / background fill), generate it on-demand.
+        if (!puzzleRow) {
+          console.warn('[ON-DEMAND PUZZLE] Missing room_puzzles row; generating now', {
             roomId,
-            puzzleIndex: room.current_puzzle_index,
-            roomLang: room.language,
-            roomDifficulty: room.difficulty,
+            puzzleIndex: currentPuzzleIndex,
+            lang: room.language,
+            difficulty: room.difficulty,
           });
           try {
             const repaired = normalizeQuizPuzzle(
               await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
             );
             if (repaired) {
-              await env.DB.prepare('UPDATE room_puzzles SET puzzle_json = ? WHERE id = ?')
-                .bind(JSON.stringify(repaired), puzzleRow.id)
-                .run();
-              currentPuzzle = repaired;
+              await env.DB.prepare(
+                'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
+              ).bind(roomId, currentPuzzleIndex, JSON.stringify(repaired)).run();
+              puzzleRow = await env.DB.prepare(
+                'SELECT id, puzzle_json, solved_by FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
+              ).bind(roomId, currentPuzzleIndex).first();
             }
           } catch (e) {
-            console.error('[REPAIR PUZZLE] Failed to regenerate puzzle', e);
+            console.error('[ON-DEMAND PUZZLE] Failed to generate', String(e?.message || e));
           }
-        } else {
-          currentPuzzle = normalized;
         }
 
-        // Add solved_by info if available
-        if (puzzleRow.solved_by) {
-          const solver = await env.DB.prepare('SELECT username FROM users WHERE id = ?')
-            .bind(puzzleRow.solved_by)
-            .first();
-          if (solver) {
-            currentPuzzle._solvedBy = solver.username;
+        if (puzzleRow) {
+          const normalized = parseAndNormalizeQuizJson(puzzleRow.puzzle_json);
+
+          const isInvalid = !normalized || !validator.validatePuzzle(normalized, room.language || 'ar').valid;
+
+          // If we ever end up with a bad puzzle in a room (from old data/fallbacks/mixed scripts), repair in-place.
+          if (isInvalid) {
+            console.warn('[REPAIR PUZZLE] Invalid stored puzzle; regenerating', {
+              roomId,
+              puzzleIndex: currentPuzzleIndex,
+              roomLang: room.language,
+              roomDifficulty: room.difficulty,
+            });
+            try {
+              const repaired = normalizeQuizPuzzle(
+                await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
+              );
+              if (repaired) {
+                await env.DB.prepare('UPDATE room_puzzles SET puzzle_json = ? WHERE id = ?')
+                  .bind(JSON.stringify(repaired), puzzleRow.id)
+                  .run();
+                currentPuzzle = repaired;
+              }
+            } catch (e) {
+              console.error('[REPAIR PUZZLE] Failed to regenerate puzzle', e);
+            }
+          } else {
+            currentPuzzle = normalized;
+          }
+
+          // Add solved_by info if available
+          if (puzzleRow.solved_by) {
+            const solver = await env.DB.prepare('SELECT username FROM users WHERE id = ?')
+              .bind(puzzleRow.solved_by)
+              .first();
+            if (solver) {
+              currentPuzzle._solvedBy = solver.username;
+            }
+          }
+          // Never leak correctIndex in status payloads.
+          currentPuzzle = toPublicPuzzle(currentPuzzle);
+        }
+      }
+
+      // Also compute global puzzle for reference (used by timer/host flows)
+      if (globalCurrentPuzzleIndex != null && globalCurrentPuzzleIndex < room.puzzle_count) {
+        const globalRow = await env.DB.prepare(
+          'SELECT puzzle_json FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
+        )
+          .bind(roomId, globalCurrentPuzzleIndex)
+          .first();
+        if (globalRow) {
+          const globalNormalized = parseAndNormalizeQuizJson(globalRow.puzzle_json);
+          if (globalNormalized) {
+            globalCurrentPuzzle = toPublicPuzzle(globalNormalized);
           }
         }
-        // Never leak correctIndex in status payloads.
-        currentPuzzle = toPublicPuzzle(currentPuzzle);
       }
     }
 
     return jsonResponse({
       room,
       participants: participants.results,
+      // Per-user puzzle (authoritative for "no-repeat" progression)
       currentPuzzle,
+      currentPuzzleIndex,
+      // Extra fields for debugging/admin
+      globalCurrentPuzzle,
+      globalCurrentPuzzleIndex,
     });
   } catch (e) {
     return errorResponse(e.message, 500);
@@ -365,131 +450,162 @@ export async function setReady(request, env) {
 }
 
 // Start room game
-async function startRoomGame(env, roomId) {
+async function startRoomGame(env, roomId, ctx) {
   const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(roomId).first();
   if (!room) return;
+
+  // Validate ALL puzzles (DB and AI) before inserting into room_puzzles.
+  // This prevents mixed Arabic/English and other corrupted content from being served.
+  const validator = await import('./puzzle_validator.js');
 
   const puzzleSource = room.puzzle_source || 'database';
   const difficulty = room.difficulty || 1;
   const language = room.language || 'ar';
   const puzzleCount = Math.max(room.puzzle_count || 5, 5); // ensure at least 5 puzzles
 
-  let puzzlesData = [];
+  // PERF: Keep room start fast. Prefill a small number synchronously, then fill the rest in the background.
+  // This avoids blocking /rooms/start on multiple AI generations when DB is low.
+  const PREFILL_SYNC_COUNT = Math.min(2, puzzleCount);
+  const puzzlesData = [];
+  const seenQuestions = new Set();
 
-  const pushPuzzle = (normalized, sourceTag) => {
+  const questionHashOf = (normalized) => JSON.stringify({
+    q: (normalized?.question || '').trim().toLowerCase(),
+    opts: (normalized?.options || []).map(o => String(o).trim().toLowerCase()).sort(),
+  });
+
+  const ensurePuzzleId = async (normalized) => {
+    if (!normalized || typeof normalized !== 'object') return null;
+    if (normalized.puzzleId) return normalized;
+    const lang = room.language || 'ar';
+    const level = room.difficulty || 1;
+    const jsonStr = JSON.stringify(normalized);
+    const inserted = await env.DB.prepare(
+      'INSERT INTO puzzles (level, lang, json) VALUES (?, ?, ?)'
+    ).bind(level, lang, jsonStr).run();
+    normalized.puzzleId = inserted.meta.last_row_id;
+    return normalized;
+  };
+
+  const pushPuzzle = async (normalized, sourceTag) => {
     if (!normalized) return false;
+
+    const validation = validator.validatePuzzle(normalized, language);
+    if (!validation.valid) {
+      console.log('[SKIP INVALID]', {
+        sourceTag,
+        errors: validation.errors,
+        q: String(normalized?.question || '').slice(0, 120),
+      });
+      return false;
+    }
+
+    const qh = questionHashOf(normalized);
+    if (seenQuestions.has(qh)) {
+      console.log('[SKIP DUPLICATE]', { question: normalized.question, sourceTag });
+      return false;
+    }
+    seenQuestions.add(qh);
+    const withId = await ensurePuzzleId(normalized);
+    if (!withId) return false;
     puzzlesData.push({
-      puzzleId: normalized.puzzleId ?? null,
-      puzzleJson: JSON.stringify(normalized),
+      puzzleId: withId.puzzleId ?? null,
+      puzzleJson: JSON.stringify(withId),
       source: sourceTag,
     });
     return true;
   };
 
-  const ensureRoomPuzzleCount = async () => {
-    // Fill remaining puzzles from AI if needed
-    while (puzzlesData.length < puzzleCount) {
-      const aiRaw = await generatePuzzleWithRetry(env, language, difficulty);
-      const normalized = normalizeQuizPuzzle(aiRaw);
-      if (!normalized) throw new Error('AI generated invalid puzzle format');
-      pushPuzzle(normalized, 'ai_fill');
-    }
-  };
-
   // Helpers to fetch puzzles from DB or AI
-  const fillFromDatabase = async (sourceTag = 'db_primary') => {
+  const fillFromDatabase = async (limit, sourceTag = 'db_primary') => {
+    if (limit <= 0) return;
     const puzzles = await env.DB.prepare(
       'SELECT id, json FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT ?'
-    )
-      .bind(difficulty, language, puzzleCount * 5)
-      .all();
+    ).bind(difficulty, language, Math.max(limit * 5, limit)).all();
 
-    if (puzzles.results.length > 0) {
-      for (const p of puzzles.results) {
-        if (puzzlesData.length >= puzzleCount) break;
-        const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
-        if (normalized) pushPuzzle(normalized, sourceTag);
+    for (const p of puzzles.results || []) {
+      if (puzzlesData.length >= limit) break;
+      const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
+      if (normalized) {
+        await pushPuzzle(normalized, sourceTag);
       }
     }
 
-    // Fallback to any language/level if still short
-    if (puzzlesData.length < puzzleCount) {
+    if (puzzlesData.length < limit) {
       const anyFallback = await env.DB.prepare(
         'SELECT id, json FROM puzzles ORDER BY RANDOM() LIMIT ?'
-      )
-        .bind(puzzleCount)
-        .all();
+      ).bind(Math.max(limit * 3, limit)).all();
 
       for (const p of anyFallback.results || []) {
-        if (puzzlesData.length >= puzzleCount) break;
+        if (puzzlesData.length >= limit) break;
         const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
-        if (normalized) pushPuzzle(normalized, sourceTag === 'db_primary' ? 'db_any' : sourceTag);
+        if (normalized) {
+          await pushPuzzle(normalized, sourceTag === 'db_primary' ? 'db_any' : sourceTag);
+        }
       }
     }
   };
 
-  const fillFromAI = async () => {
-    for (let i = 0; i < puzzleCount; i++) {
+  const fillFromAI = async (limit, sourceTag = 'ai') => {
+    if (limit <= 0) return;
+    while (puzzlesData.length < limit) {
       const aiRaw = await generatePuzzleWithRetry(env, language, difficulty);
       const normalized = normalizeQuizPuzzle(aiRaw, { puzzleId: null });
       if (!normalized) {
         console.warn('AI generated invalid puzzle, skipping');
         continue;
       }
-      pushPuzzle(normalized, 'ai');
+      await pushPuzzle(normalized, sourceTag);
     }
   };
 
-  // Primary fill based on puzzleSource with fallback to DB
+  // Prefill synchronously to start the room quickly.
+  // Strategy:
+  // - If puzzleSource is 'ai': prefer AI first to avoid repeating cached/banked puzzles.
+  // - If puzzleSource is 'database': prefer DB first for speed, but validate and skip bad puzzles.
   try {
-    if (puzzleSource === 'database') {
-      await fillFromDatabase('db_primary');
-    } else if (puzzleSource === 'ai') {
-      await fillFromAI();
+    if (puzzleSource === 'ai') {
+      await fillFromAI(PREFILL_SYNC_COUNT, 'ai_prefill');
+      if (puzzlesData.length < PREFILL_SYNC_COUNT) {
+        await fillFromDatabase(PREFILL_SYNC_COUNT, 'db_fallback_prefill');
+      }
     } else {
-      // manual or unknown: try DB first
-      await fillFromDatabase('db_primary');
+      await fillFromDatabase(PREFILL_SYNC_COUNT, 'db_primary');
+      if (puzzlesData.length < PREFILL_SYNC_COUNT) {
+        await fillFromAI(PREFILL_SYNC_COUNT, 'ai_fallback_prefill');
+      }
     }
   } catch (e) {
-    console.error('Primary puzzle fill failed, attempting DB fallback', e);
-    await fillFromDatabase('db_fallback');
-  }
-
-  // Ensure we always have enough valid puzzles; if AI top-up fails, try DB fallback once
-  try {
-    await ensureRoomPuzzleCount();
-  } catch (e) {
-    console.error('AI top-up failed, attempting DB fallback to reach quota', e);
-    await fillFromDatabase('ai_topup_fallback');
-    await ensureRoomPuzzleCount();
+    console.error('Prefill puzzles failed', e);
   }
 
   if (puzzlesData.length === 0) {
-    throw new Error('No puzzles available (AI and database fallbacks failed)');
+    // Absolute fallback: try one AI puzzle.
+    const aiRaw = await generatePuzzleWithRetry(env, language, difficulty);
+    const normalized = normalizeQuizPuzzle(aiRaw, { puzzleId: null });
+    if (!normalized) throw new Error('No puzzles available');
+    await pushPuzzle(normalized, 'ai_last_resort');
   }
 
   // Defensive cleanup: remove any previous state for this room
-  await env.DB.prepare('DELETE FROM room_results WHERE room_id = ?').bind(roomId).run();
-  await env.DB.prepare('DELETE FROM room_puzzles WHERE room_id = ?').bind(roomId).run();
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM room_results WHERE room_id = ?').bind(roomId),
+    env.DB.prepare('DELETE FROM room_puzzles WHERE room_id = ?').bind(roomId),
+  ]);
 
-  // Store puzzles in room_puzzles table (always normalized JSON)
+  // Store the prefilled puzzles (typically 1-2) so clients can immediately fetch next.
   for (let i = 0; i < puzzlesData.length; i++) {
     await env.DB.prepare(
       'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
-    )
-      .bind(roomId, i, puzzlesData[i].puzzleJson)
-      .run();
+    ).bind(roomId, i, puzzlesData[i].puzzleJson).run();
   }
 
-  // Set first puzzle
-  await env.DB.prepare('UPDATE rooms SET status = ?, current_puzzle_index = 0, started_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .bind('active', roomId)
-    .run();
-
-  // Reset participant scores
-  await env.DB.prepare('UPDATE room_participants SET score = 0, puzzles_solved = 0, current_puzzle_index = 0 WHERE room_id = ?')
-    .bind(roomId)
-    .run();
+  await env.DB.batch([
+    env.DB.prepare('UPDATE rooms SET status = ?, current_puzzle_index = 0, started_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .bind('active', roomId),
+    env.DB.prepare('UPDATE room_participants SET score = 0, puzzles_solved = 0, current_puzzle_index = 0 WHERE room_id = ?')
+      .bind(roomId),
+  ]);
 
   // Notify Durable Object to broadcast game start with first puzzle
   const firstPuzzle = toPublicPuzzle(JSON.parse(puzzlesData[0].puzzleJson));
@@ -501,11 +617,74 @@ async function startRoomGame(env, roomId) {
       type: 'start_game',
       puzzle: firstPuzzle,
       puzzleIndex: 0,
-      totalPuzzles: puzzlesData.length,
+      totalPuzzles: puzzleCount,
       roomId: roomId,
       timePerPuzzle: room.time_per_puzzle || 60
     })
   }));
+
+  // Fill remaining puzzles in the background to avoid blocking room start.
+  const fillRemaining = async () => {
+    try {
+      // Build de-duplication set from what we already inserted.
+      const existingRows = await env.DB.prepare(
+        'SELECT puzzle_index, puzzle_json FROM room_puzzles WHERE room_id = ? ORDER BY puzzle_index ASC'
+      ).bind(roomId).all();
+      for (const r of existingRows.results || []) {
+        try {
+          const pj = JSON.parse(r.puzzle_json);
+          const normalized = normalizeQuizPuzzle(pj);
+          if (normalized) {
+            seenQuestions.add(questionHashOf(normalized));
+          }
+        } catch (_) {
+          // ignore
+        }
+      }
+
+      for (let idx = puzzlesData.length; idx < puzzleCount; idx++) {
+        // Avoid generating if already exists (idempotency / retried background).
+        const already = await env.DB.prepare(
+          'SELECT id FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
+        ).bind(roomId, idx).first();
+        if (already) continue;
+
+        // Prefer AI when configured to reduce repeats; use DB only when room requests it.
+        let normalized = null;
+        if (puzzleSource !== 'ai') {
+          const dbOne = await env.DB.prepare(
+            'SELECT id, json FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT 1'
+          ).bind(difficulty, language).first();
+          if (dbOne?.json) {
+            normalized = parseAndNormalizeQuizJson(dbOne.json, { puzzleId: dbOne.id });
+          }
+        }
+        if (!normalized) {
+          const aiRaw = await generatePuzzleWithRetry(env, language, difficulty);
+          normalized = normalizeQuizPuzzle(aiRaw, { puzzleId: null });
+        }
+        if (!normalized) continue;
+
+        const pushed = await pushPuzzle(normalized, puzzleSource === 'ai' ? 'ai_fill_bg' : 'bg_fill');
+        if (!pushed) {
+          idx--;
+          continue;
+        }
+        await env.DB.prepare(
+          'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
+        ).bind(roomId, idx, puzzlesData[puzzlesData.length - 1].puzzleJson).run();
+      }
+    } catch (e) {
+      console.warn('[BG FILL] Failed to fill remaining puzzles', String(e?.message || e));
+    }
+  };
+
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(fillRemaining());
+  } else {
+    // Fallback: do not block the start path; best-effort.
+    fillRemaining();
+  }
 }
 
 // Helper to generate puzzle with retry logic for quality
@@ -734,11 +913,111 @@ async function generateAIPuzzle(env, language, level) {
     sanitized.category = sanitized.category || 'wonder_link';
   }
 
+  // --- Additional safety layer (Validator + Deduplication + Explanation trimming) ---
+  // Compute a stable fingerprint for the puzzle to avoid duplicates at scale.
+  async function ensurePuzzleHashesTable() {
+    try {
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS puzzle_hashes (
+          hash TEXT PRIMARY KEY,
+          puzzle_id INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run();
+    } catch (e) {
+      // ignore creation errors - D1 may already be configured
+    }
+  }
+
+  async function computeHexHash(text) {
+    try {
+      if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
+        const data = new TextEncoder().encode(text);
+        const buf = await crypto.subtle.digest('SHA-256', data);
+        const arr = Array.from(new Uint8Array(buf));
+        return arr.map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+    } catch (e) {
+      // fallthrough to node fallback
+    }
+
+    try {
+      const { createHash } = await import('crypto');
+      return createHash('sha256').update(text).digest('hex');
+    } catch (e) {
+      // Last-resort slow JS hash (not cryptographic)
+      let h = 2166136261 >>> 0;
+      for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+      }
+      return h.toString(16);
+    }
+  }
+
+  // Enforce extra constraints for wonder_link: linkSteps length and explanation brevity
+  if (useWonderLink) {
+    const { linkSteps } = sanitized;
+    const { min: chainMin, max: chainMax } = linkChainMinMax(level);
+    if (!Array.isArray(linkSteps) || linkSteps.length < chainMin || linkSteps.length > chainMax) {
+      console.warn('[AI PUZZLE] Rejecting wonder_link: linkSteps length out of bounds', { len: (linkSteps || []).length, chainMin, chainMax });
+      throw new Error('Wonder Link chain length invalid');
+    }
+
+    // Ensure each step is Arabic (or matches language) and unique
+    const stepSet = new Set();
+    for (const s of linkSteps) {
+      if (typeof s !== 'string' || s.trim().length === 0) {
+        throw new Error('Invalid link step content');
+      }
+      const low = s.trim().toLowerCase();
+      if (stepSet.has(low)) {
+        throw new Error('Duplicate link step');
+      }
+      stepSet.add(low);
+      const langCheck = validator.validateLanguage(s, language);
+      if (!langCheck.valid) {
+        throw new Error('Link step language invalid');
+      }
+    }
+  }
+
+  // Trim/normalize explanation to controlled size: max 140 chars per sentence and max 5 sentences
+  if (sanitized.explanation && typeof sanitized.explanation === 'string') {
+    const parts = sanitized.explanation.split(/\.|\n/).map(p => p.trim()).filter(Boolean);
+    const limited = [];
+    for (let i = 0; i < Math.min(parts.length, 5); i++) {
+      let s = parts[i];
+      if (s.length > 140) s = s.slice(0, 137).trim() + '...';
+      limited.push(s);
+    }
+    sanitized.explanation = limited.join('. ');
+  }
+
+  // Deduplication: compute a hash from pair + linkSteps/options to avoid near-duplicates
+  await ensurePuzzleHashesTable();
+  const dedupKeyBase = `${sanitized.pair?.a || ''}||${sanitized.pair?.b || ''}||${JSON.stringify(sanitized.linkSteps || sanitized.options || [])}`;
+  const puzzleHash = await computeHexHash(dedupKeyBase);
+
+  const existing = await env.DB.prepare('SELECT puzzle_id FROM puzzle_hashes WHERE hash = ?').bind(puzzleHash).first();
+  if (existing && existing.puzzle_id) {
+    console.warn('[AI PUZZLE] Duplicate detected - skipping', { puzzleHash });
+    throw new Error('Duplicate puzzle');
+  }
+
+  // Record hash now to reserve it (if two parallel generators try same idea)
+  try {
+    await env.DB.prepare('INSERT OR IGNORE INTO puzzle_hashes (hash, puzzle_id) VALUES (?, ?)').bind(puzzleHash, null).run();
+  } catch (e) {
+    // non-fatal
+  }
+
+
   return sanitized;
 }
 
 // Submit answer (supports both quiz format and legacy steps format)
-export async function submitAnswer(request, env) {
+export async function submitAnswer(request, env, ctx) {
   const user = await getUserFromRequest(request, env);
   if (!user) return errorResponse('Unauthorized', 401);
 
@@ -755,6 +1034,7 @@ export async function submitAnswer(request, env) {
   }
 
   try {
+    const validator = await import('./puzzle_validator.js');
     const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(roomId).first();
     if (!room) return errorResponse('Room not found', 404);
 
@@ -764,7 +1044,7 @@ export async function submitAnswer(request, env) {
 
     // Check if player is frozen
     const participant = await env.DB.prepare(
-      'SELECT is_frozen FROM room_participants WHERE room_id = ? AND user_id = ?'
+      'SELECT is_frozen, current_puzzle_index FROM room_participants WHERE room_id = ? AND user_id = ?'
     ).bind(roomId, user.id).first();
 
     if (participant && participant.is_frozen) {
@@ -782,6 +1062,14 @@ export async function submitAnswer(request, env) {
     if (!puzzleRow) return errorResponse('Puzzle not found', 400);
 
     const puzzle = JSON.parse(puzzleRow.puzzle_json);
+
+    // Hard guard: if this user already answered this puzzleIndex, do NOT insert again.
+    // This avoids repeats caused by client-side index desync and prevents duplicate scoring.
+    const existingAnswer = await env.DB.prepare(
+      'SELECT is_correct FROM room_results WHERE room_id = ? AND user_id = ? AND puzzle_index = ? LIMIT 1'
+    )
+      .bind(roomId, user.id, puzzleIndex)
+      .first();
 
     // If the client is using quiz answers, require quiz-shaped puzzles
     const normalizedQuiz = normalizeQuizPuzzle(puzzle);
@@ -827,6 +1115,66 @@ export async function submitAnswer(request, env) {
         fullPuzzle: puzzle
       });
       return errorResponse('Invalid puzzle format', 400);
+    }
+
+    // If already answered, return next puzzle without modifying DB or scores.
+    if (existingAnswer) {
+      // PERF: Most duplicates are re-submits of already-answered indices; use participant pointer as fast path.
+      const participantCurrent = Number(participant?.current_puzzle_index ?? 0);
+      let nextUserPuzzleIndex = null;
+      if (Number.isFinite(participantCurrent) && participantCurrent < room.puzzle_count) {
+        nextUserPuzzleIndex = participantCurrent;
+      } else if (Number.isFinite(participantCurrent) && participantCurrent >= room.puzzle_count) {
+        nextUserPuzzleIndex = null;
+      } else {
+        // Fallback: compute first unanswered.
+        const answeredPuzzles = await env.DB.prepare(
+          'SELECT DISTINCT puzzle_index FROM room_results WHERE room_id = ? AND user_id = ? ORDER BY puzzle_index ASC'
+        ).bind(roomId, user.id).all();
+
+        const answeredIndices = new Set((answeredPuzzles.results || []).map(r => r.puzzle_index));
+        for (let i = 0; i < room.puzzle_count; i++) {
+          if (!answeredIndices.has(i)) {
+            nextUserPuzzleIndex = i;
+            break;
+          }
+        }
+      }
+
+      let nextPuzzle = null;
+      let gameFinished = false;
+      if (nextUserPuzzleIndex === null) {
+        gameFinished = true;
+      } else {
+        const nextPuzzleRow = await env.DB.prepare(
+          'SELECT puzzle_json FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
+        )
+          .bind(roomId, nextUserPuzzleIndex)
+          .first();
+        if (nextPuzzleRow) {
+          nextPuzzle = toPublicPuzzle(JSON.parse(nextPuzzleRow.puzzle_json));
+        }
+      }
+
+      // Keep participant pointer correct even if client re-submitted.
+      await env.DB.prepare(
+        'UPDATE room_participants SET current_puzzle_index = ? WHERE room_id = ? AND user_id = ?'
+      )
+        .bind(gameFinished ? room.puzzle_count : nextUserPuzzleIndex, roomId, user.id)
+        .run();
+
+      return jsonResponse({
+        success: true,
+        alreadyAnswered: true,
+        isCorrect: existingAnswer.is_correct === 1,
+        isFirstCorrect: false,
+        points: 0,
+        rank: null,
+        correctIndex: normalizedQuiz ? Number(normalizedQuiz.correctIndex) : null,
+        nextPuzzle,
+        nextPuzzleIndex: gameFinished ? null : nextUserPuzzleIndex,
+        gameFinished,
+      });
     }
 
     // Check if this is the first correct answer (fastest)
@@ -896,18 +1244,18 @@ export async function submitAnswer(request, env) {
         rank = fasterCount.c + 1;
       }
 
-      // Update participant score
+      // Update participant score (advance index handled after we compute nextUserPuzzleIndex)
       await env.DB.prepare(
-        'UPDATE room_participants SET score = score + ?, puzzles_solved = puzzles_solved + 1, current_puzzle_index = ? WHERE room_id = ? AND user_id = ?'
+        'UPDATE room_participants SET score = score + ?, puzzles_solved = puzzles_solved + 1 WHERE room_id = ? AND user_id = ?'
       )
-        .bind(points, puzzleIndex + 1, roomId, user.id)
+        .bind(points, roomId, user.id)
         .run();
 
-      // Notify Durable Object about first solve
+      // Notify Durable Object about first solve (do not block answer response)
       if (isFirstCorrect) {
         const doId = env.ROOM_DO.idFromName(roomId.toString());
         const roomObject = env.ROOM_DO.get(doId);
-        await roomObject.fetch(new Request('http://room/puzzle-solved', {
+        const req = new Request('http://room/puzzle-solved', {
           method: 'POST',
           body: JSON.stringify({
             type: 'puzzle_solved_first',
@@ -916,70 +1264,152 @@ export async function submitAnswer(request, env) {
             puzzleIndex: puzzleIndex,
             timeTaken: safeTimeTaken
           })
-        }));
+        });
+        if (ctx?.waitUntil) ctx.waitUntil(roomObject.fetch(req));
+        else await roomObject.fetch(req);
       }
     }
 
-    // Check if all participants finished this puzzle
-    const participants = await env.DB.prepare('SELECT COUNT(*) AS c FROM room_participants WHERE room_id = ?')
-      .bind(roomId)
-      .first();
-    const finished = await env.DB.prepare(
-      'SELECT COUNT(*) AS c FROM room_results WHERE room_id = ? AND puzzle_index = ?'
-    )
-      .bind(roomId, puzzleIndex)
-      .first();
-
+    // منطق جديد: كل لاعب ينتقل للسؤال التالي فورًا بعد إجابته
+    // لا نحتاج انتظار باقي اللاعبين
     let nextPuzzle = null;
+    let nextPuzzleIndex = null;
     let gameFinished = false;
 
-    // Auto-advance to next puzzle if ALL participants have answered (regardless of correctness)
-    if (finished.c >= participants.c) {
-      // All answered, move to next puzzle
-      if (puzzleIndex < room.puzzle_count - 1) {
-        // Get next puzzle from room_puzzles
-        const nextPuzzleRow = await env.DB.prepare(
-          'SELECT puzzle_json FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
-        )
-          .bind(roomId, puzzleIndex + 1)
-          .first();
-
-        if (nextPuzzleRow) {
-          await env.DB.prepare('UPDATE rooms SET current_puzzle_index = ? WHERE id = ?')
-            .bind(puzzleIndex + 1, roomId)
-            .run();
-          // Never leak correctIndex in next puzzle payloads.
-          nextPuzzle = toPublicPuzzle(JSON.parse(nextPuzzleRow.puzzle_json));
-
-          // Notify Durable Object about next puzzle
-          const doId = env.ROOM_DO.idFromName(roomId.toString());
-          const roomObject = env.ROOM_DO.get(doId);
-          await roomObject.fetch(new Request('http://room/next-puzzle', {
-            method: 'POST',
-            body: JSON.stringify({
-              type: 'next_puzzle',
-              puzzle: nextPuzzle,
-              puzzleIndex: puzzleIndex + 1,
-              roomId: roomId,
-              timePerPuzzle: room.time_per_puzzle || 60
-            })
-          }));
+    // Fast path: in normal flow user answers sequentially.
+    // If the answer is for their current pointer, we can compute next index without scanning all results.
+    const participantCurrent = Number(participant?.current_puzzle_index ?? 0);
+    let nextUserPuzzleIndex = null;
+    if (Number.isFinite(participantCurrent) && Number(puzzleIndex) === participantCurrent) {
+      const candidate = participantCurrent + 1;
+      nextUserPuzzleIndex = candidate >= room.puzzle_count ? null : candidate;
+    } else {
+      // Fallback (rare): compute first unanswered.
+      const answeredPuzzles = await env.DB.prepare(
+        'SELECT DISTINCT puzzle_index FROM room_results WHERE room_id = ? AND user_id = ? ORDER BY puzzle_index ASC'
+      ).bind(roomId, user.id).all();
+      const answeredIndices = new Set((answeredPuzzles.results || []).map(r => r.puzzle_index));
+      for (let i = 0; i < room.puzzle_count; i++) {
+        if (!answeredIndices.has(i)) {
+          nextUserPuzzleIndex = i;
+          break;
         }
-      } else {
-        // Game finished
-        gameFinished = true;
-        await env.DB.prepare('UPDATE rooms SET status = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?')
-          .bind('finished', roomId)
-          .run();
-
-        // Notify Durable Object
-        const doId = env.ROOM_DO.idFromName(roomId.toString());
-        const roomObject = env.ROOM_DO.get(doId);
-        await roomObject.fetch(new Request('http://room/finish-game', {
-          method: 'POST',
-          body: JSON.stringify({ type: 'finish_game', roomId: roomId })
-        }));
       }
+    }
+
+    // إذا لم يجد سؤال غير مُجاب عليه، اللعبة انتهت له
+    if (nextUserPuzzleIndex === null) {
+      gameFinished = true;
+    } else {
+      // الحصول على السؤال التالي
+      let nextPuzzleRow = await env.DB.prepare(
+        'SELECT puzzle_json FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
+      )
+        .bind(roomId, nextUserPuzzleIndex)
+        .first();
+
+      // If missing (fast answers / bg fill), generate and insert on-demand.
+      if (!nextPuzzleRow) {
+        console.warn('[ON-DEMAND NEXT] Missing next puzzle row; generating now', {
+          roomId,
+          puzzleIndex: nextUserPuzzleIndex,
+          lang: room.language,
+          difficulty: room.difficulty,
+        });
+        try {
+          const generated = normalizeQuizPuzzle(
+            await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
+          );
+          if (generated) {
+            // Persist so future status calls return it.
+            await env.DB.prepare(
+              'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
+            ).bind(roomId, nextUserPuzzleIndex, JSON.stringify(generated)).run();
+            nextPuzzleRow = { puzzle_json: JSON.stringify(generated) };
+          }
+        } catch (e) {
+          console.error('[ON-DEMAND NEXT] Failed to generate', String(e?.message || e));
+        }
+      }
+
+      if (nextPuzzleRow?.puzzle_json) {
+        // Validate/repair if stored puzzle is corrupted or mixed-script.
+        let parsedNext = null;
+        try {
+          parsedNext = JSON.parse(nextPuzzleRow.puzzle_json);
+        } catch (_) {
+          parsedNext = null;
+        }
+        let normalizedNext = parsedNext ? normalizeQuizPuzzle(parsedNext) : null;
+        const isInvalidNext = !normalizedNext || !validator.validatePuzzle(normalizedNext, room.language || 'ar').valid;
+        if (isInvalidNext) {
+          try {
+            const repaired = normalizeQuizPuzzle(
+              await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
+            );
+            if (repaired) {
+              await env.DB.prepare(
+                'UPDATE room_puzzles SET puzzle_json = ? WHERE room_id = ? AND puzzle_index = ?'
+              ).bind(JSON.stringify(repaired), roomId, nextUserPuzzleIndex).run();
+              normalizedNext = repaired;
+            }
+          } catch (e) {
+            console.error('[REPAIR NEXT] Failed to repair next puzzle', String(e?.message || e));
+          }
+        }
+
+        if (normalizedNext) {
+          // Never leak correctIndex in next puzzle payloads.
+          nextPuzzle = toPublicPuzzle(normalizedNext);
+        }
+      }
+
+      nextPuzzleIndex = nextUserPuzzleIndex;
+    }
+
+    // Always advance participant pointer after ANY answer (correct or wrong).
+    await env.DB.prepare(
+      'UPDATE room_participants SET current_puzzle_index = ? WHERE room_id = ? AND user_id = ?'
+    )
+      .bind(gameFinished ? room.puzzle_count : nextUserPuzzleIndex, roomId, user.id)
+      .run();
+
+    // PERF: Update global current_puzzle_index from participant pointers (avoid scanning room_results).
+    // Note: participant.current_puzzle_index points to NEXT puzzle to answer.
+    const maxPtr = await env.DB.prepare(
+      'SELECT MAX(current_puzzle_index) AS max_ptr FROM room_participants WHERE room_id = ?'
+    ).bind(roomId).first();
+    if (maxPtr?.max_ptr != null) {
+      const computedGlobal = Math.max(0, Number(maxPtr.max_ptr) - 1);
+      await env.DB.prepare('UPDATE rooms SET current_puzzle_index = ? WHERE id = ?')
+        .bind(computedGlobal, roomId)
+        .run();
+    }
+
+    // التحقق: هل انتهى الجميع؟ (للإعلان عن نهاية اللعبة عالميًا)
+    const allParticipantsCount = await env.DB.prepare(
+      'SELECT COUNT(*) AS c FROM room_participants WHERE room_id = ?'
+    ).bind(roomId).first();
+
+    // PERF: Finished = participant pointer >= puzzle_count
+    const finishedParticipants = await env.DB.prepare(
+      'SELECT COUNT(*) AS c FROM room_participants WHERE room_id = ? AND current_puzzle_index >= ?'
+    ).bind(roomId, room.puzzle_count).first();
+
+    // إذا أنهى الجميع، أغلق اللعبة
+    if (finishedParticipants.c >= allParticipantsCount.c && room.status !== 'finished') {
+      await env.DB.prepare('UPDATE rooms SET status = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .bind('finished', roomId)
+        .run();
+
+      const doId = env.ROOM_DO.idFromName(roomId.toString());
+      const roomObject = env.ROOM_DO.get(doId);
+      const req = new Request('http://room/finish-game', {
+        method: 'POST',
+        body: JSON.stringify({ type: 'finish_game', roomId: roomId })
+      });
+      if (ctx?.waitUntil) ctx.waitUntil(roomObject.fetch(req));
+      else await roomObject.fetch(req);
     }
 
     return jsonResponse({
@@ -991,6 +1421,7 @@ export async function submitAnswer(request, env) {
       // Reveal correctIndex only after answering (anti-cheat)
       correctIndex: normalizedQuiz ? Number(normalizedQuiz.correctIndex) : null,
       nextPuzzle,
+      nextPuzzleIndex,
       gameFinished,
     });
   } catch (e) {
@@ -1196,7 +1627,7 @@ export async function kickUser(request, env) {
 }
 
 // Manual start game (Host only)
-export async function manualStartGame(request, env) {
+export async function manualStartGame(request, env, ctx) {
   const user = await getUserFromRequest(request, env);
   if (!user) return errorResponse('Unauthorized', 401);
 
@@ -1210,7 +1641,7 @@ export async function manualStartGame(request, env) {
     if (room.status !== 'waiting') return errorResponse('Room is not in waiting status', 400);
 
     // Start the game
-    await startRoomGame(env, roomId);
+    await startRoomGame(env, roomId, ctx);
 
     return jsonResponse({ success: true });
   } catch (e) {
@@ -1232,10 +1663,13 @@ export async function deleteRoom(request, env) {
     if (!room) return errorResponse('Room not found', 404);
     if (room.created_by !== user.id) return errorResponse('Only host can delete room', 403);
 
-    // Clean up dependent tables to satisfy FK constraints
+    // Clean up ALL dependent tables to satisfy FK constraints (order matters!)
+    await env.DB.prepare('DELETE FROM manager_actions WHERE room_id = ?').bind(roomId).run();
+    await env.DB.prepare('DELETE FROM puzzle_reports WHERE room_id = ?').bind(roomId).run();
     await env.DB.prepare('DELETE FROM room_results WHERE room_id = ?').bind(roomId).run();
     await env.DB.prepare('DELETE FROM room_puzzles WHERE room_id = ?').bind(roomId).run();
     await env.DB.prepare('DELETE FROM room_participants WHERE room_id = ?').bind(roomId).run();
+    await env.DB.prepare('DELETE FROM room_settings WHERE room_id = ?').bind(roomId).run();
     await env.DB.prepare('DELETE FROM competition_participants WHERE room_id = ?').bind(roomId).run();
 
     // Delete the room record
@@ -1268,7 +1702,9 @@ export async function reopenRoom(request, env) {
     if (!room) return errorResponse('Room not found', 404);
     if (room.created_by !== user.id) return errorResponse('Only host can reopen room', 403);
 
-    // Clear puzzles/results
+    // Clear ALL dependent data (including manager_actions & puzzle_reports)
+    await env.DB.prepare('DELETE FROM manager_actions WHERE room_id = ?').bind(roomId).run();
+    await env.DB.prepare('DELETE FROM puzzle_reports WHERE room_id = ?').bind(roomId).run();
     await env.DB.prepare('DELETE FROM room_results WHERE room_id = ?').bind(roomId).run();
     await env.DB.prepare('DELETE FROM room_puzzles WHERE room_id = ?').bind(roomId).run();
 
