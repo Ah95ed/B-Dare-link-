@@ -13,7 +13,7 @@ function stepsMinMax(level) {
   return { min: 4, max: 5 };
 }
 
-function linkChainMinMax(level) {
+export function linkChainMinMax(level) {
   const n = Number(level) || 1;
   // For Wonder Link MCQ: number of intermediate nodes (excluding endpoints).
   // Keep it readable on mobile, but scale with difficulty.

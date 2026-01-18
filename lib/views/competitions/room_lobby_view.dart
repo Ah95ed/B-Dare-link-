@@ -571,9 +571,11 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () async {
-                            await competitionProvider.nextPuzzle();
-                          },
+                          onPressed: competitionProvider.isStartingGame
+                              ? null
+                              : () async {
+                                  await competitionProvider.startGame();
+                                },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.amber.shade700,
                             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -581,14 +583,40 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text(
-                            'ابدأ اللعب الآن 🎮',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: competitionProvider.isStartingGame
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
+                                    ),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      'جاري بدء اللعبة...',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const Text(
+                                  'ابدأ اللعب الآن 🎮',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                       ),
                     ],
@@ -722,41 +750,184 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                question,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              // 🧩 اللغز
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('🧩 ', style: TextStyle(fontSize: 22)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'اللغز:',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.deepPurple,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          question,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              if (startWord != null || endWord != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
+              if (startWord != null || endWord != null) ...[
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('🔗 ', style: TextStyle(fontSize: 22)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'السلسلة:',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              // Show completed steps in green
+                              ...provider.completedSteps.map((word) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade100,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.green.shade400,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    word,
+                                    style: TextStyle(
+                                      color: Colors.green.shade900,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                );
+                              }),
+                              if (provider.completedSteps.isNotEmpty)
+                                const Icon(
+                                  Icons.arrow_forward,
+                                  size: 20,
+                                  color: Colors.orange,
+                                ),
+                              const Text(
+                                '?',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange,
+                                ),
+                              ),
+                              const Text(
+                                '...',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const Icon(
+                                Icons.arrow_forward,
+                                size: 20,
+                                color: Colors.grey,
+                              ),
+                              if (endWord != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.blue.shade300,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    endWord,
+                                    style: TextStyle(
+                                      color: Colors.blue.shade900,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (hint != null && hint.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (startWord != null)
-                        Chip(
-                          label: Text('بداية: $startWord'),
-                          backgroundColor: Colors.orange.shade50,
+                      const Text('💡 ', style: TextStyle(fontSize: 18)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'تلميح:',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              hint,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.amber.shade800,
+                              ),
+                            ),
+                          ],
                         ),
-                      if (endWord != null)
-                        Chip(
-                          label: Text('نهاية: $endWord'),
-                          backgroundColor: Colors.green.shade50,
-                        ),
+                      ),
                     ],
                   ),
                 ),
-              if (hint != null && hint.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    'تلميح: $hint',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                  ),
-                ),
+              ],
               const SizedBox(height: 8),
               // عداد الوقت يعرض فقط للمسؤول
               if (provider.puzzleEndsAt != null)
@@ -806,92 +977,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                   },
                 ),
               const SizedBox(height: 12),
-              // عرض نتيجة الإجابة السابقة (للجميع)
-              if (provider.selectedAnswerIndex != null)
-                Builder(
-                  builder: (context) {
-                    final provider = context.watch<CompetitionProvider>();
-
-                    // إذا كانت النتيجة لم تصل بعد، عرض حالة الانتظار
-                    if (provider.lastAnswerCorrect == null) {
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue, width: 2),
-                        ),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.blue.shade700,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'جاري التحقق من الإجابة...',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.blue.shade800,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    // عرض النتيجة عندما تصل
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: provider.lastAnswerCorrect!
-                            ? Colors.green.shade50
-                            : Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: provider.lastAnswerCorrect!
-                              ? Colors.green
-                              : Colors.red,
-                          width: 2,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            provider.lastAnswerCorrect!
-                                ? Icons.check_circle
-                                : Icons.cancel,
-                            color: provider.lastAnswerCorrect!
-                                ? Colors.green
-                                : Colors.red,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            provider.lastAnswerCorrect!
-                                ? 'إجابة صحيحة! أحسنت 🎉'
-                                : 'إجابة خاطئة ❌',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: provider.lastAnswerCorrect!
-                                  ? Colors.green.shade800
-                                  : Colors.red.shade800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+              // الخيارات - عرضها أولاً قبل النتيجة
               if (options.isNotEmpty)
                 ...options.asMap().entries.map((e) {
                   final idx = e.key;
@@ -1000,6 +1086,194 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       ),
                     ],
                   ),
+                ),
+              // عرض النتيجة والتفسير بعد الخيارات
+              const SizedBox(height: 16),
+              if (provider.selectedAnswerIndex != null)
+                Builder(
+                  builder: (context) {
+                    final provider = context.watch<CompetitionProvider>();
+
+                    // إذا كانت النتيجة لم تصل بعد، عرض حالة الانتظار
+                    if (provider.lastAnswerCorrect == null) {
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue, width: 2),
+                        ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.blue.shade700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'جاري التحقق من الإجابة...',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.blue.shade800,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    // عرض النتيجة عندما تصل
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: provider.lastAnswerCorrect!
+                                ? Colors.green.shade50
+                                : Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: provider.lastAnswerCorrect!
+                                  ? Colors.green
+                                  : Colors.red,
+                              width: 2,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                provider.lastAnswerCorrect!
+                                    ? Icons.check_circle
+                                    : Icons.cancel,
+                                color: provider.lastAnswerCorrect!
+                                    ? Colors.green
+                                    : Colors.red,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                provider.lastAnswerCorrect!
+                                    ? 'إجابة صحيحة! أحسنت 🎉'
+                                    : 'إجابة خاطئة ❌',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: provider.lastAnswerCorrect!
+                                      ? Colors.green.shade800
+                                      : Colors.red.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // عرض الإجابة الصحيحة
+                        if (provider.lastAnswerCorrect == false &&
+                            provider.correctAnswerIndex != null &&
+                            options.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green.shade300),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  '✅ ',
+                                  style: TextStyle(fontSize: 18),
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'الإجابة الصحيحة:',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green.shade900,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        options[provider.correctAnswerIndex!]
+                                                ?.toString() ??
+                                            '',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.green.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        // 🧠 التفسير
+                        if (puzzle['explanation'] != null &&
+                            puzzle['explanation'].toString().isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  '🧠 ',
+                                  style: TextStyle(fontSize: 20),
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'التفسير:',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade900,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        puzzle['explanation'].toString(),
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.blue.shade800,
+                                          height: 1.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
             ],
           ),

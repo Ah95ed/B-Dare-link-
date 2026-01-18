@@ -21,9 +21,12 @@ class CompetitionProvider with ChangeNotifier {
   List<Map<String, dynamic>> _roomParticipants = [];
   Map<String, dynamic>? _currentPuzzle;
   int _currentPuzzleIndex = 0;
+  int _currentStepIndex = 0; // Track current step in Wonder Link puzzles
+  List<String> _completedSteps = []; // Track completed words in chain
   bool _isReady = false;
   bool _gameStarted = false;
   bool _gameFinished = false;
+  bool _isStartingGame = false;
   int _score = 0;
   int _puzzlesSolved = 0;
   int _totalPuzzles = 5;
@@ -40,6 +43,8 @@ class CompetitionProvider with ChangeNotifier {
   int? _correctAnswerIndex;
 
   Map<String, dynamic>? get currentRoom => _currentRoom;
+  int get currentStepIndex => _currentStepIndex;
+  List<String> get completedSteps => _completedSteps;
   int? get selectedAnswerIndex => _selectedAnswerIndex;
   bool? get lastAnswerCorrect => _lastAnswerCorrect;
   int? get correctAnswerIndex => _correctAnswerIndex;
@@ -51,6 +56,7 @@ class CompetitionProvider with ChangeNotifier {
   bool get isReady => _isReady;
   bool get gameStarted => _gameStarted;
   bool get gameFinished => _gameFinished;
+  bool get isStartingGame => _isStartingGame;
 
   /// Reset game state to go back to lobby without leaving room
   void goBackToLobby() {
@@ -136,27 +142,16 @@ class CompetitionProvider with ChangeNotifier {
   Map<String, dynamic> _normalizePuzzle(Map<String, dynamic> puzzle) {
     final normalized = Map<String, dynamic>.from(puzzle);
 
-    // If this looks like a Wonder Link puzzle (steps array), lift first step into options/question
-    final steps = (normalized['steps'] as List?) ?? const [];
-    if ((normalized['options'] as List?)?.isEmpty == true && steps.isNotEmpty) {
-      final firstStep = Map<String, dynamic>.from(steps.first as Map? ?? {});
-      final start = normalized['startWord'] ?? '';
-      final end = normalized['endWord'] ?? '';
-      final stepWord = firstStep['word'] ?? start;
-      normalized['type'] = normalized['type'] ?? 'steps';
-      normalized['question'] =
-          normalized['question'] ??
-          'ربط بين "$start" و"$end" - اختر الكلمة التالية بعد "$stepWord"';
-      normalized['options'] = List<dynamic>.from(
-        firstStep['options'] ?? const [],
-      );
-      normalized['correctIndex'] =
-          normalized['correctIndex'] ?? (firstStep['correctIndex'] ?? 0);
-    }
-
+    // Standard quiz format - simple normalization
     normalized['question'] = normalized['question'] ?? 'سؤال غير متوفر';
     normalized['options'] = (normalized['options'] as List?) ?? <dynamic>[];
     normalized['type'] = normalized['type'] ?? 'quiz';
+
+    // Preserve metadata for display
+    if (normalized['startWord'] != null || normalized['endWord'] != null) {
+      // This is a Wonder Link puzzle, keep the metadata
+    }
+
     return normalized;
   }
 
@@ -181,7 +176,7 @@ class CompetitionProvider with ChangeNotifier {
     int maxParticipants = 10,
     int puzzleCount = 5,
     int timePerPuzzle = 60,
-    String puzzleSource = 'ai',
+    String puzzleSource = 'database',
     int difficulty = 1,
     String language = 'ar',
   }) async {
@@ -584,6 +579,8 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> startGame() async {
     if (_currentRoom == null) return;
+    _isStartingGame = true;
+    notifyListeners();
     try {
       // Refresh first to get latest status and any existing puzzle
       await refreshRoomStatus();
@@ -614,6 +611,9 @@ class CompetitionProvider with ChangeNotifier {
       _errorMessage = 'فشل بدء اللعبة: $e';
       // Try to fetch current state/puzzle to keep UI consistent
       await refreshRoomStatus();
+      notifyListeners();
+    } finally {
+      _isStartingGame = false;
       notifyListeners();
     }
   }
@@ -808,6 +808,12 @@ class CompetitionProvider with ChangeNotifier {
               int.tryParse(result['nextPuzzleIndex'].toString()) ??
               _currentPuzzleIndex;
         }
+        // Reset step tracking for new puzzle
+        _currentStepIndex = 0;
+        _completedSteps = [];
+        final startWord = result['nextPuzzle']['startWord']?.toString();
+        if (startWord != null) _completedSteps.add(startWord);
+
         _currentPuzzle = _normalizePuzzle(
           Map<String, dynamic>.from(result['nextPuzzle']),
         );

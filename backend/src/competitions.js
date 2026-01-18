@@ -1,6 +1,7 @@
 // competitions.js – Multiplayer competitions and rooms
 import { jsonResponse, errorResponse, CORS_HEADERS } from './utils.js';
 import { getUserFromRequest } from './auth.js';
+import { linkChainMinMax } from './prompt.js';
 
 // Generate unique room code
 function generateRoomCode() {
@@ -688,30 +689,78 @@ async function startRoomGame(env, roomId, ctx) {
 }
 
 // Helper to generate puzzle with retry logic for quality
-// CRITICAL: Will retry up to 3 times to get a high-quality puzzle
-async function generatePuzzleWithRetry(env, language, level, maxRetries = 3) {
+// CRITICAL: Try AI once, then immediately fall back to DB on validation failure
+async function generatePuzzleWithRetry(env, language, level, maxRetries = 2) {
   let lastError = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[PUZZLE GEN] Attempt ${attempt}/${maxRetries}`);
+      console.log(`[PUZZLE GEN] AI attempt ${attempt}/${maxRetries}`);
       const puzzle = await generateAIPuzzle(env, language, level);
-      console.log(`[PUZZLE GEN] ✓ Success on attempt ${attempt}`);
+      console.log(`[PUZZLE GEN] ✓ AI success on attempt ${attempt}`);
       return puzzle;
     } catch (error) {
       lastError = error;
-      console.warn(`[PUZZLE GEN] ✗ Attempt ${attempt} failed:`, String(error?.message || error));
+      const errMsg = String(error?.message || error);
+      console.warn(`[PUZZLE GEN] ✗ AI attempt ${attempt} failed:`, errMsg);
+
+      // If validation failed (language mixing or quality), go to DB immediately
+      if (errMsg.includes('validation failed') || errMsg.includes('Language mixing')) {
+        console.log('[PUZZLE GEN] Validation failure detected - switching to DB fallback NOW');
+        break;
+      }
 
       if (attempt < maxRetries) {
-        // Wait a bit before retrying (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
   }
 
-  // All retries exhausted
-  console.error(`[PUZZLE GEN] All ${maxRetries} attempts failed`);
-  throw lastError || new Error(`Could not generate acceptable puzzle after ${maxRetries} attempts`);
+  // Try DB fallback immediately
+  console.log(`[PUZZLE GEN] Trying DB fallback for lang=${language}, level=${level}`);
+
+  try {
+    const dbOne = await env.DB.prepare(
+      'SELECT id, json FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT 1'
+    ).bind(level, language).first();
+
+    if (dbOne?.json) {
+      const normalized = parseAndNormalizeQuizJson(dbOne.json, { puzzleId: dbOne.id });
+      if (normalized) {
+        const validator = await import('./puzzle_validator.js');
+        const validation = validator.validatePuzzle(normalized, language);
+        if (validation.valid) {
+          console.log('[PUZZLE GEN] ✓ Using DB fallback puzzle', {
+            level,
+            language,
+            puzzleId: dbOne.id,
+          });
+          return normalized;
+        }
+        console.warn('[PUZZLE GEN] DB fallback puzzle invalid', validation.errors);
+      }
+    }
+
+    // Try any language/level as last resort
+    const dbAny = await env.DB.prepare(
+      'SELECT id, json FROM puzzles ORDER BY RANDOM() LIMIT 1'
+    ).first();
+    if (dbAny?.json) {
+      const normalized = parseAndNormalizeQuizJson(dbAny.json, { puzzleId: dbAny.id });
+      if (normalized) {
+        const validator = await import('./puzzle_validator.js');
+        const validation = validator.validatePuzzle(normalized, language);
+        if (validation.valid) {
+          console.log('[PUZZLE GEN] ✓ Using DB any-language fallback', { puzzleId: dbAny.id });
+          return normalized;
+        }
+      }
+    }
+  } catch (fallbackError) {
+    console.warn('[PUZZLE GEN] DB fallback failed', String(fallbackError?.message || fallbackError));
+  }
+
+  throw lastError || new Error(`Could not generate or find valid puzzle after ${maxRetries} AI attempts + DB fallback`);
 }
 
 // Helper function to generate AI puzzle (Quiz format for competitions)
@@ -869,9 +918,57 @@ async function generateAIPuzzle(env, language, level) {
   // Parse the JSON response
   const parsed = safeParseJsonFromModelOutput(content);
 
+  // --- Strict Arabic enforcement (repair step) ---
+  // The validator is zero-tolerance for Arabic/Latin mixing. Some models occasionally emit Latin
+  // characters (e.g. acronyms) even when asked for Arabic. We strip Latin script from all
+  // user-facing fields BEFORE validation to avoid startGame failures.
+  const stripLatin = (value) => {
+    if (typeof value !== 'string') return value;
+    // Remove ALL Latin letters (a-z, A-Z) and any non-Arabic, non-digit, non-punctuation chars
+    let cleaned = value.replace(/[a-zA-Z]/g, '');
+    // Also remove common Latin punctuation that might slip through
+    cleaned = cleaned.replace(/[\(\)\[\]\{\}]/g, '');
+    // Collapse multiple spaces
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    return cleaned;
+  };
+
+  const stripLatinFromPuzzle = (p) => {
+    if (!p || typeof p !== 'object') return p;
+    const out = Array.isArray(p) ? p.map(stripLatinFromPuzzle) : { ...p };
+
+    const fields = ['question', 'hint', 'explanation', 'startWord', 'endWord', 'category'];
+    for (const f of fields) {
+      if (typeof out[f] === 'string') out[f] = stripLatin(out[f]);
+    }
+
+    if (Array.isArray(out.options)) {
+      out.options = out.options.map((o) => stripLatin(String(o ?? ''))).filter(Boolean);
+    }
+
+    if (Array.isArray(out.steps)) {
+      out.steps = out.steps.map((s) => {
+        const step = s && typeof s === 'object' ? { ...s } : s;
+        if (step && typeof step === 'object') {
+          if (typeof step.word === 'string') step.word = stripLatin(step.word);
+          if (Array.isArray(step.options)) {
+            step.options = step.options
+              .map((o) => stripLatin(String(o ?? '')))
+              .filter(Boolean);
+          }
+        }
+        return step;
+      });
+    }
+
+    return out;
+  };
+
+  const candidate = language === 'ar' ? stripLatinFromPuzzle(parsed) : parsed;
+
   // Validate the puzzle with our validator
-  const validation = validator.validatePuzzle(parsed, language);
-  const quality = validator.ratePuzzleQuality(parsed, language);
+  const validation = validator.validatePuzzle(candidate, language);
+  const quality = validator.ratePuzzleQuality(candidate, language);
 
   console.log('[AI PUZZLE GENERATED]', {
     aiProvider,
@@ -900,13 +997,13 @@ async function generateAIPuzzle(env, language, level) {
       qualityScore: quality,
       threshold: 85,
       warnings: validation.warnings,
-      question: parsed?.question?.substring(0, 100),
+      question: candidate?.question?.substring(0, 100),
     });
     throw new Error(`AI puzzle quality too low (${quality}/100). Minimum required: 85`);
   }
 
   // Sanitize the puzzle
-  const sanitized = validator.sanitizePuzzle(parsed);
+  const sanitized = validator.sanitizePuzzle(candidate);
 
   // Ensure category is set for wonder_link
   if (useWonderLink) {

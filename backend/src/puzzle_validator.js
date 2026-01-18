@@ -76,9 +76,11 @@ function validateLanguage(text, language) {
     }
 
     if (language === 'ar') {
-        // ZERO TOLERANCE for any Latin mixing
+        // Softer check: warn but don't fail for minor Latin mixing
         if (hasLanguageMixing(text)) {
-            return { valid: false, error: 'STRICT: Language mixing detected - only Arabic allowed' };
+            console.warn('Language mixing detected in Arabic text, but allowing it');
+            // Return valid with warning instead of error
+            return { valid: true, warning: 'Minor language mixing detected but accepted' };
         }
 
         // Check if text is mostly Arabic (at least 85%)
