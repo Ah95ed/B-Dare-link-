@@ -740,6 +740,29 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     final String? endWord = puzzle['endWord']?.toString();
     final String? hint = puzzle['hint']?.toString();
 
+    String normalizeArrowSpacing(String input) {
+      var s = input.replaceAll('->', '→');
+      s = s.replaceAll(RegExp(r'\s*→\s*'), ' → ');
+      return s.trim();
+    }
+
+    String optionValueToDisplayText(dynamic value) {
+      if (value == null) return '';
+      if (value is List) {
+        final parts = value
+            .map((e) => e?.toString().trim() ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList();
+        return normalizeArrowSpacing(parts.join(' → '));
+      }
+      return normalizeArrowSpacing(value.toString());
+    }
+
+    String indexToLetter(int index) {
+      const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+      return index < letters.length ? letters[index] : '#';
+    }
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 4,
@@ -981,7 +1004,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               if (options.isNotEmpty)
                 ...options.asMap().entries.map((e) {
                   final idx = e.key;
-                  final opt = e.value?.toString() ?? '';
+                  final optText = optionValueToDisplayText(e.value);
                   final selectedIdx = provider.selectedAnswerIndex;
                   final lastAnswerCorrect = provider.lastAnswerCorrect;
                   // Only show selection/result if we have an actual answer (selectedIdx != null)
@@ -989,57 +1012,65 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                   final hasResult = hasSelection && lastAnswerCorrect != null;
                   final isSelected = selectedIdx == idx;
                   final showResult = hasSelection;
+                  final badge = indexToLetter(idx);
 
-                  Color? tileColor;
-                  if (hasResult) {
-                    if (isSelected && lastAnswerCorrect == true) {
-                      tileColor = Colors.green.shade100;
-                    } else if (isSelected && lastAnswerCorrect == false) {
-                      tileColor = Colors.red.shade100;
+                  Color? borderColor;
+                  Color? backgroundColor;
+                  if (hasResult && isSelected) {
+                    if (lastAnswerCorrect == true) {
+                      borderColor = Colors.green;
+                      backgroundColor = Colors.green.shade50;
+                    } else {
+                      borderColor = Colors.red;
+                      backgroundColor = Colors.red.shade50;
                     }
                   }
 
-                  return ListTile(
-                    tileColor: tileColor,
-                    leading: CircleAvatar(
-                      backgroundColor: hasResult && isSelected
-                          ? (lastAnswerCorrect == true
-                                ? Colors.green
-                                : Colors.red)
-                          : Theme.of(context).primaryColorLight,
-                      child: hasResult && isSelected
-                          ? Icon(
-                              lastAnswerCorrect == true
-                                  ? Icons.check
-                                  : Icons.close,
-                              color: Colors.white,
-                              size: 20,
-                            )
-                          : Text((idx + 1).toString()),
-                    ),
-                    title: Text(
-                      opt,
-                      style: TextStyle(
-                        fontWeight: hasResult && isSelected
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: InkWell(
+                      onTap: showResult
+                          ? null
+                          : () async {
+                              if ((puzzle['type'] ?? 'quiz') == 'quiz') {
+                                await provider.submitQuizAnswer(idx);
+                              } else {
+                                await provider.submitAnswer([optText]);
+                              }
+                            },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: backgroundColor ?? Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: borderColor ?? Colors.grey.shade300,
+                            width: borderColor != null ? 2 : 1,
+                          ),
+                        ),
+                        child: Directionality(
+                          textDirection: TextDirection.ltr,
+                          child: Text(
+                            '$badge) $optText',
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.5,
+                              fontWeight: hasResult && isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: showResult
+                                  ? Colors.grey.shade800
+                                  : Colors.black87,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    trailing:
-                        hasResult && isSelected && lastAnswerCorrect == true
-                        ? const Icon(Icons.check_circle, color: Colors.green)
-                        : null,
-                    enabled: !showResult,
-                    onTap: showResult
-                        ? null
-                        : () async {
-                            // For quiz type, send selected answer index.
-                            if ((puzzle['type'] ?? 'quiz') == 'quiz') {
-                              await provider.submitQuizAnswer(idx);
-                            } else {
-                              await provider.submitAnswer([opt]);
-                            }
-                          },
                   );
                 })
               else
@@ -1179,50 +1210,60 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         if (provider.lastAnswerCorrect == false &&
                             provider.correctAnswerIndex != null &&
                             options.isNotEmpty) ...[
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.green.shade300),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '✅ ',
-                                  style: TextStyle(fontSize: 18),
-                                ),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'الإجابة الصحيحة:',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green.shade900,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        options[provider.correctAnswerIndex!]
-                                                ?.toString() ??
-                                            '',
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.green.shade800,
-                                        ),
-                                      ),
-                                    ],
+                          Builder(
+                            builder: (context) {
+                              final correctIdx = provider.correctAnswerIndex!;
+                              final correctLetter = indexToLetter(correctIdx);
+                              final correctText = optionValueToDisplayText(
+                                options[correctIdx],
+                              );
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.green.shade300,
                                   ),
                                 ),
-                              ],
-                            ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      '✅ ',
+                                      style: TextStyle(fontSize: 18),
+                                    ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'الإجابة الصحيحة:',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.green.shade900,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '$correctLetter) $correctText',
+                                            textDirection: TextDirection.ltr,
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.green.shade800,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                         ],
                         // 🧠 التفسير

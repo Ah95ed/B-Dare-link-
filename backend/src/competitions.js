@@ -202,6 +202,27 @@ function normalizeQuizPuzzle(raw, { puzzleId = null } = {}) {
   p.options = options;
   p.correctIndex = correctIndex;
   p.type = p.type || 'quiz';
+
+  // Preserve Wonder Link metadata (essential for UI display)
+  // These fields are optional but should be kept if present
+  const wonderLinkFields = [
+    'startWord',
+    'endWord',
+    'linkSteps',
+    'hint',
+    'explanation',
+    'category',
+    'pair',
+    'domain',
+    'scriptType'
+  ];
+
+  for (const field of wonderLinkFields) {
+    if (raw[field] !== undefined && raw[field] !== null) {
+      p[field] = raw[field];
+    }
+  }
+
   return p;
 }
 
@@ -760,7 +781,59 @@ async function generatePuzzleWithRetry(env, language, level, maxRetries = 2) {
     console.warn('[PUZZLE GEN] DB fallback failed', String(fallbackError?.message || fallbackError));
   }
 
-  throw lastError || new Error(`Could not generate or find valid puzzle after ${maxRetries} AI attempts + DB fallback`);
+  // Absolute last resort: built-in fallback puzzle so the game never stalls on a missing puzzle.
+  console.warn('[PUZZLE GEN] Using built-in fallback puzzle', {
+    language,
+    level,
+    lastError: String(lastError?.message || lastError || 'unknown'),
+  });
+  return getBuiltInFallbackPuzzle(language, level);
+}
+
+function getBuiltInFallbackPuzzle(language, level) {
+  const lang = (language || 'ar').toLowerCase();
+  // Keep it Wonder Link shaped so UI remains consistent.
+  if (lang === 'ar') {
+    return {
+      type: 'quiz',
+      category: 'wonder_link',
+      question: 'ما الرابط بين "البحر" و"القمح"؟',
+      options: [
+        'تبخر → غيوم → مطر → تربة',
+        'أمواج → شاطئ → رمال → صحراء',
+        'ملح → أسماك → صيد → سوق',
+        'أعماق → ضغط → معادن → صخور',
+      ],
+      correctIndex: 0,
+      hint: 'يتعلق بدورة الماء وتأثيرها على الزراعة',
+      pair: { a: 'البحر', b: 'القمح' },
+      linkSteps: ['تبخر', 'غيوم', 'مطر', 'تربة'],
+      domain: 'دورات طبيعية',
+      scriptType: 'من الماء إلى الزراعة',
+      explanation: 'يتبخر ماء البحر فيشكل غيوماً تمطر على اليابسة، فيرطب التربة اللازمة لزراعة القمح.',
+      level: Number(level) || 1,
+    };
+  }
+
+  return {
+    type: 'quiz',
+    category: 'wonder_link',
+    question: 'What is the link between "sea" and "wheat"?',
+    options: [
+      'evaporation → clouds → rain → soil',
+      'waves → shore → sand → desert',
+      'salt → fish → fishing → market',
+      'depth → pressure → minerals → rocks',
+    ],
+    correctIndex: 0,
+    hint: 'It relates to the water cycle and farming.',
+    pair: { a: 'sea', b: 'wheat' },
+    linkSteps: ['evaporation', 'clouds', 'rain', 'soil'],
+    domain: 'natural cycles',
+    scriptType: 'water-to-farming',
+    explanation: 'Sea water evaporates to form clouds that bring rain, which moistens soil needed to grow wheat.',
+    level: Number(level) || 1,
+  };
 }
 
 // Helper function to generate AI puzzle (Quiz format for competitions)
@@ -1862,13 +1935,42 @@ export async function forceNextPuzzle(request, env) {
       return jsonResponse({ success: true, gameFinished: true });
     }
 
-    const nextRow = await env.DB.prepare(
+    let nextRow = await env.DB.prepare(
       'SELECT puzzle_json FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
     ).bind(roomId, nextIdx).first();
 
-    if (!nextRow) return errorResponse('Next puzzle not found', 404);
+    // If missing (background fill failed), generate and insert on-demand so clients never get stuck.
+    if (!nextRow) {
+      console.warn('[FORCE NEXT] Missing next puzzle row; generating on-demand', {
+        roomId,
+        puzzleIndex: nextIdx,
+        lang: room.language,
+        difficulty: room.difficulty,
+      });
+      try {
+        const generated = normalizeQuizPuzzle(
+          await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
+        );
+        if (generated) {
+          await env.DB.prepare(
+            'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
+          ).bind(roomId, nextIdx, JSON.stringify(generated)).run();
+          nextRow = { puzzle_json: JSON.stringify(generated) };
+        }
+      } catch (e) {
+        console.error('[FORCE NEXT] Failed to generate next puzzle', String(e?.message || e));
+      }
+    }
+
+    if (!nextRow?.puzzle_json) return errorResponse('Next puzzle not found', 404);
 
     await env.DB.prepare('UPDATE rooms SET current_puzzle_index = ? WHERE id = ?')
+      .bind(nextIdx, roomId)
+      .run();
+
+    // Host-forced advance should move everyone to the new puzzle to avoid "stuck loading".
+    // Per-user progression remains for normal answering; this is a manager override.
+    await env.DB.prepare('UPDATE room_participants SET current_puzzle_index = ? WHERE room_id = ?')
       .bind(nextIdx, roomId)
       .run();
 
