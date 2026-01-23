@@ -345,8 +345,12 @@ export async function getRoomStatus(request, env) {
             difficulty: room.difficulty,
           });
           try {
-            const repaired = normalizeQuizPuzzle(
-              await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
+            const repaired = await generateUniqueRoomPuzzle(
+              env,
+              roomId,
+              room.language || 'ar',
+              room.difficulty || 1,
+              validator,
             );
             if (repaired) {
               await env.DB.prepare(
@@ -709,6 +713,69 @@ async function startRoomGame(env, roomId, ctx) {
   }
 }
 
+function computeQuestionHash(normalized) {
+  return JSON.stringify({
+    q: (normalized?.question || '').trim().toLowerCase(),
+    opts: (normalized?.options || []).map(o => String(o).trim().toLowerCase()).sort(),
+  });
+}
+
+async function getRoomSeenQuestionHashes(env, roomId) {
+  const seen = new Set();
+  try {
+    const rows = await env.DB.prepare(
+      'SELECT puzzle_json FROM room_puzzles WHERE room_id = ?'
+    ).bind(roomId).all();
+
+    for (const r of rows.results || []) {
+      try {
+        const pj = JSON.parse(r.puzzle_json);
+        const normalized = normalizeQuizPuzzle(pj);
+        if (normalized) {
+          seen.add(computeQuestionHash(normalized));
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+  } catch (_) {
+    // ignore
+  }
+  return seen;
+}
+
+async function generateUniqueRoomPuzzle(env, roomId, language, level, validator, maxAttempts = 4) {
+  const seen = await getRoomSeenQuestionHashes(env, roomId);
+  const lang = language || 'ar';
+  const lvl = Number(level) || 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const raw = await generatePuzzleWithRetry(env, lang, lvl);
+    const normalized = normalizeQuizPuzzle(raw, { puzzleId: null });
+    if (!normalized) continue;
+    const validation = validator.validatePuzzle(normalized, lang);
+    if (!validation.valid) continue;
+    const h = computeQuestionHash(normalized);
+    if (seen.has(h)) {
+      console.warn('[DEDUP] Duplicate puzzle generated; retrying', { roomId, attempt, q: normalized.question });
+      continue;
+    }
+    return normalized;
+  }
+
+  // Last resort: pick a built-in puzzle not yet used in this room.
+  const pool = getBuiltInFallbackPuzzlePool(lang, lvl);
+  for (const candidate of pool) {
+    const normalized = normalizeQuizPuzzle(candidate, { puzzleId: null });
+    if (!normalized) continue;
+    const h = computeQuestionHash(normalized);
+    if (!seen.has(h)) return normalized;
+  }
+
+  // If everything is exhausted, return any built-in fallback (still valid).
+  return normalizeQuizPuzzle(getBuiltInFallbackPuzzle(lang, lvl), { puzzleId: null });
+}
+
 // Helper to generate puzzle with retry logic for quality
 // CRITICAL: Try AI once, then immediately fall back to DB on validation failure
 async function generatePuzzleWithRetry(env, language, level, maxRetries = 2) {
@@ -790,50 +857,138 @@ async function generatePuzzleWithRetry(env, language, level, maxRetries = 2) {
   return getBuiltInFallbackPuzzle(language, level);
 }
 
-function getBuiltInFallbackPuzzle(language, level) {
+function getBuiltInFallbackPuzzlePool(language, level) {
   const lang = (language || 'ar').toLowerCase();
-  // Keep it Wonder Link shaped so UI remains consistent.
+  const lvl = Number(level) || 1;
+
+  // Keep them Wonder Link shaped so UI remains consistent.
   if (lang === 'ar') {
-    return {
-      type: 'quiz',
-      category: 'wonder_link',
-      question: 'ما الرابط بين "البحر" و"القمح"؟',
-      options: [
-        'تبخر → غيوم → مطر → تربة',
-        'أمواج → شاطئ → رمال → صحراء',
-        'ملح → أسماك → صيد → سوق',
-        'أعماق → ضغط → معادن → صخور',
-      ],
-      correctIndex: 0,
-      hint: 'يتعلق بدورة الماء وتأثيرها على الزراعة',
-      pair: { a: 'البحر', b: 'القمح' },
-      linkSteps: ['تبخر', 'غيوم', 'مطر', 'تربة'],
-      domain: 'دورات طبيعية',
-      scriptType: 'من الماء إلى الزراعة',
-      explanation: 'يتبخر ماء البحر فيشكل غيوماً تمطر على اليابسة، فيرطب التربة اللازمة لزراعة القمح.',
-      level: Number(level) || 1,
-    };
+    return [
+      {
+        type: 'quiz',
+        category: 'wonder_link',
+        question: 'ما الرابط بين "البحر" و"القمح"؟',
+        options: [
+          'تبخر → غيوم → مطر → تربة',
+          'ملح → أسماك → صيد → سوق',
+          'أمواج → شاطئ → رمال → صحراء',
+          'أعماق → ضغط → معادن → صخور',
+        ],
+        correctIndex: 0,
+        hint: 'يتعلق بدورة الماء وتأثيرها على الزراعة',
+        pair: { a: 'البحر', b: 'القمح' },
+        linkSteps: ['تبخر', 'غيوم', 'مطر', 'تربة'],
+        domain: 'دورات طبيعية',
+        scriptType: 'من الماء إلى الزراعة',
+        explanation: 'يتبخر ماء البحر فيشكل غيوماً تمطر على اليابسة، فيرطب التربة اللازمة لزراعة القمح.',
+        level: lvl,
+      },
+      {
+        type: 'quiz',
+        category: 'wonder_link',
+        question: 'ما الرابط بين "الشمس" و"المطر"؟',
+        options: [
+          'تبخر → غيوم → تكاثف → مطر',
+          'ليل → نجوم → ظلام → مطر',
+          'حرارة → صحراء → رمال → مطر',
+          'صيف → عطش → ماء → مطر',
+        ],
+        correctIndex: 0,
+        hint: 'الحرارة تبدأ دورة الماء',
+        pair: { a: 'الشمس', b: 'المطر' },
+        linkSteps: ['تبخر', 'غيوم', 'تكاثف', 'مطر'],
+        domain: 'الطقس',
+        scriptType: 'سبب ونتيجة',
+        explanation: 'حرارة الشمس تسبب التبخر ثم تتكون الغيوم وتتکاثف لتسقط الأمطار.',
+        level: lvl,
+      },
+      {
+        type: 'quiz',
+        category: 'wonder_link',
+        question: 'ما الرابط بين "الكتاب" و"الذاكرة"؟',
+        options: [
+          'قراءة → فهم → تكرار → ذاكرة',
+          'حبر → ورق → غلاف → ذاكرة',
+          'مكتبة → رفوف → كتب → ذاكرة',
+          'قلم → كتابة → سطر → ذاكرة',
+        ],
+        correctIndex: 0,
+        hint: 'التعلم يثبت بالممارسة',
+        pair: { a: 'الكتاب', b: 'الذاكرة' },
+        linkSteps: ['قراءة', 'فهم', 'تكرار', 'ذاكرة'],
+        domain: 'التعلم',
+        scriptType: 'تعلم وتثبيت',
+        explanation: 'القراءة والفهم ثم التكرار يساعد على تثبيت المعلومات في الذاكرة.',
+        level: lvl,
+      },
+      {
+        type: 'quiz',
+        category: 'wonder_link',
+        question: 'ما الرابط بين "الطعام" و"الطاقة"؟',
+        options: [
+          'هضم → امتصاص → سكر → طاقة',
+          'ملح → فلفل → نكهة → طاقة',
+          'طبخ → نار → دخان → طاقة',
+          'مائدة → صحون → شوكة → طاقة',
+        ],
+        correctIndex: 0,
+        hint: 'الجسم يحول الغذاء إلى طاقة',
+        pair: { a: 'الطعام', b: 'الطاقة' },
+        linkSteps: ['هضم', 'امتصاص', 'سكر', 'طاقة'],
+        domain: 'الجسم',
+        scriptType: 'تحويل',
+        explanation: 'يهضم الجسم الطعام ويمتصه ثم يحوله إلى سكر/طاقة للحركة والوظائف الحيوية.',
+        level: lvl,
+      },
+    ];
   }
 
-  return {
-    type: 'quiz',
-    category: 'wonder_link',
-    question: 'What is the link between "sea" and "wheat"?',
-    options: [
-      'evaporation → clouds → rain → soil',
-      'waves → shore → sand → desert',
-      'salt → fish → fishing → market',
-      'depth → pressure → minerals → rocks',
-    ],
-    correctIndex: 0,
-    hint: 'It relates to the water cycle and farming.',
-    pair: { a: 'sea', b: 'wheat' },
-    linkSteps: ['evaporation', 'clouds', 'rain', 'soil'],
-    domain: 'natural cycles',
-    scriptType: 'water-to-farming',
-    explanation: 'Sea water evaporates to form clouds that bring rain, which moistens soil needed to grow wheat.',
-    level: Number(level) || 1,
-  };
+  return [
+    {
+      type: 'quiz',
+      category: 'wonder_link',
+      question: 'What is the link between "sea" and "wheat"?',
+      options: [
+        'evaporation → clouds → rain → soil',
+        'salt → fish → fishing → market',
+        'waves → shore → sand → desert',
+        'depth → pressure → minerals → rocks',
+      ],
+      correctIndex: 0,
+      hint: 'It relates to the water cycle and farming.',
+      pair: { a: 'sea', b: 'wheat' },
+      linkSteps: ['evaporation', 'clouds', 'rain', 'soil'],
+      domain: 'natural cycles',
+      scriptType: 'water-to-farming',
+      explanation: 'Sea water evaporates to form clouds that bring rain, which moistens soil needed to grow wheat.',
+      level: lvl,
+    },
+    {
+      type: 'quiz',
+      category: 'wonder_link',
+      question: 'What is the link between "sun" and "rain"?',
+      options: [
+        'heat → evaporation → clouds → rain',
+        'night → stars → dark → rain',
+        'summer → desert → sand → rain',
+        'fire → smoke → ash → rain',
+      ],
+      correctIndex: 0,
+      hint: 'Heat starts the water cycle.',
+      pair: { a: 'sun', b: 'rain' },
+      linkSteps: ['heat', 'evaporation', 'clouds', 'rain'],
+      domain: 'weather',
+      scriptType: 'cause-effect',
+      explanation: 'Sun heat drives evaporation; clouds form and then rain falls.',
+      level: lvl,
+    },
+  ];
+}
+
+function getBuiltInFallbackPuzzle(language, level) {
+  const pool = getBuiltInFallbackPuzzlePool(language, level);
+  const idx = Math.abs((Date.now() + Math.floor(Math.random() * 100000)) % pool.length);
+  return pool[idx];
 }
 
 // Helper function to generate AI puzzle (Quiz format for competitions)
@@ -1487,8 +1642,12 @@ export async function submitAnswer(request, env, ctx) {
           difficulty: room.difficulty,
         });
         try {
-          const generated = normalizeQuizPuzzle(
-            await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
+          const generated = await generateUniqueRoomPuzzle(
+            env,
+            roomId,
+            room.language || 'ar',
+            room.difficulty || 1,
+            validator,
           );
           if (generated) {
             // Persist so future status calls return it.
@@ -1757,13 +1916,25 @@ export async function leaveRoom(request, env) {
   const user = await getUserFromRequest(request, env);
   if (!user) return errorResponse('Unauthorized', 401);
 
-  const { roomId } = await request.json();
+  const { roomId, permanent } = await request.json();
   if (!roomId) return errorResponse('roomId required', 400);
 
   try {
-    await env.DB.prepare('DELETE FROM room_participants WHERE room_id = ? AND user_id = ?')
-      .bind(roomId, user.id)
-      .run();
+    // IMPORTANT:
+    // Do not delete the participant row by default.
+    // Many clients call "leave" when navigating away, and deleting resets
+    // per-user progress (current_puzzle_index), which makes questions repeat
+    // when the user reopens the room.
+    if (permanent === true) {
+      await env.DB.prepare('DELETE FROM room_participants WHERE room_id = ? AND user_id = ?')
+        .bind(roomId, user.id)
+        .run();
+    } else {
+      // Soft leave: keep progress, just mark not ready.
+      await env.DB.prepare('UPDATE room_participants SET is_ready = 0 WHERE room_id = ? AND user_id = ?')
+        .bind(roomId, user.id)
+        .run();
+    }
 
     return jsonResponse({ success: true });
   } catch (e) {

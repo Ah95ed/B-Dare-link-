@@ -979,10 +979,10 @@ class CompetitionProvider with ChangeNotifier {
     }
   }
 
-  Future<void> leaveRoom() async {
+  Future<void> leaveRoom({bool permanent = false}) async {
     if (_currentRoom != null) {
       try {
-        await _service.leaveRoom(_currentRoom!['id']);
+        await _service.leaveRoom(_currentRoom!['id'], permanent: permanent);
       } catch (e) {
         debugPrint('Error during leave API: $e');
       }

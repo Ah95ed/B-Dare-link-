@@ -115,7 +115,11 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
               // Header
               Row(
                 children: [
-                  const Icon(Icons.settings, size: 28, color: Colors.blue),
+                  Icon(
+                    Icons.settings,
+                    size: 28,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -130,12 +134,18 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.tertiary.withOpacity(0.18),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: const Text(
+                      child: Text(
                         'مدير',
-                        style: TextStyle(fontSize: 12, color: Colors.orange),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Theme.of(context).colorScheme.tertiary,
+                        ),
                       ),
                     ),
                 ],

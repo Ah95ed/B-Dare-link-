@@ -133,97 +133,153 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
           children: [
             // Error Banner
             if (competitionProvider.errorMessage != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 6,
-                  horizontal: 12,
-                ),
-                color: Colors.red.withOpacity(0.1),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: Colors.red,
-                      size: 16,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.error.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.error.withOpacity(0.20),
                     ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        competitionProvider.errorMessage!,
-                        style: TextStyle(
-                          color: Colors.red.shade800,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 2,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        color: Theme.of(context).colorScheme.error,
+                        size: 18,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          competitionProvider.errorMessage!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.error.withOpacity(0.95),
+                              ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             // Connection Status Indicator
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              color: competitionProvider.isConnected
-                  ? Colors.green.withOpacity(0.1)
-                  : (competitionProvider.isConnecting
-                        ? Colors.orange.withOpacity(0.1)
-                        : Colors.red.withOpacity(0.1)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    competitionProvider.isConnected
-                        ? Icons.cloud_done
-                        : (competitionProvider.isConnecting
-                              ? Icons.cloud_queue
-                              : Icons.cloud_off),
-                    size: 14,
-                    color: competitionProvider.isConnected
-                        ? Colors.green
-                        : (competitionProvider.isConnecting
-                              ? Colors.orange
-                              : Colors.red),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    competitionProvider.isConnected
-                        ? 'متصل بالخادم'
-                        : (competitionProvider.isConnecting
-                              ? 'جارٍ الاتصال...'
-                              : 'غير متصل - اضغط تحديث'),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: competitionProvider.isConnected
-                          ? Colors.green.shade800
-                          : (competitionProvider.isConnecting
-                                ? Colors.orange.shade800
-                                : Colors.red.shade800),
-                      fontWeight: FontWeight.bold,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+              child: Builder(
+                builder: (context) {
+                  final scheme = Theme.of(context).colorScheme;
+                  final bool connected = competitionProvider.isConnected;
+                  final bool connecting = competitionProvider.isConnecting;
+                  final Color tint = connected
+                      ? scheme.secondary
+                      : (connecting ? scheme.tertiary : scheme.error);
+                  final IconData icon = connected
+                      ? Icons.cloud_done
+                      : (connecting ? Icons.cloud_queue : Icons.cloud_off);
+                  final String label = connected
+                      ? 'متصل بالخادم'
+                      : (connecting
+                            ? 'جارٍ الاتصال...'
+                            : 'غير متصل - اضغط تحديث');
+
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 12,
                     ),
-                  ),
-                ],
+                    decoration: BoxDecoration(
+                      color: tint.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: tint.withOpacity(0.20)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(icon, size: 18, color: tint),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: tint.withOpacity(0.95),
+                                ),
+                          ),
+                        ),
+                        if (!connected)
+                          Text(
+                            'تحديث',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: tint,
+                                ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
 
             // Game Settings Info
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.grey.shade50,
-              child: Row(
-                children: [
-                  const Icon(Icons.settings, size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${room['puzzleCount'] ?? 5} ألغاز • ${(room['timePerPuzzle'] ?? 60)} ثانية/لغز • ${room['puzzleSource'] == 'ai' ? 'ذكاء اصطناعي' : (room['puzzleSource'] == 'manual' ? 'يدوي' : 'قاعدة بيانات')}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  const Spacer(),
-                ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.black.withOpacity(0.06)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.tune,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${room['puzzleCount'] ?? 5} ألغاز • ${(room['timePerPuzzle'] ?? 60)} ثانية/لغز • ${room['puzzleSource'] == 'ai' ? 'ذكاء اصطناعي' : (room['puzzleSource'] == 'manual' ? 'يدوي' : 'قاعدة بيانات')}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.75),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const Divider(height: 1),
@@ -730,6 +786,25 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     if (puzzle == null) {
       return const SizedBox.shrink();
     }
+
+    final room = provider.currentRoom;
+    int parseInt(dynamic value, int fallback) {
+      if (value == null) return fallback;
+      if (value is int) return value;
+      if (value is double) return value.round();
+      return int.tryParse(value.toString()) ?? fallback;
+    }
+
+    final int totalPuzzles = parseInt(
+      room?['puzzleCount'] ?? room?['puzzle_count'],
+      5,
+    ).clamp(1, 999999);
+    final int idx0 = provider.currentPuzzleIndex;
+    final int completedCount = idx0.clamp(0, totalPuzzles);
+    final int currentNumber = (idx0 + 1).clamp(1, totalPuzzles);
+    final double? progressValue = totalPuzzles > 0
+        ? (completedCount / totalPuzzles).clamp(0.0, 1.0)
+        : null;
     // Expected puzzle fields (adjust as needed):
     // - 'question' : String
     // - 'options'  : List<dynamic>
@@ -773,6 +848,68 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 📊 التقدم
+              if (provider.gameFinished) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: const Row(
+                    children: [
+                      Text('🎉 ', style: TextStyle(fontSize: 18)),
+                      Expanded(
+                        child: Text(
+                          'انتهت الجولة بالنسبة لك!',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ] else ...[
+                Row(
+                  children: [
+                    const Text('📊 ', style: TextStyle(fontSize: 18)),
+                    Expanded(
+                      child: Text(
+                        'السؤال $currentNumber من $totalPuzzles',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '$completedCount/$totalPuzzles',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    minHeight: 8,
+                    value: progressValue,
+                    backgroundColor: Colors.grey.shade200,
+                    color: Colors.deepPurple,
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               // 🧩 اللغز
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1026,6 +1163,13 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                     }
                   }
 
+                  final theme = Theme.of(context);
+                  final tileBg = backgroundColor ?? theme.colorScheme.surface;
+                  final tileBorder = borderColor ?? theme.dividerColor;
+                  final tileTextColor = showResult
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onSurface;
+
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: InkWell(
@@ -1038,34 +1182,52 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                                 await provider.submitAnswer([optText]);
                               }
                             },
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
+                      borderRadius: BorderRadius.circular(12),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
+                          horizontal: 14,
+                          vertical: 14,
                         ),
                         decoration: BoxDecoration(
-                          color: backgroundColor ?? Colors.white,
-                          borderRadius: BorderRadius.circular(10),
+                          color: tileBg,
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: borderColor ?? Colors.grey.shade300,
-                            width: borderColor != null ? 2 : 1,
+                            color: tileBorder,
+                            width: hasResult && isSelected ? 2.2 : 1.0,
                           ),
+                          boxShadow: isSelected && hasResult
+                              ? [
+                                  BoxShadow(
+                                    color:
+                                        (lastAnswerCorrect == true
+                                                ? Colors.greenAccent
+                                                : Colors.redAccent)
+                                            .withOpacity(0.12),
+                                    blurRadius: 14,
+                                    spreadRadius: 1,
+                                  ),
+                                ]
+                              : [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.03),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                         ),
                         child: Directionality(
                           textDirection: TextDirection.ltr,
                           child: Text(
                             '$badge) $optText',
-                            style: TextStyle(
+                            style: theme.textTheme.bodyMedium?.copyWith(
                               fontSize: 15,
-                              height: 1.5,
+                              height: 1.45,
                               fontWeight: hasResult && isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: showResult
-                                  ? Colors.grey.shade800
-                                  : Colors.black87,
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
+                              color: tileTextColor,
                             ),
                           ),
                         ),

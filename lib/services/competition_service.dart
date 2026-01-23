@@ -212,8 +212,13 @@ class CompetitionService {
     ); // Reusing status for members list mainly
   }
 
-  Future<Map<String, dynamic>> leaveRoom(int roomId) async {
-    return await _post('/api/rooms/leave', {'roomId': roomId});
+  Future<Map<String, dynamic>> leaveRoom(
+    int roomId, {
+    bool permanent = false,
+  }) async {
+    final payload = <String, dynamic>{'roomId': roomId};
+    if (permanent) payload['permanent'] = true;
+    return await _post('/api/rooms/leave', payload);
   }
 
   Future<Map<String, dynamic>> kickUser(int roomId, String targetUserId) async {
