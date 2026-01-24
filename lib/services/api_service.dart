@@ -5,10 +5,18 @@ import '../models/game_level.dart';
 import '../models/game_puzzle.dart';
 
 class CloudflareApiService {
-  // TODO: Replace with your deployed Worker URL
-  final String _workerUrl = 'https://wonder-link-backend.amhmeed31.workers.dev';
+  static const String _defaultWorkerUrl =
+      'https://wonder-link-backend.amhmeed31.workers.dev';
+  late final String _workerUrl = const String.fromEnvironment(
+    'WORKER_URL',
+    defaultValue: _defaultWorkerUrl,
+  );
 
-  Future<GameLevel?> generateLevel(bool isArabic, int levelId, {bool fresh = false}) async {
+  Future<GameLevel?> generateLevel(
+    bool isArabic,
+    int levelId, {
+    bool fresh = false,
+  }) async {
     try {
       final response = await http.post(
         Uri.parse('$_workerUrl/generate-level'),
@@ -27,7 +35,9 @@ class CloudflareApiService {
           return _getFallbackLevelSafe(levelId, isArabic);
         }
         if (data['error'] != null) {
-          debugPrint("Worker Error Payload: ${data['error']} - ${data['reason']}");
+          debugPrint(
+            "Worker Error Payload: ${data['error']} - ${data['reason']}",
+          );
           return _getFallbackLevelSafe(levelId, isArabic);
         }
 

@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../core/app_colors.dart';
+import '../../core/room_design_components.dart';
 import 'room_settings_view.dart';
 
 class RoomLobbyView extends StatefulWidget {
@@ -75,214 +77,111 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     }
 
     return Scaffold(
+      backgroundColor: AppColors.darkBackground,
+      endDrawer: _buildLobbyDrawer(context, room, competitionProvider, isHost),
       appBar: AppBar(
+        backgroundColor: AppColors.darkSurface,
+        elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(room['name'] ?? 'غرفة'),
             Text(
-              'كود الغرفة: ${room['code']}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
+              room['name'] ?? 'غرفة',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              'عدد اللاعبين : ${participants.length}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.cyan.withOpacity(0.7),
+                letterSpacing: 0.5,
+              ),
+            ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: participants.length / (room['maxParticipants'] ?? 10),
+                minHeight: 6,
+                backgroundColor: AppColors.darkBackground.withOpacity(0.5),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  participants.length > 0.7
+                      ? AppColors.success
+                      : AppColors.cyan,
+                ),
               ),
             ),
           ],
         ),
         actions: [
-          if (isHost)
-            IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: () => _showSettingsDialog(context),
-              tooltip: 'إعدادات الغرفة',
+          Builder(
+            builder: (inner) => IconButton(
+              icon: Icon(Icons.menu_rounded, color: AppColors.cyan),
+              onPressed: () => Scaffold.of(inner).openEndDrawer(),
             ),
-          IconButton(
-            icon: const Icon(Icons.copy),
-            onPressed: () {
-              final code = room['code'] ?? '';
-              Clipboard.setData(ClipboardData(text: code)).then((_) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('تم نسخ الكود: $code')),
-                  );
-                }
-              });
-            },
-            tooltip: 'نسخ كود الغرفة',
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => competitionProvider.refreshRoomStatus(),
-            tooltip: 'تحديث الغرفة',
-          ),
-          if (competitionProvider.isHost)
-            IconButton(
-              icon: const Icon(Icons.delete_forever, color: Colors.red),
-              onPressed: () => _confirmDeleteRoom(context),
-              tooltip: 'حذف المجموعة',
-            ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => competitionProvider.leaveRoom(),
-            tooltip: 'مغادرة',
           ),
         ],
       ),
       body: SingleChildScrollView(
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Error Banner
-            if (competitionProvider.errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 10,
-                    horizontal: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.error.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.error.withOpacity(0.20),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        color: Theme.of(context).colorScheme.error,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          competitionProvider.errorMessage!,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.error.withOpacity(0.95),
-                              ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            // Connection Status Indicator
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
-              child: Builder(
-                builder: (context) {
-                  final scheme = Theme.of(context).colorScheme;
-                  final bool connected = competitionProvider.isConnected;
-                  final bool connecting = competitionProvider.isConnecting;
-                  final Color tint = connected
-                      ? scheme.secondary
-                      : (connecting ? scheme.tertiary : scheme.error);
-                  final IconData icon = connected
-                      ? Icons.cloud_done
-                      : (connecting ? Icons.cloud_queue : Icons.cloud_off);
-                  final String label = connected
-                      ? 'متصل بالخادم'
-                      : (connecting
-                            ? 'جارٍ الاتصال...'
-                            : 'غير متصل - اضغط تحديث');
-
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 10,
-                      horizontal: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: tint.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: tint.withOpacity(0.20)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(icon, size: 18, color: tint),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            label,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: tint.withOpacity(0.95),
-                                ),
-                          ),
-                        ),
-                        if (!connected)
-                          Text(
-                            'تحديث',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: tint,
-                                ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
+            // Modern Room Info Header
+            // RoomInfoHeader(
+            //   roomName: room['name'] ?? 'غرفة',
+            //   roomCode: room['code'] ?? '',
+            //   participantCount: participants.length,
+            //   maxParticipants: room['maxParticipants'] ?? 10,
+            //   gameStartsIn: competitionProvider.gameStarted
+            //       ? null
+            //       : Duration(seconds: 3),
+            //   // onSettingsTap: isHost ? () => _showSettingsDialog(context) : null,
+            // ),
+            // SizedBox(height: 4),
             // Game Settings Info
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.black.withOpacity(0.06)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.tune,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        '${room['puzzleCount'] ?? 5} ألغاز • ${(room['timePerPuzzle'] ?? 60)} ثانية/لغز • ${room['puzzleSource'] == 'ai' ? 'ذكاء اصطناعي' : (room['puzzleSource'] == 'manual' ? 'يدوي' : 'قاعدة بيانات')}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.75),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const Divider(height: 1),
+            // Container(
+            //   margin: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            //   padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            //   decoration: BoxDecoration(
+            //     borderRadius: BorderRadius.circular(14),
+            //     gradient: LinearGradient(
+            //       colors: [
+            //         AppColors.darkSurface.withOpacity(0.8),
+            //         AppColors.darkSurface.withOpacity(0.3),
+            //       ],
+            //     ),
+            //     border: Border.all(
+            //       color: AppColors.cyan.withOpacity(0.15),
+            //       width: 1,
+            //     ),
+            //     boxShadow: [
+            //       BoxShadow(
+            //         color: AppColors.cyan.withOpacity(0.08),
+            //         blurRadius: 10,
+            //       ),
+            //     ],
+            //   ),
+            //   child: Row(
+            //     children: [
+            //       Icon(Icons.tune_rounded, size: 18, color: AppColors.cyan),
+            //       SizedBox(width: 10),
+            //       Expanded(
+            //         child: Text(
+            //           '${room['puzzleCount'] ?? 5} ألغاز • ${(room['timePerPuzzle'] ?? 60)} ثانية/لغز • ${room['puzzleSource'] == 'ai' ? 'ذكاء اصطناعي' : (room['puzzleSource'] == 'manual' ? 'يدوي' : 'قاعدة بيانات')}',
+            //           style: TextStyle(
+            //             fontWeight: FontWeight.w600,
+            //             color: AppColors.textSecondary,
+            //             fontSize: 12,
+            //           ),
+            //         ),
+            //       ),
+            //     ],
+            //   ),
+            // ),
 
             // Top area: show puzzle instead of participants list
             // فقط اعرض السؤال إذا كانت اللعبة قد بدأت (status = 'active') وهناك سؤال حالي
@@ -343,14 +242,17 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               ),
               const Divider(height: 1),
             ] else ...[
-              // Participants Row (only before game starts)
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+              // Participants Grid (only before game starts)
+              Container(
+                padding: EdgeInsets.all(12),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 0.75,
                   ),
                   itemCount: participants.length,
                   itemBuilder: (context, index) {
@@ -359,84 +261,17 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                     final isPHost = pId == competitionProvider.hostId;
                     final isPReady = p['isReady'] == true;
 
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: Column(
-                        children: [
-                          Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: isPReady
-                                    ? Colors.green
-                                    : Colors.grey.shade300,
-                                child: CircleAvatar(
-                                  radius: 22,
-                                  child: Text(
-                                    p['username']?[0]?.toUpperCase() ?? '?',
-                                  ),
-                                ),
-                              ),
-                              if (isPHost &&
-                                  pId != null &&
-                                  competitionProvider.hostId != null)
-                                Positioned(
-                                  right: 0,
-                                  bottom: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.amber,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.star,
-                                      size: 12,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                (p['username'] ?? '...'),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: isPHost
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  color: isPHost && pId != null
-                                      ? Colors.amber.shade900
-                                      : Colors.black,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              if (isHost && pId != currentUserId && pId != null)
-                                GestureDetector(
-                                  onTap: () =>
-                                      competitionProvider.kickUser(pId),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    margin: const EdgeInsets.only(left: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withOpacity(0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      size: 10,
-                                      color: Colors.red,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
+                    return ParticipantCard(
+                      name: p['username'] ?? 'اللاعب',
+                      score: p['score'] ?? 0,
+                      isHost: isPHost,
+                      isActive: isPReady,
+                      statusColor: isPReady
+                          ? AppColors.success
+                          : AppColors.textSecondary,
+                      onTap: isHost && pId != currentUserId && pId != null
+                          ? () => competitionProvider.kickUser(pId)
+                          : null,
                     );
                   },
                 ),
@@ -593,86 +428,79 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton(
+                      child: ElevatedButton.icon(
                         onPressed: () {
                           competitionProvider.toggleReady(
                             !competitionProvider.isReady,
                           );
                         },
+                        icon: Icon(
+                          competitionProvider.isReady
+                              ? Icons.check_circle_rounded
+                              : Icons.radio_button_unchecked_rounded,
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: competitionProvider.isReady
-                              ? Colors.green
-                              : Theme.of(context).primaryColor,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                              ? AppColors.success
+                              : AppColors.cyan,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                           ),
+                          elevation: 8,
+                          shadowColor: competitionProvider.isReady
+                              ? AppColors.success.withOpacity(0.3)
+                              : AppColors.cyan.withOpacity(0.3),
                         ),
-                        child: Text(
+                        label: Text(
                           competitionProvider.isReady
-                              ? 'أنت جاهز ✅'
+                              ? 'أنت جاهز ✓'
                               : 'إعلان الجاهزية',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
                     ),
                     if (isHost && !competitionProvider.gameStarted) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
-                        child: ElevatedButton(
+                        child: ElevatedButton.icon(
                           onPressed: competitionProvider.isStartingGame
                               ? null
                               : () async {
                                   await competitionProvider.startGame();
                                 },
+                          icon: Icon(Icons.play_circle_filled_rounded),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.amber.shade700,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            backgroundColor: AppColors.magenta,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: AppColors.textSecondary
+                                .withOpacity(0.3),
+                            padding: EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 8,
+                            shadowColor: AppColors.magenta.withOpacity(0.3),
+                          ),
+                          label: Text(
+                            competitionProvider.isStartingGame
+                                ? 'جاري البدء...'
+                                : 'ابدأ اللعبة',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
                             ),
                           ),
-                          child: competitionProvider.isStartingGame
-                              ? Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const [
-                                    SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
-                                      ),
-                                    ),
-                                    SizedBox(width: 10),
-                                    Text(
-                                      'جاري بدء اللعبة...',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : const Text(
-                                  'ابدأ اللعب الآن 🎮',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
                         ),
                       ),
                     ],
@@ -1485,12 +1313,85 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     );
   }
 
-  void _showSettingsDialog(BuildContext context) {
-    final provider = context.read<CompetitionProvider>();
-    final room = provider.currentRoom;
+  Drawer _buildLobbyDrawer(
+    BuildContext context,
+    Map<String, dynamic> room,
+    CompetitionProvider provider,
+    bool isHost,
+  ) {
+    return Drawer(
+      backgroundColor: AppColors.darkSurface,
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          children: [
+            if (isHost)
+              ListTile(
+                leading: Icon(Icons.settings, color: AppColors.cyan),
+                title: const Text('إعدادات الغرفة'),
+                onTap: () {
+                  Navigator.of(context).maybePop();
+                  _pushSettings(context, provider, room);
+                },
+              ),
+            ListTile(
+              leading: Icon(Icons.copy_rounded, color: AppColors.magenta),
+              title: const Text('نسخ كود الغرفة'),
+              onTap: () {
+                final code = room['code'] ?? '';
+                Clipboard.setData(ClipboardData(text: code)).then((_) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('تم نسخ الكود: $code'),
+                        backgroundColor: AppColors.cyan.withOpacity(0.8),
+                      ),
+                    );
+                  }
+                });
+                Navigator.of(context).maybePop();
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.refresh_rounded, color: AppColors.cyan),
+              title: const Text('تحديث الغرفة'),
+              onTap: () {
+                Navigator.of(context).maybePop();
+                provider.refreshRoomStatus();
+              },
+            ),
+            if (isHost)
+              ListTile(
+                leading: Icon(
+                  Icons.delete_forever_rounded,
+                  color: AppColors.error,
+                ),
+                title: const Text('حذف الغرفة'),
+                onTap: () {
+                  Navigator.of(context).maybePop();
+                  _confirmDeleteRoom(context);
+                },
+              ),
+            ListTile(
+              leading: Icon(Icons.logout_rounded, color: AppColors.error),
+              title: const Text('مغادرة'),
+              onTap: () {
+                Navigator.of(context).maybePop();
+                provider.leaveRoom();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
+  void _pushSettings(
+    BuildContext context,
+    CompetitionProvider provider,
+    Map<String, dynamic>? room,
+  ) {
     if (room == null) return;
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1500,6 +1401,15 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
         ),
       ),
     );
+  }
+
+  void _showSettingsDialog(BuildContext context) {
+    final provider = context.read<CompetitionProvider>();
+    final room = provider.currentRoom;
+
+    if (room == null) return;
+
+    _pushSettings(context, provider, room);
   }
 
   void _confirmDeleteRoom(BuildContext context) {

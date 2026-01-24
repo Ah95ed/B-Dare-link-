@@ -3,9 +3,12 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthService {
-  // TODO: Update this with your actual deployed Cloudflare Worker URL or localhost
-  static const String _baseUrl =
+  static const String _defaultBaseUrl =
       'https://wonder-link-backend.amhmeed31.workers.dev';
+  static const String _baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: _defaultBaseUrl,
+  );
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<String?> getToken() async {
