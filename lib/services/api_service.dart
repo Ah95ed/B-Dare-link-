@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/game_level.dart';
@@ -232,5 +233,31 @@ class CloudflareApiService {
     // Ideally this would also validate via backend,
     // but for now we trust the local client logic or implement similar backend endpoint.
     return true;
+  }
+
+  Future<GamePuzzle?> generatePuzzleFromImage(File image, bool isArabic) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_workerUrl/api/generate-from-image'),
+      );
+
+      request.fields['language'] = isArabic ? 'ar' : 'en';
+      request.files.add(await http.MultipartFile.fromPath('image', image.path));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return GamePuzzle.fromJson(data);
+      } else {
+        debugPrint("Vision Error: ${response.statusCode} - ${response.body}");
+        return null;
+      }
+    } catch (e) {
+      debugPrint("Vision Exception: $e");
+      return null;
+    }
   }
 }

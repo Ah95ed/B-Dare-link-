@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,7 +23,6 @@ class _RoomGameViewState extends State<RoomGameView> {
 
     if (!competitionProvider.gameStarted ||
         competitionProvider.currentPuzzle == null) {
-          
       return _buildLoadingScreen(competitionProvider);
     }
 
@@ -192,57 +189,6 @@ class _RoomGameViewState extends State<RoomGameView> {
     );
   }
 
-  Widget _buildScoreBar(CompetitionProvider provider) {
-    final participants = provider.roomParticipants;
-    int totalScore = 0;
-    int currentScore = 0;
-
-    for (var p in participants) {
-      final score = p['score'] ?? 0;
-      totalScore += score is int ? score : (score as num).toInt();
-      currentScore = score is int ? score : (score as num).toInt();
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.darkSurface.withOpacity(0.5),
-        border: Border(
-          bottom: BorderSide(color: AppColors.cyan.withOpacity(0.1), width: 1),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _scoreItem('نقاطك', '$currentScore', Icons.stars, AppColors.cyan),
-          _scoreItem(
-            'المجموع',
-            '$totalScore',
-            Icons.leaderboard,
-            AppColors.magenta,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _scoreItem(String label, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Icon(icon, size: 20, color: color),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-        ),
-      ],
-    );
-  }
-
   Widget _buildQuizView(
     Map<String, dynamic> puzzle,
     CompetitionProvider provider,
@@ -283,18 +229,24 @@ class _RoomGameViewState extends State<RoomGameView> {
               if (hint.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     color: AppColors.magenta.withOpacity(0.1),
-                    border:
-                        Border.all(color: AppColors.magenta.withOpacity(0.2)),
+                    border: Border.all(
+                      color: AppColors.magenta.withOpacity(0.2),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.lightbulb_rounded,
-                          size: 18, color: AppColors.magenta),
+                      Icon(
+                        Icons.lightbulb_rounded,
+                        size: 18,
+                        color: AppColors.magenta,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -441,7 +393,10 @@ class _RoomGameViewState extends State<RoomGameView> {
             ),
             const Divider(height: 1),
             ListTile(
-              leading: Icon(Icons.meeting_room_outlined, color: AppColors.magenta),
+              leading: Icon(
+                Icons.meeting_room_outlined,
+                color: AppColors.magenta,
+              ),
               title: const Text('العودة للغرفة'),
               onTap: () {
                 Navigator.of(context).maybePop();

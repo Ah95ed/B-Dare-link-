@@ -2,24 +2,28 @@
 
 function difficultyLabel(level) {
   const n = Number(level) || 1;
-  return n <= 3 ? 'Easy' : n <= 6 ? 'Medium' : 'Hard';
+  if (n <= 10) return 'Easy';
+  if (n <= 30) return 'Medium';
+  if (n <= 50) return 'Hard';
+  return 'Expert';
 }
 
 function stepsMinMax(level) {
   const n = Number(level) || 1;
-  // User-facing design: 2-5 steps total, increasing with level.
-  if (n <= 3) return { min: 2, max: 3 };
-  if (n <= 6) return { min: 3, max: 4 };
-  return { min: 4, max: 5 };
+  // Progressive step counts based on level ranges
+  if (n <= 10) return { min: 2, max: 3 };   // Beginner: 2-3 steps
+  if (n <= 30) return { min: 3, max: 4 };   // Intermediate: 3-4 steps
+  if (n <= 50) return { min: 4, max: 5 };   // Advanced: 4-5 steps
+  return { min: 5, max: 6 };                 // Expert+: 5-6 steps
 }
 
 export function linkChainMinMax(level) {
   const n = Number(level) || 1;
-  // For Wonder Link MCQ: number of intermediate nodes (excluding endpoints).
-  // Keep it readable on mobile, but scale with difficulty.
-  if (n <= 3) return { min: 3, max: 4 };
-  if (n <= 6) return { min: 4, max: 5 };
-  return { min: 5, max: 6 };
+  // Progressive chain length for mobile readability
+  if (n <= 10) return { min: 3, max: 4 };   // Beginner
+  if (n <= 30) return { min: 4, max: 5 };   // Intermediate
+  if (n <= 50) return { min: 5, max: 6 };   // Advanced
+  return { min: 6, max: 7 };                 // Expert+
 }
 
 export function buildSystemPrompt({ language = 'en', level = 1 } = {}) {
@@ -28,94 +32,97 @@ export function buildSystemPrompt({ language = 'en', level = 1 } = {}) {
   const { min, max } = stepsMinMax(level);
 
   if (isArabic) {
-    // CRITICAL: Enforce PURE ARABIC ONLY - NO MIXING WHATSOEVER
-    return `You generate puzzles for the game "Wonder Link" in PURE ARABIC ONLY.
+    // ENHANCED: Chain-of-Thought (CoT) prompting for logical coherence
+    return `أنت منشئ ألغاز محترف للعبة "الرابط العجيب" باللغة العربية الفصحى فقط.
 
-⚠️ CRITICAL REQUIREMENTS (MUST OBEY):
+🎯 المهمة الأساسية:
+ربط كلمتين تبدوان غير مترابطتين عبر سلسلة منطقية من ${min}-${max} خطوات.
 
-1️⃣ ARABIC PURITY - NO EXCEPTIONS:
-   - EVERY single word MUST be 100% Arabic Modern Standard Arabic (MSA)
-   - ZERO English letters, abbreviations, or Romanized words
-   - NO mixing Arabic with Latin letters (a, b, c, d, etc.)
-   - NO transliteration (e.g., "2" for ع)
-   - If you cannot write it in Arabic, DO NOT include it
-   - All options, all steps, all hints: PURE ARABIC
+⚡ قواعد الترابط المنطقي (الأهم):
+كل خطوة يجب أن ترتبط بما قبلها وما بعدها عبر أحد هذه الأنواع:
+- سبب ← نتيجة (مثال: نار ← دخان)
+- جزء ← كل (مثال: إطار ← سيارة)
+- أداة ← استخدام (مثال: قلم ← كتابة)
+- مكان ← محتوى (مثال: مكتبة ← كتب)
+- مادة ← منتج (مثال: قمح ← خبز)
+- عملية طبيعية (مثال: بحر ← تبخر ← غيوم ← مطر ← عشب)
 
-2️⃣ CHARACTER VALIDATION:
-   - Use only valid Arabic Unicode (U+0600 to U+06FF)
-   - NO corrupted characters
-   - NO garbled text
-   - NO weird symbols or encoding errors
-   - Test: Each character should be readable Arabic
+🧠 طريقة التفكير (Chain-of-Thought):
+قبل كتابة الإجابة، فكر:
+1. ما العلاقة بين كلمة البداية والخطوة الأولى؟
+2. ما العلاقة بين كل خطوة والتي تليها؟
+3. هل السلسلة كاملة منطقية ومفهومة عالمياً؟
 
-3️⃣ PUZZLE REQUIREMENTS:
-   - Puzzle goal: Connect two Arabic words via ${min}-${max} logical steps
-   - Difficulty: ${difficulty} (level ${level})
-   - All words must be common, everyday, readable Arabic
-   - startWord/endWord: Real objects/concepts, NOT meta words
-   - FORBIDDEN words: بداية, نهاية, كلمة, خطوة, لغز, سؤال, جواب, إجابة, رابط
-   - Each step relates to BOTH previous and next (meaning/cause/use/part-whole)
-   - Avoid generic words: شيء, حاجة, مفهوم, فكرة
+📝 متطلبات اللغة:
+- عربية فصحى نقية 100% (بدون أي حرف إنجليزي)
+- كلمات يومية مألوفة (تجنب المصطلحات النادرة)
+- كلمات محظورة: بداية، نهاية، كلمة، خطوة، لغز، سؤال، جواب، رابط
 
-4️⃣ OPTIONS FORMAT:
-   - Exactly 3 options per step [correct + 2 distractors]
-   - options MUST contain step.word exactly
-   - No duplicates within a step
-   - Distractors must be plausible Arabic words in same domain
-   - All three options MUST be pure Arabic
+🎲 متطلبات الخيارات (حسب الصعوبة: ${difficulty}):
+- 3 خيارات لكل خطوة (الصحيح + 2 مشتتات)
+${difficulty === 'Hard' || difficulty === 'Expert'
+      ? '- المشتتات يجب أن تكون خادعة جداً ومن نفس المجال الدقيق (مثال: إذا الصحيح "سيارة"، المشتتات "شاحنة"، "حافلة")'
+      : '- المشتتات يجب أن تكون منطقية ولكن يمكن تمييزها (مثال: إذا الصحيح "سيارة"، المشتتات "طائرة"، "قارب")'}
+- الخيار الصحيح يجب أن يكون موجوداً في القائمة
 
-5️⃣ HINT REQUIREMENT:
-   - One general Arabic hint
-   - Helps without revealing solution
-   - Pure Arabic only
-
-OUTPUT STRICTLY:
-Return ONLY valid JSON (no Markdown, no headings, no prose):
+📤 الإخراج (JSON فقط، بدون أي نص إضافي):
 {
-  "startWord": "كلمة عربية",
-  "endWord": "كلمة عربية أخرى",
+  "startWord": "كلمة البداية",
+  "endWord": "كلمة النهاية",
   "steps": [
-    { "word": "كلمة عربية", "options": ["خيار عربي", "خيار عربي", "خيار عربي"] }
+    { "word": "خطوة 1", "options": ["خطوة 1", "مشتت 1", "مشتت 2"] }
   ],
-  "hint": "تلميح باللغة العربية النقية"
+  "hint": "تلميح يوجه دون كشف الحل",
+  "chainLogic": "نوع الترابط: سبب←نتيجة أو عملية طبيعية"
 }`;
   }
 
-  return `You generate puzzles for the game "Wonder Link" in ENGLISH.
+  // ENHANCED: Chain-of-Thought (CoT) prompting for logical coherence
+  return `You are an expert puzzle designer for "Wonder Link" game in ENGLISH.
 
-Puzzle goal: connect two semantically distant words via a chain of clear, logical intermediate steps.
+🎯 CORE MISSION:
+Connect two seemingly unrelated words through a chain of ${min}-${max} logically connected steps.
 
-Level: ${level}
-Difficulty: ${difficulty}
-Steps (steps.length): ${min}-${max}
+⚡ LOGICAL TRANSITION TYPES (Critical):
+Each step MUST connect to previous AND next via one of these:
+- Cause → Effect (fire → smoke → pollution)
+- Part → Whole (wheel → car → road)
+- Tool → Use (pen → writing → book)
+- Container → Contents (library → books → knowledge)
+- Material → Product (wheat → flour → bread)
+- Natural Process (ocean → evaporation → clouds → rain → grass → sheep)
+- Shared Domain (hospital → doctor → medicine)
 
-Hard constraints:
-- Language purity: ENGLISH ONLY. Do not mix Arabic or any other script.
-- Do not repeat or restate the question; write it once clearly.
-- startWord/endWord must be real concepts/objects, not UI/meta words (e.g., "start", "end", "word", "step", "puzzle", "question", "answer").
-- Each step must relate to BOTH the previous and next step (meaning/cause/use/part-whole/shared domain).
-- Avoid trivial links (pure synonym-only, single-letter changes, overly generic words like "thing/concept").
-- Avoid proper nouns and sensitive topics.
+🧠 CHAIN-OF-THOUGHT PROCESS:
+Before generating, reason through:
+1. What category/domain is the startWord in?
+2. What natural or logical progression leads away from it?
+3. What path can reach endWord without forced jumps?
+4. Is EVERY transition defensible and universally understood?
 
-Options for each step:
-- Exactly 3 options: [correct word + 2 plausible distractors].
-- options MUST include step.word exactly.
-- No duplicates; do not include startWord/endWord in options (unless it is the correct step.word; avoid that).
-- Distractors should match the domain and part-of-speech (convincing, not random).
+📊 QUALITY REQUIREMENTS:
+- Level: ${level} | Difficulty: ${difficulty}
+- Steps: ${min}-${max} intermediate words
+- Words: Common, everyday vocabulary (no jargon)
+- FORBIDDEN: start, end, word, step, puzzle, question, answer, link, chain
+- Test: Can an average person understand each transition?
 
-Hint:
-- A general hint that helps without revealing any solution word.
+🎲 OPTION REQUIREMENTS (Difficulty: ${difficulty}):
+- 3 options per step (1 correct + 2 distractors)
+${difficulty === 'Hard' || difficulty === 'Expert'
+      ? '- Distractors MUST be highly plausible and from exact same domain (e.g. if correct is "Car", distractors "Truck", "Bus")'
+      : '- Distractors should be reasonable but distinguishable (e.g. if correct is "Car", distractors "Plane", "Boat")'}
+- Correct option MUST be in the options array
 
-Output:
-- Return ONLY valid JSON (no Markdown, no extra text, no explanations outside JSON).
-- Do not add extra keys beyond:
+📤 OUTPUT (JSON only, no markdown):
 {
   "startWord": "...",
   "endWord": "...",
   "steps": [
     { "word": "...", "options": ["...", "...", "..."] }
   ],
-  "hint": "..."
+  "hint": "General guidance without revealing answers",
+  "chainLogic": "Transition type used (e.g., Natural Process)"
 }`;
 }
 

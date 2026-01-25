@@ -661,252 +661,307 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
       return normalizeArrowSpacing(value.toString());
     }
 
-    String indexToLetter(int index) {
-      const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-      return index < letters.length ? letters[index] : '#';
-    }
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.darkSurface.withOpacity(0.8),
+            AppColors.darkSurface.withOpacity(0.4),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.cyan.withOpacity(0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.cyan.withOpacity(0.2),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: SingleChildScrollView(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 📊 التقدم
-              if (provider.gameFinished) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.green.shade200),
-                  ),
-                  child: const Row(
-                    children: [
-                      Text('🎉 ', style: TextStyle(fontSize: 18)),
-                      Expanded(
-                        child: Text(
-                          'انتهت الجولة بالنسبة لك!',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ] else ...[
+              // 📊 Progress Header with enhanced design
+              if (!provider.gameFinished) ...[
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const Text('📊 ', style: TextStyle(fontSize: 18)),
-                    Expanded(
-                      child: Text(
-                        'السؤال $currentNumber من $totalPuzzles',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '$completedCount/$totalPuzzles',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    minHeight: 8,
-                    value: progressValue,
-                    backgroundColor: Colors.grey.shade200,
-                    color: Colors.deepPurple,
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-              // 🧩 اللغز
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('🧩 ', style: TextStyle(fontSize: 22)),
-                  Expanded(
-                    child: Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'اللغز:',
+                        Text(
+                          'السؤال $currentNumber',
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepPurple,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.cyan,
+                            letterSpacing: 0.5,
                           ),
                         ),
-                        const SizedBox(height: 6),
                         Text(
-                          question,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            height: 1.4,
+                          'من $totalPuzzles',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              if (startWord != null || endWord != null) ...[
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('🔗 ', style: TextStyle(fontSize: 22)),
-                    Expanded(
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.cyan.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.cyan.withOpacity(0.4),
+                          width: 2,
+                        ),
+                      ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'السلسلة:',
+                          Text(
+                            '$completedCount',
                             style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.cyan,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              // Show completed steps in green
-                              ...provider.completedSteps.map((word) {
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade100,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.green.shade400,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    word,
-                                    style: TextStyle(
-                                      color: Colors.green.shade900,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                );
-                              }),
-                              if (provider.completedSteps.isNotEmpty)
-                                const Icon(
-                                  Icons.arrow_forward,
-                                  size: 20,
-                                  color: Colors.orange,
-                                ),
-                              const Text(
-                                '?',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.orange,
-                                ),
-                              ),
-                              const Text(
-                                '...',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              const Icon(
-                                Icons.arrow_forward,
-                                size: 20,
-                                color: Colors.grey,
-                              ),
-                              if (endWord != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.blue.shade300,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    endWord,
-                                    style: TextStyle(
-                                      color: Colors.blue.shade900,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                            ],
+                          Text(
+                            'مكتملة',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.cyan.withOpacity(0.8),
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
-              ],
-              if (hint != null && hint.isNotEmpty) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
+                // Animated progress bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: LinearProgressIndicator(
+                    minHeight: 10,
+                    value: progressValue,
+                    backgroundColor: AppColors.darkBackground.withOpacity(0.5),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color.lerp(
+                        AppColors.magenta,
+                        AppColors.cyan,
+                        progressValue ?? 0,
+                      )!,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ] else ...[
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.shade200),
+                    color: AppColors.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.success.withOpacity(0.3),
+                      width: 2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Text('🎉', style: TextStyle(fontSize: 24)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'انتهت الجولة بالنسبة لك!',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.success,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+              // 🧩 Question Card with modern design
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.darkBackground.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppColors.magenta.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: AppColors.magenta,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'اللغز',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.magenta,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      question,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        height: 1.5,
+                        color: AppColors.textPrimary,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // 🔗 Word Chain (for word chain puzzles)
+              if (startWord != null || endWord != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.darkBackground.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.success.withOpacity(0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: AppColors.success,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'السلسلة',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.success,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            if (startWord != null)
+                              _buildWordPill(startWord, isActive: true),
+                            for (
+                              int i = 0;
+                              i < (provider.completedSteps.length);
+                              i++
+                            ) ...[
+                              _buildChainArrow(),
+                              _buildWordPill(
+                                provider.completedSteps[i],
+                                isActive: true,
+                                isCompleted: true,
+                              ),
+                            ],
+                            _buildChainArrow(),
+                            _buildWordPill(
+                              '?',
+                              isActive: true,
+                              isUnknown: true,
+                            ),
+                            _buildChainArrow(),
+                            if (endWord != null)
+                              _buildWordPill(endWord, isActive: true),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              // 💡 Hint Card
+              if (hint != null && hint.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.magenta.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.magenta.withOpacity(0.3),
+                      width: 1.5,
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('💡 ', style: TextStyle(fontSize: 18)),
+                      Text('💡', style: TextStyle(fontSize: 20)),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'تلميح:',
+                              'تلميح مفيد',
                               style: TextStyle(
                                 fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.amber.shade900,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.magenta,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 6),
                             Text(
                               hint,
                               style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.amber.shade800,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w500,
+                                height: 1.4,
                               ),
                             ),
                           ],
@@ -915,397 +970,130 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 16),
               ],
-              const SizedBox(height: 8),
-              // عداد الوقت يعرض فقط للمسؤول
-              if (provider.puzzleEndsAt != null)
-                Builder(
-                  builder: (context) {
-                    final isHost = context.watch<CompetitionProvider>().isHost;
-                    if (!isHost) return const SizedBox.shrink();
-
-                    return StreamBuilder<int>(
-                      stream: Stream.periodic(const Duration(seconds: 1), (_) {
-                        final puzzleEnd = context
-                            .read<CompetitionProvider>()
-                            .puzzleEndsAt;
-                        if (puzzleEnd == null) return 0;
-                        final now = DateTime.now();
-                        final remaining = puzzleEnd.difference(now).inSeconds;
-                        return remaining > 0 ? remaining : 0;
-                      }),
-                      builder: (context, snapshot) {
-                        final puzzleEnd = context
-                            .read<CompetitionProvider>()
-                            .puzzleEndsAt;
-                        if (puzzleEnd == null) return const SizedBox.shrink();
-                        final remaining =
-                            snapshot.data ??
-                            puzzleEnd.difference(DateTime.now()).inSeconds;
-                        final secs = remaining > 0 ? remaining : 0;
-                        return Align(
-                          alignment: Alignment.centerLeft,
-                          child: Chip(
-                            backgroundColor: secs <= 5
-                                ? Colors.red.shade100
-                                : Colors.blue.shade100,
-                            label: Text(
-                              'الوقت المتبقي: $secs ثانية',
-                              style: TextStyle(
-                                color: secs <= 5
-                                    ? Colors.red.shade800
-                                    : Colors.blue.shade800,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
+              // ⏱️ Time indicator (for host only)
+              if (provider.puzzleEndsAt != null && provider.isHost)
+                _buildTimeIndicator(context, provider),
+              // ✨ Options Grid with modern design
+              if (options.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'الخيارات المتاحة:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 0.5,
+                  ),
                 ),
-              const SizedBox(height: 12),
-              // الخيارات - عرضها أولاً قبل النتيجة
-              if (options.isNotEmpty)
-                ...options.asMap().entries.map((e) {
-                  final idx = e.key;
-                  final optText = optionValueToDisplayText(e.value);
-                  final selectedIdx = provider.selectedAnswerIndex;
-                  final lastAnswerCorrect = provider.lastAnswerCorrect;
-                  // Only show selection/result if we have an actual answer (selectedIdx != null)
-                  final hasSelection = selectedIdx != null;
-                  final hasResult = hasSelection && lastAnswerCorrect != null;
-                  final isSelected = selectedIdx == idx;
-                  final showResult = hasSelection;
-                  final badge = indexToLetter(idx);
+                const SizedBox(height: 10),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 1.8,
+                  ),
+                  itemCount: options.length,
+                  itemBuilder: (context, idx) {
+                    final optText = optionValueToDisplayText(options[idx]);
+                    final selectedIdx = provider.selectedAnswerIndex;
+                    final isSelected = selectedIdx == idx;
+                    final isCorrect = provider.lastAnswerCorrect == true;
 
-                  Color? borderColor;
-                  Color? backgroundColor;
-                  if (hasResult && isSelected) {
-                    if (lastAnswerCorrect == true) {
-                      borderColor = Colors.green;
-                      backgroundColor = Colors.green.shade50;
-                    } else {
-                      borderColor = Colors.red;
-                      backgroundColor = Colors.red.shade50;
+                    Color bgColor = AppColors.darkBackground.withOpacity(0.3);
+                    Color borderColor = AppColors.cyan.withOpacity(0.2);
+                    Color textColor = AppColors.textPrimary;
+
+                    if (isSelected) {
+                      if (isCorrect) {
+                        bgColor = AppColors.success.withOpacity(0.15);
+                        borderColor = AppColors.success;
+                      } else {
+                        bgColor = AppColors.error.withOpacity(0.15);
+                        borderColor = AppColors.error;
+                      }
                     }
-                  }
 
-                  final theme = Theme.of(context);
-                  final tileBg = backgroundColor ?? theme.colorScheme.surface;
-                  final tileBorder = borderColor ?? theme.dividerColor;
-                  final tileTextColor = showResult
-                      ? theme.colorScheme.onSurface
-                      : theme.colorScheme.onSurface;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: InkWell(
-                      onTap: showResult
-                          ? null
-                          : () async {
-                              if ((puzzle['type'] ?? 'quiz') == 'quiz') {
-                                await provider.submitQuizAnswer(idx);
-                              } else {
-                                await provider.submitAnswer([optText]);
-                              }
-                            },
-                      borderRadius: BorderRadius.circular(12),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 14,
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: borderColor,
+                          width: isSelected ? 2.5 : 1.5,
                         ),
-                        decoration: BoxDecoration(
-                          color: tileBg,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: tileBorder,
-                            width: hasResult && isSelected ? 2.2 : 1.0,
-                          ),
-                          boxShadow: isSelected && hasResult
-                              ? [
-                                  BoxShadow(
-                                    color:
-                                        (lastAnswerCorrect == true
-                                                ? Colors.greenAccent
-                                                : Colors.redAccent)
-                                            .withOpacity(0.12),
-                                    blurRadius: 14,
-                                    spreadRadius: 1,
-                                  ),
-                                ]
-                              : [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.03),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                        ),
-                        child: Directionality(
-                          textDirection: TextDirection.ltr,
-                          child: Text(
-                            '$badge) $optText',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 15,
-                              height: 1.45,
-                              fontWeight: hasResult && isSelected
-                                  ? FontWeight.w800
-                                  : FontWeight.w600,
-                              color: tileTextColor,
-                            ),
-                          ),
-                        ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: borderColor.withOpacity(0.3),
+                                  blurRadius: 8,
+                                  spreadRadius: 2,
+                                ),
+                              ]
+                            : null,
                       ),
-                    ),
-                  );
-                })
-              else
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'لم تصل خيارات لهذا السؤال بعد.',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              await provider.refreshRoomStatus();
-                            },
-                            icon: const Icon(Icons.refresh, size: 16),
-                            label: const Text('تحديث السؤال'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: borderColor.withOpacity(0.2),
+                              border: Border.all(
+                                color: borderColor,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                String.fromCharCode(65 + idx),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: borderColor,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          const Flexible(
+                          const SizedBox(height: 8),
+                          Expanded(
                             child: Text(
-                              'إذا استمر غياب الخيارات، اطلب من القائد إعادة بدء الجولة.',
+                              optText,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey,
+                                fontWeight: FontWeight.w600,
+                                color: textColor,
+                                height: 1.2,
                               ),
                             ),
                           ),
+                          if (isSelected)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Icon(
+                                isCorrect
+                                    ? Icons.check_circle_rounded
+                                    : Icons.cancel_rounded,
+                                size: 16,
+                                color: borderColor,
+                              ),
+                            ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-              // عرض النتيجة والتفسير بعد الخيارات
-              const SizedBox(height: 16),
-              if (provider.selectedAnswerIndex != null)
-                Builder(
-                  builder: (context) {
-                    final provider = context.watch<CompetitionProvider>();
-
-                    // إذا كانت النتيجة لم تصل بعد، عرض حالة الانتظار
-                    if (provider.lastAnswerCorrect == null) {
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue, width: 2),
-                        ),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.blue.shade700,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'جاري التحقق من الإجابة...',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.blue.shade800,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    // عرض النتيجة عندما تصل
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: provider.lastAnswerCorrect!
-                                ? Colors.green.shade50
-                                : Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: provider.lastAnswerCorrect!
-                                  ? Colors.green
-                                  : Colors.red,
-                              width: 2,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                provider.lastAnswerCorrect!
-                                    ? Icons.check_circle
-                                    : Icons.cancel,
-                                color: provider.lastAnswerCorrect!
-                                    ? Colors.green
-                                    : Colors.red,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                provider.lastAnswerCorrect!
-                                    ? 'إجابة صحيحة! أحسنت 🎉'
-                                    : 'إجابة خاطئة ❌',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: provider.lastAnswerCorrect!
-                                      ? Colors.green.shade800
-                                      : Colors.red.shade800,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // عرض الإجابة الصحيحة
-                        if (provider.lastAnswerCorrect == false &&
-                            provider.correctAnswerIndex != null &&
-                            options.isNotEmpty) ...[
-                          Builder(
-                            builder: (context) {
-                              final correctIdx = provider.correctAnswerIndex!;
-                              final correctLetter = indexToLetter(correctIdx);
-                              final correctText = optionValueToDisplayText(
-                                options[correctIdx],
-                              );
-                              return Container(
-                                padding: const EdgeInsets.all(12),
-                                margin: const EdgeInsets.only(bottom: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.green.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      '✅ ',
-                                      style: TextStyle(fontSize: 18),
-                                    ),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'الإجابة الصحيحة:',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.green.shade900,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '$correctLetter) $correctText',
-                                            textDirection: TextDirection.ltr,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.green.shade800,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                        // 🧠 التفسير
-                        if (puzzle['explanation'] != null &&
-                            puzzle['explanation'].toString().isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.blue.shade200),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '🧠 ',
-                                  style: TextStyle(fontSize: 20),
-                                ),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'التفسير:',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.blue.shade900,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        puzzle['explanation'].toString(),
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.blue.shade800,
-                                          height: 1.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
                     );
                   },
                 ),
+              ],
             ],
           ),
         ),
@@ -1313,267 +1101,367 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     );
   }
 
-  Drawer _buildLobbyDrawer(
-    BuildContext context,
-    Map<String, dynamic> room,
-    CompetitionProvider provider,
-    bool isHost,
-  ) {
-    return Drawer(
-      backgroundColor: AppColors.darkSurface,
-      child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          children: [
-            if (isHost)
-              ListTile(
-                leading: Icon(Icons.settings, color: AppColors.cyan),
-                title: const Text('إعدادات الغرفة'),
-                onTap: () {
-                  Navigator.of(context).maybePop();
-                  _pushSettings(context, provider, room);
-                },
-              ),
-            ListTile(
-              leading: Icon(Icons.copy_rounded, color: AppColors.magenta),
-              title: const Text('نسخ كود الغرفة'),
-              onTap: () {
-                final code = room['code'] ?? '';
-                Clipboard.setData(ClipboardData(text: code)).then((_) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('تم نسخ الكود: $code'),
-                        backgroundColor: AppColors.cyan.withOpacity(0.8),
-                      ),
-                    );
-                  }
-                });
-                Navigator.of(context).maybePop();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.refresh_rounded, color: AppColors.cyan),
-              title: const Text('تحديث الغرفة'),
-              onTap: () {
-                Navigator.of(context).maybePop();
-                provider.refreshRoomStatus();
-              },
-            ),
-            if (isHost)
-              ListTile(
-                leading: Icon(
-                  Icons.delete_forever_rounded,
-                  color: AppColors.error,
-                ),
-                title: const Text('حذف الغرفة'),
-                onTap: () {
-                  Navigator.of(context).maybePop();
-                  _confirmDeleteRoom(context);
-                },
-              ),
-            ListTile(
-              leading: Icon(Icons.logout_rounded, color: AppColors.error),
-              title: const Text('مغادرة'),
-              onTap: () {
-                Navigator.of(context).maybePop();
-                provider.leaveRoom();
-              },
-            ),
-          ],
+  // Helper method: Build word pill for chain display
+  Widget _buildWordPill(
+    String word, {
+    bool isActive = false,
+    bool isCompleted = false,
+    bool isUnknown = false,
+  }) {
+    Color bgColor = AppColors.darkBackground.withOpacity(0.5);
+    Color textColor = AppColors.textSecondary;
+    Color borderColor = AppColors.textSecondary.withOpacity(0.3);
+
+    if (isCompleted) {
+      bgColor = AppColors.success.withOpacity(0.15);
+      textColor = AppColors.success;
+      borderColor = AppColors.success.withOpacity(0.4);
+    } else if (isUnknown) {
+      bgColor = AppColors.magenta.withOpacity(0.1);
+      textColor = AppColors.magenta;
+      borderColor = AppColors.magenta.withOpacity(0.3);
+    } else if (isActive) {
+      bgColor = AppColors.cyan.withOpacity(0.1);
+      textColor = AppColors.cyan;
+      borderColor = AppColors.cyan.withOpacity(0.3);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor, width: 1.5),
+      ),
+      child: Text(
+        word,
+        style: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.w700,
+          fontSize: 13,
+          letterSpacing: 0.5,
         ),
       ),
     );
   }
 
-  void _pushSettings(
-    BuildContext context,
-    CompetitionProvider provider,
-    Map<String, dynamic>? room,
-  ) {
-    if (room == null) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => RoomSettingsView(
-          roomId: room['id'] as int,
-          isCreator: provider.isHost,
-        ),
+  // Helper method: Build arrow for chain
+  Widget _buildChainArrow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Icon(
+        Icons.arrow_forward_rounded,
+        size: 18,
+        color: AppColors.cyan.withOpacity(0.5),
       ),
     );
   }
 
-  void _showSettingsDialog(BuildContext context) {
-    final provider = context.read<CompetitionProvider>();
-    final room = provider.currentRoom;
+  // Helper method: Build time indicator
+  Widget _buildTimeIndicator(
+    BuildContext context,
+    CompetitionProvider provider,
+  ) {
+    return StreamBuilder<int>(
+      stream: Stream.periodic(const Duration(seconds: 1), (_) {
+        final puzzleEnd = provider.puzzleEndsAt;
+        if (puzzleEnd == null) return 0;
+        final remaining = puzzleEnd.difference(DateTime.now()).inSeconds;
+        return remaining > 0 ? remaining : 0;
+      }),
+      builder: (context, snapshot) {
+        final remaining = snapshot.data ?? 0;
+        final isLowTime = remaining <= 5;
 
-    if (room == null) return;
-
-    _pushSettings(context, provider, room);
-  }
-
-  void _confirmDeleteRoom(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('حذف المجموعة'),
-        content: const Text(
-          'هل أنت متأكد من رغبتك في حذف المجموعة نهائياً؟ سيتم طرد جميع الأعضاء.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isLowTime
+                ? AppColors.error.withOpacity(0.15)
+                : AppColors.cyan.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isLowTime
+                  ? AppColors.error.withOpacity(0.4)
+                  : AppColors.cyan.withOpacity(0.3),
+              width: 1.5,
+            ),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(context); // Close dialog
-              await context.read<CompetitionProvider>().deleteRoom();
-              if (context.mounted) {
-                Navigator.pop(context); // Exit room view
-              }
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.schedule_rounded,
+                size: 16,
+                color: isLowTime ? AppColors.error : AppColors.cyan,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'الوقت المتبقي: $remaining ثانية',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isLowTime ? AppColors.error : AppColors.cyan,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+Drawer _buildLobbyDrawer(
+  BuildContext context,
+  Map<String, dynamic> room,
+  CompetitionProvider provider,
+  bool isHost,
+) {
+  return Drawer(
+    backgroundColor: AppColors.darkSurface,
+    child: SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        children: [
+          if (isHost)
+            ListTile(
+              leading: Icon(Icons.settings, color: AppColors.cyan),
+              title: const Text('إعدادات الغرفة'),
+              onTap: () {
+                Navigator.of(context).maybePop();
+                _pushSettings(context, provider, room);
+              },
+            ),
+          ListTile(
+            leading: Icon(Icons.copy_rounded, color: AppColors.magenta),
+            title: const Text('نسخ كود الغرفة'),
+            onTap: () {
+              final code = room['code'] ?? '';
+              Clipboard.setData(ClipboardData(text: code)).then((_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('تم نسخ الكود: $code'),
+                      backgroundColor: AppColors.cyan.withOpacity(0.8),
+                    ),
+                  );
+                }
+              });
+              Navigator.of(context).maybePop();
             },
-            child: const Text('حذف', style: TextStyle(color: Colors.white)),
+          ),
+          ListTile(
+            leading: Icon(Icons.refresh_rounded, color: AppColors.cyan),
+            title: const Text('تحديث الغرفة'),
+            onTap: () {
+              Navigator.of(context).maybePop();
+              provider.refreshRoomStatus();
+            },
+          ),
+          if (isHost)
+            ListTile(
+              leading: Icon(
+                Icons.delete_forever_rounded,
+                color: AppColors.error,
+              ),
+              title: const Text('حذف الغرفة'),
+              onTap: () {
+                Navigator.of(context).maybePop();
+                _confirmDeleteRoom(context);
+              },
+            ),
+          ListTile(
+            leading: Icon(Icons.logout_rounded, color: AppColors.error),
+            title: const Text('مغادرة'),
+            onTap: () {
+              Navigator.of(context).maybePop();
+              provider.leaveRoom();
+            },
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
-  void _showGameResults(BuildContext context, CompetitionProvider provider) {
-    final participants = provider.roomParticipants;
+void _pushSettings(
+  BuildContext context,
+  CompetitionProvider provider,
+  Map<String, dynamic>? room,
+) {
+  if (room == null) return;
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => RoomSettingsView(
+        roomId: room['id'] as int,
+        isCreator: provider.isHost,
+      ),
+    ),
+  );
+}
 
-    // ترتيب المشاركين حسب النقاط
-    final sortedParticipants = List<Map<String, dynamic>>.from(participants);
-    sortedParticipants.sort((a, b) {
-      final scoreA = (a['score'] as num?)?.toInt() ?? 0;
-      final scoreB = (b['score'] as num?)?.toInt() ?? 0;
-      if (scoreA != scoreB) return scoreB.compareTo(scoreA);
-
-      final solvedA = (a['puzzles_solved'] as num?)?.toInt() ?? 0;
-      final solvedB = (b['puzzles_solved'] as num?)?.toInt() ?? 0;
-      if (solvedA != solvedB) return solvedB.compareTo(solvedA);
-
-      final nameA = a['username']?.toString() ?? '';
-      final nameB = b['username']?.toString() ?? '';
-      return nameA.compareTo(nameB);
-    });
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.emoji_events, color: Colors.amber.shade700, size: 28),
-            const SizedBox(width: 8),
-            const Text('نتائج اللعبة 🎉'),
-          ],
+void _confirmDeleteRoom(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('حذف المجموعة'),
+      content: const Text(
+        'هل أنت متأكد من رغبتك في حذف المجموعة نهائياً؟ سيتم طرد جميع الأعضاء.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
         ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'تهانينا للجميع! إليكم النتائج النهائية:',
-                style: TextStyle(fontSize: 14),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ListView.builder(
-                shrinkWrap: true,
-                itemCount: sortedParticipants.length,
-                itemBuilder: (context, index) {
-                  final participant = sortedParticipants[index];
-                  final username =
-                      participant['username']?.toString() ?? 'لاعب';
-                  final score = (participant['score'] as num?)?.toInt() ?? 0;
-                  final puzzlesSolved =
-                      (participant['puzzles_solved'] as num?)?.toInt() ?? 0;
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () async {
+            Navigator.pop(context); // Close dialog
+            await context.read<CompetitionProvider>().deleteRoom();
+            if (context.mounted) {
+              Navigator.pop(context); // Exit room view
+            }
+          },
+          child: const Text('حذف', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+}
 
-                  Color? rankColor;
-                  IconData? rankIcon;
-                  if (index == 0) {
-                    rankColor = Colors.amber.shade700;
-                    rankIcon = Icons.emoji_events;
-                  } else if (index == 1) {
-                    rankColor = Colors.grey.shade600;
-                    rankIcon = Icons.emoji_events;
-                  } else if (index == 2) {
-                    rankColor = Colors.brown.shade600;
-                    rankIcon = Icons.emoji_events;
-                  }
+void _showGameResults(BuildContext context, CompetitionProvider provider) {
+  final participants = provider.roomParticipants;
 
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: index == 0 ? Colors.amber.shade50 : null,
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: rankColor ?? Colors.blue,
-                        child: rankIcon != null
-                            ? Icon(rankIcon, color: Colors.white, size: 20)
-                            : Text(
-                                '${index + 1}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
+  // ترتيب المشاركين حسب النقاط
+  final sortedParticipants = List<Map<String, dynamic>>.from(participants);
+  sortedParticipants.sort((a, b) {
+    final scoreA = (a['score'] as num?)?.toInt() ?? 0;
+    final scoreB = (b['score'] as num?)?.toInt() ?? 0;
+    if (scoreA != scoreB) return scoreB.compareTo(scoreA);
+
+    final solvedA = (a['puzzles_solved'] as num?)?.toInt() ?? 0;
+    final solvedB = (b['puzzles_solved'] as num?)?.toInt() ?? 0;
+    if (solvedA != solvedB) return solvedB.compareTo(solvedA);
+
+    final nameA = a['username']?.toString() ?? '';
+    final nameB = b['username']?.toString() ?? '';
+    return nameA.compareTo(nameB);
+  });
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.emoji_events, color: Colors.amber.shade700, size: 28),
+          const SizedBox(width: 8),
+          const Text('نتائج اللعبة 🎉'),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'تهانينا للجميع! إليكم النتائج النهائية:',
+              style: TextStyle(fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ListView.builder(
+              shrinkWrap: true,
+              itemCount: sortedParticipants.length,
+              itemBuilder: (context, index) {
+                final participant = sortedParticipants[index];
+                final username = participant['username']?.toString() ?? 'لاعب';
+                final score = (participant['score'] as num?)?.toInt() ?? 0;
+                final puzzlesSolved =
+                    (participant['puzzles_solved'] as num?)?.toInt() ?? 0;
+
+                Color? rankColor;
+                IconData? rankIcon;
+                if (index == 0) {
+                  rankColor = Colors.amber.shade700;
+                  rankIcon = Icons.emoji_events;
+                } else if (index == 1) {
+                  rankColor = Colors.grey.shade600;
+                  rankIcon = Icons.emoji_events;
+                } else if (index == 2) {
+                  rankColor = Colors.brown.shade600;
+                  rankIcon = Icons.emoji_events;
+                }
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  color: index == 0 ? Colors.amber.shade50 : null,
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: rankColor ?? Colors.blue,
+                      child: rankIcon != null
+                          ? Icon(rankIcon, color: Colors.white, size: 20)
+                          : Text(
+                              '${index + 1}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
+                            ),
+                    ),
+                    title: Text(
+                      username,
+                      style: TextStyle(
+                        fontWeight: index == 0
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        fontSize: index == 0 ? 16 : 14,
                       ),
-                      title: Text(
-                        username,
+                    ),
+                    subtitle: Text('$puzzlesSolved ألغاز محلولة'),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            rankColor?.withOpacity(0.2) ?? Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$score نقطة',
                         style: TextStyle(
-                          fontWeight: index == 0
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          fontSize: index == 0 ? 16 : 14,
-                        ),
-                      ),
-                      subtitle: Text('$puzzlesSolved ألغاز محلولة'),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color:
-                              rankColor?.withOpacity(0.2) ??
-                              Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '$score نقطة',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: rankColor ?? Colors.blue.shade800,
-                            fontSize: 14,
-                          ),
+                          fontWeight: FontWeight.bold,
+                          color: rankColor ?? Colors.blue.shade800,
+                          fontSize: 14,
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إغلاق'),
-          ),
-          if (provider.isHost)
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                provider.reopenRoom();
+                  ),
+                );
               },
-              child: const Text('لعب مرة أخرى'),
             ),
-        ],
+          ],
+        ),
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إغلاق'),
+        ),
+        if (provider.isHost)
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              provider.reopenRoom();
+            },
+            child: const Text('لعب مرة أخرى'),
+          ),
+      ],
+    ),
+  );
 }

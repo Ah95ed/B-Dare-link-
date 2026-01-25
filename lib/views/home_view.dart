@@ -11,6 +11,7 @@ import 'admin/admin_page.dart';
 import 'competitions/competitions_view.dart';
 import 'groups/create_group_view.dart';
 import 'groups/join_group_view.dart';
+import 'modes/reality_camera_view.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
@@ -180,7 +181,7 @@ class HomeView extends StatelessWidget {
                               },
                               icon: Icon(Icons.play_circle_fill),
                               label: Text(
-                                isArabic ? "المراحل" : "Levels",
+                                isArabic ? "اللعب الفردي" : "Levels",
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -204,6 +205,52 @@ class HomeView extends StatelessWidget {
                                     width: 2,
                                   ),
                                 ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Reality Camera Button
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                PageRouteBuilder(
+                                  pageBuilder: (_, __, ___) =>
+                                      const RealityCameraView(),
+                                  transitionsBuilder:
+                                      (_, animation, __, child) {
+                                        return FadeTransition(
+                                          opacity: animation,
+                                          child: child,
+                                        );
+                                      },
+                                ),
+                              );
+                            },
+                            icon: Icon(Icons.camera_alt),
+                            label: Text(
+                              isArabic
+                                  ? "اللعب بالواقع المعزز"
+                                  : "Augmented Reality",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Color(0xFF9B5DE5),
+                              foregroundColor: Colors.white,
+                              elevation: 10,
+                              shadowColor: Color(0xFF9B5DE5).withOpacity(0.35),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 40,
+                                vertical: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
                               ),
                             ),
                           ),

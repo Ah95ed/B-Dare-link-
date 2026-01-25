@@ -1,0 +1,39 @@
+
+  Future<bool> generatePuzzleFromImage(File image, bool isArabic) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final puzzle = await _apiService.generatePuzzleFromImage(image, isArabic);
+      if (puzzle != null && _isValidPuzzle(puzzle)) {
+        // Create a temporary level for this unique puzzle
+        final tempPuzzles = [puzzle];
+        _currentLevel = GameLevel(id: 999, puzzles: tempPuzzles); // ID 999 for custom
+        _currentPuzzleIndex = 0;
+        _loadPuzzle();
+        _lives = 3;
+        _score = 0;
+        _isGameOver = false;
+        _errorMessage = null;
+        _isLevelComplete = false;
+        _timeLimit = 60; // Standard minute for special puzzle
+        
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+      
+      _errorMessage = isArabic 
+        ? "فشل في توليد لغز من الصورة" 
+        : "Failed to generate puzzle from image";
+      _isLoading = false;
+      notifyListeners();
+      return false;
+      
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }

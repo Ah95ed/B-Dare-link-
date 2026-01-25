@@ -9,6 +9,10 @@ import 'controllers/game_provider.dart';
 import 'controllers/locale_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/competition_provider.dart';
+import 'providers/rewards_provider.dart';
+import 'providers/avatar_provider.dart';
+import 'providers/tournament_provider.dart';
+import 'providers/story_provider.dart';
 import 'l10n/app_localizations.dart';
 
 void main() {
@@ -90,6 +94,10 @@ class WonderLinkApp extends StatelessWidget {
           create: (_) => CompetitionProvider(),
           update: (_, auth, competition) => competition!..setAuthProvider(auth),
         ),
+        ChangeNotifierProvider(create: (_) => RewardsProvider()),
+        ChangeNotifierProvider(create: (_) => AvatarProvider()),
+        ChangeNotifierProvider(create: (_) => TournamentProvider()),
+        ChangeNotifierProvider(create: (_) => StoryProvider()),
       ],
       child: DeepLinkHandler(
         child: Consumer<LocaleProvider>(

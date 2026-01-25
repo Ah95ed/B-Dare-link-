@@ -14,7 +14,7 @@ class MultipleChoiceGameWidget extends StatefulWidget {
 class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
   // Track current step index user is solving
   int _currentStepIndex = 0;
-  List<String> _currentOptions = [];
+  final List<String> _currentOptions = [];
   // Track provider and last puzzle key to detect changes
   late final GameProvider? _provider;
   String? _lastPuzzleKey;
@@ -34,15 +34,12 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
   @override
   void didUpdateWidget(covariant MultipleChoiceGameWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _generateOptions();
+    _onProviderChanged();
   }
 
   @override
   void dispose() {
-    // Clean up provider listener
-    try {
-      _provider?.removeListener(_onProviderChanged);
-    } catch (_) {}
+    _provider?.removeListener(_onProviderChanged);
     super.dispose();
   }
 
@@ -53,7 +50,6 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     final puzzle = provider.currentPuzzle;
     if (puzzle == null) return;
 
-    // Build a simple key to detect puzzle identity changes
     final isArabic =
         Provider.of<LocaleProvider>(
           context,
@@ -64,7 +60,7 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     final end = isArabic ? puzzle.endWordAr : puzzle.endWordEn;
     final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
     final key =
-        '$start|$end|${steps.length}|${steps.map((s) => s.word).join(',')}';
+        '${provider.currentPuzzleIndex}|$start|$end|${steps.length}|${steps.map((s) => s.word).join(',')}';
 
     if (key != _lastPuzzleKey) {
       _lastPuzzleKey = key;
@@ -107,7 +103,9 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     }
 
     setState(() {
-      _currentOptions = options;
+      _currentOptions
+        ..clear()
+        ..addAll(options);
       // Options are already shuffled by backend, but we can shuffle again to be safe
       _currentOptions.shuffle();
     });
@@ -233,7 +231,10 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
               const SizedBox(height: 16),
               Text(
                 isArabic ? "تم إكمال المرحلة!" : "Level Complete!",
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -275,6 +276,12 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     }
 
     final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
+    final startWord = isArabic ? puzzle.startWordAr : puzzle.startWordEn;
+    final endWord = isArabic ? puzzle.endWordAr : puzzle.endWordEn;
+    final hint = isArabic ? puzzle.hintAr : puzzle.hintEn;
+    final questionText = isArabic
+        ? 'ما الرابط بين "$startWord" و"$endWord"؟'
+        : 'What links "$startWord" and "$endWord"?';
 
     // Safety check if we switched puzzles and index is out of bounds
     if (_currentStepIndex > steps.length) _currentStepIndex = 0;
@@ -283,103 +290,179 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
-          // Path Visualization
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildNode(
-                isArabic ? puzzle.startWordAr : puzzle.startWordEn,
-                true,
-              ),
-              ...List.generate(steps.length, (index) {
-                String text = (index < _currentStepIndex)
-                    ? steps[index].word
-                    : "?";
-                bool isSolved = index < _currentStepIndex;
-                bool isCurrent = index == _currentStepIndex;
-                return Expanded(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Divider(
-                          thickness: 2,
-                          color: isSolved ? Colors.green : Colors.grey,
-                        ),
-                      ),
-                      _buildStepNode(text, isSolved, isCurrent),
-                      Expanded(
-                        child: Divider(
-                          thickness: 2,
-                          color: (index == steps.length - 1 && isSolved)
-                              ? Colors.green
-                              : Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-              _buildNode(isArabic ? puzzle.endWordAr : puzzle.endWordEn, true),
-            ],
-          ),
-
-          const Spacer(),
-
-          // Questions Area
+          // Question & Options Area (Modern Card)
           if (_currentStepIndex < steps.length &&
               _currentOptions.isNotEmpty) ...[
-            Text(
-              isArabic ? "اختر الخطوة القادمة:" : "Choose the next step:",
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-
-            // Using GridView for better organization "خطأ تنظيمي"
-            SizedBox(
-              height: 250, // Fixed height for options area
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, // 2 items per row = clean layout
-                  childAspectRatio: 2.5, // rectangular buttons
-                  crossAxisSpacing: 15,
-                  mainAxisSpacing: 15,
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.blueGrey.shade900.withOpacity(0.9),
+                    Colors.blueGrey.shade800.withOpacity(0.6),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                itemCount: _currentOptions.length,
-                itemBuilder: (context, index) {
-                  final word = _currentOptions[index];
-                  return ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.cyanAccent.withOpacity(0.25),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    questionText,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.start,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isArabic
+                        ? 'اختر الخيار الصحيح لإكمال الرابط'
+                        : 'Choose the correct option to complete the link',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.cyanAccent.withOpacity(0.8),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (hint.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.cyanAccent.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.cyanAccent.withOpacity(0.25),
+                        ),
                       ),
-                      textStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('💡', style: TextStyle(fontSize: 18)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              hint,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                height: 1.4,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    onPressed: () => _handleOptionSelected(word),
-                    child: Text(
-                      word,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                },
+                  ],
+                  const SizedBox(height: 16),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 2.4,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                    itemCount: _currentOptions.length,
+                    itemBuilder: (context, index) {
+                      final word = _currentOptions[index];
+                      final letter = String.fromCharCode(65 + index);
+                      final chainWords = List<String>.from(
+                        steps.map((s) => s.word),
+                      );
+                      if (_currentStepIndex < chainWords.length) {
+                        chainWords[_currentStepIndex] = word;
+                      }
+                      final chainText = chainWords.join(' → ');
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => _handleOptionSelected(word),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.12),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 28,
+                                height: 28,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.cyanAccent.withOpacity(0.15),
+                                  border: Border.all(
+                                    color: Colors.cyanAccent.withOpacity(0.6),
+                                  ),
+                                ),
+                                child: Text(
+                                  letter,
+                                  style: const TextStyle(
+                                    color: Colors.cyanAccent,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  chainText,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    height: 1.2,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
           ],
 
-          const Spacer(),
+          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildNode(String text, bool isEnd) {
+  Widget buildNode(String text, bool isEnd) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -396,7 +479,7 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     );
   }
 
-  Widget _buildStepNode(String text, bool isSolved, bool isCurrent) {
+  Widget buildStepNode(String text, bool isSolved, bool isCurrent) {
     return Container(
       width: 50,
       height: 50,

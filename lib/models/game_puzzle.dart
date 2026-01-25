@@ -22,6 +22,31 @@ class GamePuzzle {
     this.hintAr = "",
     this.hintEn = "",
   });
+
+  factory GamePuzzle.fromJson(Map<String, dynamic> json) {
+    return GamePuzzle(
+      puzzleId: json['puzzleId']?.toString(),
+      startWordAr:
+          json['startWordAr'] ??
+          json['startWord'] ??
+          '', // Fallback to startWord if Ar specific not present
+      endWordAr: json['endWordAr'] ?? json['endWord'] ?? '',
+      stepsAr:
+          (json['stepsAr'] ?? json['steps'] as List?)
+              ?.map((s) => PuzzleStep.fromJson(s))
+              .toList() ??
+          [],
+      startWordEn: json['startWordEn'] ?? json['startWord'] ?? '',
+      endWordEn: json['endWordEn'] ?? json['endWord'] ?? '',
+      stepsEn:
+          (json['stepsEn'] ?? json['steps'] as List?)
+              ?.map((s) => PuzzleStep.fromJson(s))
+              .toList() ??
+          [],
+      hintAr: json['hintAr'] ?? json['hint'] ?? '',
+      hintEn: json['hintEn'] ?? json['hint'] ?? '',
+    );
+  }
 }
 
 class PuzzleStep {
@@ -33,4 +58,11 @@ class PuzzleStep {
   // Helper for simple string list compatibility if needed
   static PuzzleStep fromSimple(String word) =>
       PuzzleStep(word: word, options: []);
+
+  factory PuzzleStep.fromJson(Map<String, dynamic> json) {
+    return PuzzleStep(
+      word: json['word'] ?? '',
+      options: List<String>.from(json['options'] ?? []),
+    );
+  }
 }

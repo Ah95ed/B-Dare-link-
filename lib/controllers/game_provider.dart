@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'dart:async'; // Added for Timer
 import '../models/game_round.dart';
 import '../models/game_level.dart';
@@ -12,6 +13,11 @@ enum GameMode { multipleChoice, gridPath, dragDrop, fillBlank }
 class GameProvider extends ChangeNotifier {
   final CloudflareApiService _apiService = CloudflareApiService();
   AuthProvider? _authProvider;
+
+  // Session-persistent set to prevent puzzle repetition across levels
+  // This is loaded from SharedPreferences on startup and persisted on updates
+  final Set<String> _sessionSeenPuzzleKeys = {};
+  static const String _seenPuzzleKeysStorageKey = 'seen_puzzle_keys';
 
   void updateAuthProvider(AuthProvider auth) {
     _authProvider = auth;
@@ -131,7 +137,24 @@ class GameProvider extends ChangeNotifier {
   Future<void> _loadProgress() async {
     final prefs = await SharedPreferences.getInstance();
     _unlockedLevelId = prefs.getInt('unlockedLevelId') ?? 1;
+
+    // Load persisted seen puzzle keys
+    final savedKeys = prefs.getStringList(_seenPuzzleKeysStorageKey);
+    if (savedKeys != null) {
+      _sessionSeenPuzzleKeys.addAll(savedKeys);
+    }
+
     notifyListeners();
+  }
+
+  Future<void> _saveSeenPuzzleKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Keep only the last 500 keys to avoid unlimited storage growth
+    final keysToSave = _sessionSeenPuzzleKeys.toList();
+    if (keysToSave.length > 500) {
+      keysToSave.removeRange(0, keysToSave.length - 500);
+    }
+    await prefs.setStringList(_seenPuzzleKeysStorageKey, keysToSave);
   }
 
   Future<void> _saveProgress(
@@ -179,30 +202,22 @@ class GameProvider extends ChangeNotifier {
   bool get isGameOver => _isGameOver;
 
   int _timeLimitForLevel(int levelId) {
-    final tier = ((levelId - 1) % 100) ~/ 10 + 1; // 1..10
-    switch (tier) {
-      case 1:
-        return 60;
-      case 2:
-        return 55;
-      case 3:
-        return 50;
-      case 4:
-        return 45;
-      case 5:
-        return 40;
-      case 6:
-        return 35;
-      case 7:
-        return 30;
-      default:
-        return 25;
-    }
+    // Progressive time limits based on level ranges
+    if (levelId <= 10) return 60; // Beginner: 60 seconds
+    if (levelId <= 20) return 55; // Early: 55 seconds
+    if (levelId <= 30) return 50; // Intermediate: 50 seconds
+    if (levelId <= 40) return 45; // Advanced: 45 seconds
+    if (levelId <= 50) return 40; // Expert: 40 seconds
+    if (levelId <= 75) return 35; // Master: 35 seconds
+    return 30; // Legend: 30 seconds
   }
 
   int _desiredPuzzlesForLevel(int levelId) {
-    final tier = ((levelId - 1) % 100) ~/ 10 + 1;
-    return tier <= 3 ? 3 : 5;
+    // Progressive puzzle count based on level ranges
+    if (levelId <= 10) return 3; // Beginner: 3 puzzles
+    if (levelId <= 30) return 4; // Intermediate: 4 puzzles
+    if (levelId <= 50) return 5; // Advanced: 5 puzzles
+    return 6; // Expert+: 6 puzzles
   }
 
   void startNewGame(String start, String end) {
@@ -274,7 +289,7 @@ class GameProvider extends ChangeNotifier {
       final int desiredCount = _desiredPuzzlesForLevel(level.id);
       const int maxAttempts = 8; // keep loading fast
       int attempts = 0;
-      final seenKeys = <String>{};
+      final seenKeys = _sessionSeenPuzzleKeys; // Use session-persistent set
 
       while (generatedPuzzles.length < desiredCount && attempts < maxAttempts) {
         final remaining = desiredCount - generatedPuzzles.length;
@@ -316,6 +331,9 @@ class GameProvider extends ChangeNotifier {
 
       // Update the level with new puzzles
       _currentLevel = GameLevel(id: level.id, puzzles: generatedPuzzles);
+
+      // Persist seen puzzle keys to prevent repetition after app restart
+      _saveSeenPuzzleKeys();
     } else {
       _currentLevel = level;
     }
@@ -513,8 +531,50 @@ class GameProvider extends ChangeNotifier {
     });
   }
 
+  Future<bool> generatePuzzleFromImage(File image, bool isArabic) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final puzzle = await _apiService.generatePuzzleFromImage(image, isArabic);
+      if (puzzle != null && _isValidPuzzle(puzzle)) {
+        // Create a temporary level for this unique puzzle
+        final tempPuzzles = [puzzle];
+        _currentLevel = GameLevel(
+          id: 999,
+          puzzles: tempPuzzles,
+        ); // ID 999 for custom
+        _currentPuzzleIndex = 0;
+        _loadPuzzle();
+        _lives = 3;
+        _score = 0;
+        _isGameOver = false;
+        _errorMessage = null;
+        _isLevelComplete = false;
+        _timeLimit = 60; // Standard minute for special puzzle
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      _errorMessage = isArabic
+          ? "فشل في توليد لغز من الصورة"
+          : "Failed to generate puzzle from image";
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   @override
   void dispose() {
+    _authProvider = null;
     _timer?.cancel();
     super.dispose();
   }

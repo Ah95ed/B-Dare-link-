@@ -4,7 +4,7 @@ import '../models/game_level.dart';
 import '../data/level_data.dart';
 import '../controllers/game_provider.dart';
 import '../controllers/locale_provider.dart';
-import 'game_mode_selection_view.dart';
+import 'game_play_view.dart';
 
 class LevelsView extends StatelessWidget {
   const LevelsView({super.key});
@@ -18,7 +18,7 @@ class LevelsView extends StatelessWidget {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
-          isArabic ? "المراحل" : "Levels",
+          isArabic ? "اللعب الفردي" : "Levels",
           style: TextStyle(
             fontWeight: FontWeight.w900,
             letterSpacing: 1,
@@ -107,11 +107,14 @@ class LevelsView extends StatelessWidget {
                 context,
                 listen: false,
               ).loadLevel(level, isArabic);
+              Provider.of<GameProvider>(
+                context,
+                listen: false,
+              ).setGameMode(GameMode.multipleChoice);
               Navigator.push(
                 context,
                 PageRouteBuilder(
-                  pageBuilder: (_, __, ___) =>
-                      GameModeSelectionView(level: level, isArabic: isArabic),
+                  pageBuilder: (_, __, ___) => const GamePlayView(),
                   transitionsBuilder: (_, animation, __, child) {
                     return FadeTransition(opacity: animation, child: child);
                   },

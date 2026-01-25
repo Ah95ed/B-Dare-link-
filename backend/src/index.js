@@ -4,6 +4,8 @@ import { register, login, getUserFromRequest, updateProfile, deleteAccount, rese
 import { getProgress, saveProgress } from './progress.js';
 import { generateLevel, submitSolution } from './game.js';
 import { listPuzzles, deletePuzzle, regeneratePuzzle, generateBulkPuzzles } from './admin.js';
+import { getDailyChallenge, submitDailyScore, getDailyLeaderboard, getWeeklyStandings } from './tournament.js';
+import { generatePuzzleFromImage } from './vision.js';
 import {
   createRoom,
   joinRoom,
@@ -99,6 +101,11 @@ export default {
         return await submitSolution(request, env, CORS_HEADERS);
       }
 
+      // ---------- Vision (Reality Mode) ----------
+      if (path === '/api/generate-from-image' && request.method === 'POST') {
+        return await generatePuzzleFromImage(request, env);
+      }
+
       // ---------- Admin ----------
       if (path.startsWith('/admin/puzzles')) {
         if (request.method === 'GET') return await listPuzzles(request, env);
@@ -111,7 +118,19 @@ export default {
         return await generateBulkPuzzles(request, env, CORS_HEADERS);
       }
 
-      // ---------- Competitions & Rooms ----------
+      // ---------- Tournaments ----------
+      if (path === '/tournament/daily' && request.method === 'GET') {
+        return await getDailyChallenge(request, env);
+      }
+      if (path === '/tournament/daily/submit' && request.method === 'POST') {
+        return await submitDailyScore(request, env);
+      }
+      if (path === '/tournament/daily/leaderboard' && request.method === 'GET') {
+        return await getDailyLeaderboard(request, env);
+      }
+      if (path === '/tournament/weekly' && request.method === 'GET') {
+        return await getWeeklyStandings(request, env);
+      }
       if (path === '/competitions' || path === '/api/competitions/active') {
         if (request.method === 'GET') {
           return await getActiveCompetitions(request, env);
