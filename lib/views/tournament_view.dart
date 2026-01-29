@@ -4,6 +4,7 @@ import '../providers/tournament_provider.dart';
 import '../providers/auth_provider.dart';
 import '../controllers/locale_provider.dart';
 import '../core/app_colors.dart';
+import '../l10n/app_localizations.dart';
 
 /// Tournament view with daily challenge and leaderboards
 class TournamentView extends StatefulWidget {
@@ -49,12 +50,13 @@ class _TournamentViewState extends State<TournamentView>
     final tournament = context.watch<TournamentProvider>();
     final isArabic =
         context.watch<LocaleProvider>().locale.languageCode == 'ar';
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
       appBar: AppBar(
         title: Text(
-          isArabic ? 'البطولات' : 'Tournaments',
+          l10n.tournaments,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.transparent,
@@ -66,8 +68,8 @@ class _TournamentViewState extends State<TournamentView>
           labelColor: AppColors.cyan,
           unselectedLabelColor: AppColors.textSecondary,
           tabs: [
-            Tab(text: isArabic ? 'اليومي' : 'Daily'),
-            Tab(text: isArabic ? 'الأسبوعي' : 'Weekly'),
+            Tab(text: l10n.daily),
+            Tab(text: l10n.weekly),
           ],
         ),
       ),
@@ -82,6 +84,7 @@ class _TournamentViewState extends State<TournamentView>
   }
 
   Widget _buildDailyTab(TournamentProvider tournament, bool isArabic) {
+    final l10n = AppLocalizations.of(context)!;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -110,7 +113,7 @@ class _TournamentViewState extends State<TournamentView>
                     Icon(Icons.today, color: AppColors.cyan, size: 28),
                     const SizedBox(width: 8),
                     Text(
-                      isArabic ? 'تحدي اليوم' : 'Daily Challenge',
+                      l10n.dailyChallenge,
                       style: TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 22,
@@ -125,14 +128,14 @@ class _TournamentViewState extends State<TournamentView>
                   // Show results
                   _buildResultCard(
                     icon: Icons.emoji_events,
-                    label: isArabic ? 'نتيجتك' : 'Your Score',
+                    label: l10n.yourScore,
                     value: '${tournament.todayScore ?? 0}',
                     color: Colors.amber,
                   ),
                   const SizedBox(height: 12),
                   _buildResultCard(
                     icon: Icons.leaderboard,
-                    label: isArabic ? 'ترتيبك' : 'Your Rank',
+                    label: l10n.yourRank,
                     value: '#${tournament.todayRank ?? '-'}',
                     color: AppColors.cyan,
                   ),
@@ -161,7 +164,7 @@ class _TournamentViewState extends State<TournamentView>
                         Icon(Icons.play_arrow),
                         const SizedBox(width: 8),
                         Text(
-                          isArabic ? 'العب الآن' : 'Play Now',
+                          l10n.playNow,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -179,7 +182,7 @@ class _TournamentViewState extends State<TournamentView>
 
           // Leaderboard
           Text(
-            isArabic ? 'المتصدرين اليوم' : "Today's Leaders",
+            l10n.todaysLeaders,
             style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 18,
@@ -195,6 +198,7 @@ class _TournamentViewState extends State<TournamentView>
   }
 
   Widget _buildWeeklyTab(TournamentProvider tournament, bool isArabic) {
+    final l10n = AppLocalizations.of(context)!;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -220,7 +224,7 @@ class _TournamentViewState extends State<TournamentView>
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      isArabic ? 'بطولة الأسبوع' : 'Weekly Championship',
+                      l10n.weeklyChampionship,
                       style: TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 18,
@@ -243,7 +247,7 @@ class _TournamentViewState extends State<TournamentView>
           const SizedBox(height: 24),
 
           Text(
-            isArabic ? 'ترتيب الأسبوع' : 'Weekly Standings',
+            l10n.weeklyStandings,
             style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 18,

@@ -975,7 +975,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               // ⏱️ Time indicator (for host only)
               if (provider.puzzleEndsAt != null && provider.isHost)
                 _buildTimeIndicator(context, provider),
-              // ✨ Options Grid with modern design
+              // ✨ Options list with modern design
               if (options.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
@@ -988,15 +988,9 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                GridView.builder(
+                ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                    childAspectRatio: 1.8,
-                  ),
                   itemCount: options.length,
                   itemBuilder: (context, idx) {
                     final optText = optionValueToDisplayText(options[idx]);
@@ -1018,77 +1012,75 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       }
                     }
 
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: bgColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: borderColor,
-                          width: isSelected ? 2.5 : 1.5,
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: bgColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: borderColor,
+                            width: isSelected ? 2.5 : 1.5,
+                          ),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: borderColor.withOpacity(0.3),
+                                    blurRadius: 8,
+                                    spreadRadius: 2,
+                                  ),
+                                ]
+                              : [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.08),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
                         ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: borderColor.withOpacity(0.3),
-                                  blurRadius: 8,
-                                  spreadRadius: 2,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      padding: const EdgeInsets.all(10),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: borderColor.withOpacity(0.2),
-                              border: Border.all(
-                                color: borderColor,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                String.fromCharCode(65 + idx),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 14,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: borderColor.withOpacity(0.2),
+                                border: Border.all(
                                   color: borderColor,
-                                  fontSize: 13,
+                                  width: 1.4,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  String.fromCharCode(65 + idx),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    color: borderColor,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Expanded(
-                            child: Text(
-                              optText,
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: textColor,
-                                height: 1.2,
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                optText,
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ),
-                          if (isSelected)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Icon(
-                                isCorrect
-                                    ? Icons.check_circle_rounded
-                                    : Icons.cancel_rounded,
-                                size: 16,
-                                color: borderColor,
-                              ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },

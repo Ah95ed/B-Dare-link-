@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/game_provider.dart';
 import '../../controllers/locale_provider.dart';
+import '../../l10n/app_localizations.dart';
 
 class DragDropGameWidget extends StatefulWidget {
   const DragDropGameWidget({super.key});
@@ -69,9 +70,10 @@ class _DragDropGameWidgetState extends State<DragDropGameWidget> {
       _showPuzzleCompleteDialog(context, isArabic);
     } else {
       provider.decrementLives();
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isArabic ? "الترتيب غير صحيح!" : "Incorrect Order!"),
+          content: Text(l10n.incorrectOrder),
           backgroundColor: Colors.red,
         ),
       );
@@ -79,14 +81,13 @@ class _DragDropGameWidgetState extends State<DragDropGameWidget> {
   }
 
   void _showPuzzleCompleteDialog(BuildContext context, bool isArabic) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text("🎉"),
-        content: Text(
-          isArabic ? "ممتاز! الترتيب صحيح." : "Excellent! Order Correct.",
-        ),
+        content: Text(l10n.excellent),
         actions: [
           TextButton(
             onPressed: () {
@@ -100,7 +101,7 @@ class _DragDropGameWidgetState extends State<DragDropGameWidget> {
                 setState(() {});
               });
             },
-            child: const Text("Next"),
+            child: Text(l10n.next),
           ),
         ],
       ),
@@ -113,8 +114,9 @@ class _DragDropGameWidgetState extends State<DragDropGameWidget> {
     final isArabic =
         Provider.of<LocaleProvider>(context).locale.languageCode == 'ar';
     final puzzle = provider.currentPuzzle;
+    final l10n = AppLocalizations.of(context)!;
 
-    if (puzzle == null) return const Center(child: Text("Level Complete"));
+    if (puzzle == null) return Center(child: Text(l10n.levelComplete));
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -187,7 +189,7 @@ class _DragDropGameWidgetState extends State<DragDropGameWidget> {
                 backgroundColor: Theme.of(context).primaryColor,
               ),
               child: Text(
-                isArabic ? "تحقق" : "Check",
+                l10n.checkAnswer,
                 style: const TextStyle(fontSize: 18, color: Colors.white),
               ),
             ),

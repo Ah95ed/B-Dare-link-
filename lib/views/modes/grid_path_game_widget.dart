@@ -4,6 +4,7 @@ import '../../controllers/game_provider.dart';
 import '../../controllers/locale_provider.dart';
 import '../../models/game_puzzle.dart';
 import 'dart:math';
+import '../../l10n/app_localizations.dart';
 
 class GridPathGameWidget extends StatefulWidget {
   const GridPathGameWidget({super.key});
@@ -159,9 +160,10 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
     } else {
       // Wrong tap
       provider.decrementLives();
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Wrong choice! Follow the chain."),
+        SnackBar(
+          content: Text(l10n.wrongChoice),
           backgroundColor: Colors.red,
           duration: Duration(milliseconds: 500),
         ),
@@ -170,14 +172,13 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
   }
 
   void _showPuzzleCompleteDialog(BuildContext context, bool isArabic) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text("🎉"),
-        content: Text(
-          isArabic ? "مذهل! لقد وجدت الطريق." : "Amazing! Path Found.",
-        ),
+        content: Text(l10n.amazing),
         actions: [
           TextButton(
             onPressed: () {
@@ -193,7 +194,7 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
                 });
               });
             },
-            child: const Text("Next"),
+            child: Text(l10n.next),
           ),
         ],
       ),
@@ -206,17 +207,22 @@ class _GridPathGameWidgetState extends State<GridPathGameWidget> {
     final isArabic =
         Provider.of<LocaleProvider>(context).locale.languageCode == 'ar';
     final puzzle = provider.currentPuzzle;
+    final l10n = AppLocalizations.of(context)!;
 
-    if (puzzle == null) return const Center(child: Text("Level Complete"));
+    if (puzzle == null) return Center(child: Text(l10n.levelComplete));
+
+    final start = isArabic ? puzzle.startWordAr : puzzle.startWordEn;
+    final end = isArabic ? puzzle.endWordAr : puzzle.endWordEn;
+    final instructionText = isArabic
+        ? 'اضغط على الكلمات بالترتيب: $start <- ... <- $end'
+        : "Tap words in order: $start -> ... -> $end";
 
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Text(
-            isArabic
-                ? "اضغط على الكلمات بالترتيب: ${puzzle.startWordAr} -> ... -> ${puzzle.endWordAr}"
-                : "Tap words in order: ${puzzle.startWordEn} -> ... -> ${puzzle.endWordEn}",
+            instructionText,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),

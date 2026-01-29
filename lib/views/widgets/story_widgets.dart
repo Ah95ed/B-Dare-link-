@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../providers/story_provider.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Story dialog shown before starting a level
 class StoryDialogWidget extends StatelessWidget {
@@ -17,6 +18,7 @@ class StoryDialogWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -149,7 +151,7 @@ class StoryDialogWidget extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    isArabic ? 'هيا نبدأ!' : "Let's Go!",
+                    l10n.continueButton,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -186,6 +188,7 @@ class StoryCompletionDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final completionText = story.getCompletion(isArabic);
+    final l10n = AppLocalizations.of(context)!;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -226,7 +229,7 @@ class StoryCompletionDialog extends StatelessWidget {
 
             // Completed title
             Text(
-              isArabic ? 'أكملت المرحلة!' : 'Level Complete!',
+              l10n.levelComplete,
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 22,
@@ -298,7 +301,7 @@ class StoryCompletionDialog extends StatelessWidget {
                 ),
               ),
               child: Text(
-                isArabic ? 'متابعة' : 'Continue',
+                l10n.continueButton,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,

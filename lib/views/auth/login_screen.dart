@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../l10n/app_localizations.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -28,10 +29,11 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       } catch (e) {
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Login Failed: ${e.toString().replaceAll("Exception: ", "")}',
+                '${l10n.loginFailed}: ${e.toString().replaceAll("Exception: ", "")}',
               ),
             ),
           );
@@ -42,8 +44,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
+      appBar: AppBar(title: Text(l10n.loginTitle)),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -51,29 +54,32 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                "Welcome Back!",
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              Text(
+                l10n.welcomeBack,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.email,
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (v) =>
-                    v!.contains('@') ? null : 'Enter a valid email',
+                    v!.contains('@') ? null : l10n.enterValidEmail,
               ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.password,
+                  border: const OutlineInputBorder(),
                 ),
                 obscureText: true,
-                validator: (v) => v!.length < 6 ? 'Password too short' : null,
+                validator: (v) => v!.length < 6 ? l10n.passwordTooShort : null,
               ),
               const SizedBox(height: 20),
               Consumer<AuthProvider>(
@@ -84,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 50),
                         ),
-                        child: const Text('Login'),
+                        child: Text(l10n.login),
                       ),
               ),
               TextButton(
@@ -94,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     MaterialPageRoute(builder: (_) => const RegisterScreen()),
                   );
                 },
-                child: const Text('Don\'t have an account? Register'),
+                child: Text(l10n.dontHaveAccount),
               ),
               TextButton(
                 onPressed: () {
@@ -105,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   );
                 },
-                child: const Text('Forgot Password?'),
+                child: Text(l10n.forgotPassword),
               ),
             ],
           ),

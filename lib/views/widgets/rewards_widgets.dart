@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/rewards_provider.dart';
 import '../../controllers/locale_provider.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Compact rewards display widget for home screen
 class RewardsDisplayWidget extends StatelessWidget {
@@ -11,8 +12,7 @@ class RewardsDisplayWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rewards = context.watch<RewardsProvider>();
-    final isArabic =
-        context.watch<LocaleProvider>().locale.languageCode == 'ar';
+    final l10n = AppLocalizations.of(context)!;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -34,7 +34,7 @@ class RewardsDisplayWidget extends StatelessWidget {
             icon: Icons.monetization_on,
             iconColor: Colors.amber,
             value: '${rewards.coins}',
-            label: isArabic ? 'عملات' : 'Coins',
+            label: l10n.coins,
           ),
 
           // Streak
@@ -42,7 +42,7 @@ class RewardsDisplayWidget extends StatelessWidget {
             icon: Icons.local_fire_department,
             iconColor: Colors.orange,
             value: '${rewards.currentStreak}',
-            label: isArabic ? 'سلسلة' : 'Streak',
+            label: l10n.streak,
           ),
 
           // Achievements
@@ -51,7 +51,7 @@ class RewardsDisplayWidget extends StatelessWidget {
             iconColor: AppColors.cyan,
             value:
                 '${rewards.unlockedAchievements.length}/${RewardsProvider.achievements.length}',
-            label: isArabic ? 'إنجازات' : 'Badges',
+            label: l10n.badges,
           ),
         ],
       ),
@@ -109,6 +109,7 @@ class DailyBonusDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final isArabic =
         context.watch<LocaleProvider>().locale.languageCode == 'ar';
+    final l10n = AppLocalizations.of(context)!;
 
     return AlertDialog(
       backgroundColor: AppColors.darkSurface,
@@ -119,7 +120,7 @@ class DailyBonusDialog extends StatelessWidget {
           Icon(Icons.celebration, color: Colors.amber, size: 28),
           const SizedBox(width: 8),
           Text(
-            isArabic ? 'مكافأة يومية!' : 'Daily Bonus!',
+            l10n.dailyBonus,
             style: TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.bold,
@@ -186,7 +187,7 @@ class DailyBonusDialog extends StatelessWidget {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(
-            isArabic ? 'رائع!' : 'Awesome!',
+            l10n.awesome,
             style: TextStyle(
               color: AppColors.cyan,
               fontWeight: FontWeight.bold,
@@ -211,6 +212,7 @@ class AchievementUnlockedDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
       backgroundColor: AppColors.darkSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -220,7 +222,7 @@ class AchievementUnlockedDialog extends StatelessWidget {
           Icon(Icons.emoji_events, color: AppColors.cyan, size: 28),
           const SizedBox(width: 8),
           Text(
-            isArabic ? 'إنجاز جديد!' : 'Achievement Unlocked!',
+            l10n.achievementUnlocked,
             style: TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.bold,
@@ -291,7 +293,7 @@ class AchievementUnlockedDialog extends StatelessWidget {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(
-            isArabic ? 'تم!' : 'Got it!',
+            l10n.gotIt,
             style: TextStyle(
               color: AppColors.cyan,
               fontWeight: FontWeight.bold,

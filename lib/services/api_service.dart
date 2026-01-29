@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/game_level.dart';
 import '../models/game_puzzle.dart';
+import '../core/exceptions/app_exceptions.dart';
 
 class CloudflareApiService {
   static const String _defaultWorkerUrl =
@@ -32,21 +33,22 @@ class CloudflareApiService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data is! Map) {
-          debugPrint("Worker Error: unexpected response shape");
-          return _getFallbackLevelSafe(levelId, isArabic);
+          throw GameException.puzzleLoadFailed(
+            'Unexpected response format from API',
+          );
         }
         if (data['error'] != null) {
-          debugPrint(
-            "Worker Error Payload: ${data['error']} - ${data['reason']}",
+          throw GameException.puzzleLoadFailed(
+            '${data['error']} - ${data['reason']}',
           );
-          return _getFallbackLevelSafe(levelId, isArabic);
         }
 
         final startWord = data['startWord']?.toString().trim() ?? '';
         final endWord = data['endWord']?.toString().trim() ?? '';
         if (startWord.isEmpty || endWord.isEmpty || startWord == endWord) {
-          debugPrint("Worker Error: invalid start/end words");
-          return _getFallbackLevelSafe(levelId, isArabic);
+          throw GameException.puzzleLoadFailed(
+            'Invalid start/end words from API',
+          );
         }
 
         // Defensive normalization: ensure each step has 3 options and includes the correct word
@@ -127,55 +129,19 @@ class CloudflareApiService {
           hintEn: !isArabic ? (data['hint'] ?? "") : "",
         );
 
-        return GameLevel(
-          id: levelId, // Use the actual level ID
-          puzzles: [puzzle],
-        );
+        return GameLevel(id: levelId, puzzles: [puzzle]);
       } else {
-        debugPrint("Worker Error: ${response.statusCode} - ${response.body}");
-        return _getFallbackLevelSafe(levelId, isArabic);
+        throw NetworkException.badRequest(
+          'Failed to generate level: ${response.statusCode}',
+        );
       }
+    } on NetworkException {
+      rethrow;
+    } on GameException {
+      rethrow;
     } catch (e) {
-      debugPrint("Error generating level: $e");
-      return _getFallbackLevelSafe(levelId, isArabic);
+      throw NetworkException.badRequest('Error generating level: $e');
     }
-  }
-
-  GameLevel _getFallbackLevelSafe(int levelId, bool isArabic) {
-    final steps = isArabic
-        ? [
-            PuzzleStep(
-              word: "تفاحة",
-              options: ["تفاحة", "موز", "برتقال"]..shuffle(),
-            ),
-            PuzzleStep(
-              word: "أحمر",
-              options: ["أحمر", "أزرق", "أخضر"]..shuffle(),
-            ),
-          ]
-        : [
-            PuzzleStep(
-              word: "Apple",
-              options: ["Apple", "Banana", "Grape"]..shuffle(),
-            ),
-            PuzzleStep(
-              word: "Red",
-              options: ["Red", "Blue", "Green"]..shuffle(),
-            ),
-          ];
-
-    final puzzle = GamePuzzle(
-      startWordAr: "فاكهة",
-      endWordAr: "لون",
-      stepsAr: isArabic ? steps : [],
-      startWordEn: "Fruit",
-      endWordEn: "Color",
-      stepsEn: isArabic ? [] : steps,
-      hintAr: "فكّر في مثال بسيط يربط بين الشيء وصفته.",
-      hintEn: "Think of a simple object and its attribute.",
-    );
-
-    return GameLevel(id: levelId, puzzles: [puzzle]);
   }
 
   // ignore: unused_element
@@ -252,12 +218,14 @@ class CloudflareApiService {
         final data = jsonDecode(response.body);
         return GamePuzzle.fromJson(data);
       } else {
-        debugPrint("Vision Error: ${response.statusCode} - ${response.body}");
-        return null;
+        throw NetworkException.badRequest(
+          'Failed to generate from image: ${response.statusCode}',
+        );
       }
+    } on NetworkException {
+      rethrow;
     } catch (e) {
-      debugPrint("Vision Exception: $e");
-      return null;
+      throw NetworkException.badRequest('Vision processing error: $e');
     }
   }
 }

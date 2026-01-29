@@ -7,6 +7,7 @@ import 'package:wonder_link_game/views/game_play_view.dart';
 import '../../controllers/game_provider.dart';
 import '../../controllers/locale_provider.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Camera/Gallery view for Reality Mode
 /// Note: ImagePicker disabled temporarily for Windows build stability
@@ -108,8 +109,7 @@ class _RealityCameraViewState extends State<RealityCameraView> {
 
   @override
   Widget build(BuildContext context) {
-    final isArabic =
-        context.watch<LocaleProvider>().locale.languageCode == 'ar';
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -145,7 +145,7 @@ class _RealityCameraViewState extends State<RealityCameraView> {
               ),
               const SizedBox(height: 24),
               Text(
-                isArabic ? 'الواقع المعزز بالمعنى' : 'Contextual Reality Start',
+                l10n.arMode,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -156,9 +156,7 @@ class _RealityCameraViewState extends State<RealityCameraView> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Text(
-                  isArabic
-                      ? 'التقط صورة وسنقوم بتحويلها إلى لغز فريد يبدأ من عالمك!'
-                      : 'Capture a photo and we will transform it into a unique puzzle starting from your world!',
+                  l10n.arInstructions,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70, fontSize: 16),
                 ),
@@ -171,7 +169,7 @@ class _RealityCameraViewState extends State<RealityCameraView> {
                     const CircularProgressIndicator(color: AppColors.cyan),
                     const SizedBox(height: 16),
                     Text(
-                      isArabic ? 'جاري تحليل الصورة...' : 'Analyzing Image...',
+                      l10n.analyzingImage,
                       style: const TextStyle(color: AppColors.cyan),
                     ),
                   ],
@@ -195,13 +193,13 @@ class _RealityCameraViewState extends State<RealityCameraView> {
                       children: [
                         _buildOptionButton(
                           icon: Icons.camera_alt,
-                          label: isArabic ? 'كاميرا' : 'Camera',
+                          label: l10n.camera,
                           onTap: () => _pickImage(ImageSource.camera),
                         ),
                         const SizedBox(width: 24),
                         _buildOptionButton(
                           icon: Icons.photo_library,
-                          label: isArabic ? 'استوديو' : 'Gallery',
+                          label: l10n.gallery,
                           onTap: () => _pickImage(ImageSource.gallery),
                         ),
                       ],

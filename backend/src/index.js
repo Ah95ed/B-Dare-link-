@@ -1,8 +1,11 @@
 // index.js – Cloudflare Worker entry point (modularized)
 import { CORS_HEADERS, errorResponse } from './utils.js';
-import { register, login, getUserFromRequest, updateProfile, deleteAccount, resetPassword } from './auth.js';
+import { register, login, updateProfile, deleteAccount, resetPassword } from './auth.js';
 import { getProgress, saveProgress } from './progress.js';
+import { requireAuth } from './middleware/auth_middleware.js';
+import { requiresAuth } from './middleware/route_guard.js';
 import { generateLevel, submitSolution } from './game.js';
+import { generatePathLevel } from './game_path.js';
 import { listPuzzles, deletePuzzle, regeneratePuzzle, generateBulkPuzzles } from './admin.js';
 import { getDailyChallenge, submitDailyScore, getDailyLeaderboard, getWeeklyStandings } from './tournament.js';
 import { generatePuzzleFromImage } from './vision.js';
@@ -57,6 +60,9 @@ export default {
     const path = url.pathname;
 
     try {
+      const shouldAuth = requiresAuth(path, request.method);
+      const authContext = shouldAuth ? await requireAuth(request, env) : null;
+      if (shouldAuth && authContext?.response) return authContext.response;
       // ---------- Auth ----------
       if (path === '/auth/register' && request.method === 'POST') {
         return await register(request, env);
@@ -68,7 +74,7 @@ export default {
         return await resetPassword(request, env);
       }
       if (path === '/auth/me') {
-        const user = await getUserFromRequest(request, env);
+        const user = authContext?.user;
         if (!user) return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
         if (request.method === 'GET') {
           return new Response(JSON.stringify(user), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
@@ -83,8 +89,8 @@ export default {
 
       // ---------- Progress ----------
       if (path === '/progress') {
-        const user = await getUserFromRequest(request, env);
-        if (!user) return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
+        const { user, response } = await requireAuth(request, env);
+        if (!user) return response;
         if (request.method === 'GET') {
           return await getProgress(request, env);
         }
@@ -96,6 +102,10 @@ export default {
       // ---------- Game ----------
       if ((path === '/generate-level' || path === '/api/generate') && request.method === 'POST') {
         return await generateLevel(request, env, CORS_HEADERS);
+      }
+      // New: Path-based puzzle system
+      if (path === '/api/generate-path' && request.method === 'POST') {
+        return await generatePathLevel(request, env, CORS_HEADERS);
       }
       if ((path === '/submit-solution' || path === '/api/submit') && request.method === 'POST') {
         return await submitSolution(request, env, CORS_HEADERS);

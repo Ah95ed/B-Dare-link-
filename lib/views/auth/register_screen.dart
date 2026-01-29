@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../l10n/app_localizations.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -31,10 +32,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }
       } catch (e) {
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Registration Failed: ${e.toString().replaceAll("Exception: ", "")}',
+                '${l10n.registrationFailed}: ${e.toString().replaceAll("Exception: ", "")}',
               ),
             ),
           );
@@ -45,8 +47,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('Register')),
+      appBar: AppBar(title: Text(l10n.registerTitle)),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -54,38 +57,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                "Create Account",
+              Text(
+                l10n.createAccount,
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.username,
+                  border: const OutlineInputBorder(),
                 ),
-                validator: (v) => v!.isEmpty ? 'Enter a username' : null,
+                validator: (v) => v!.isEmpty ? l10n.enterUsername : null,
               ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.email,
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (v) =>
-                    v!.contains('@') ? null : 'Enter a valid email',
+                    v!.contains('@') ? null : l10n.enterValidEmail,
               ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l10n.password,
+                  border: const OutlineInputBorder(),
                 ),
                 obscureText: true,
-                validator: (v) => v!.length < 6 ? 'Password too short' : null,
+                validator: (v) => v!.length < 6 ? l10n.passwordTooShort : null,
               ),
               const SizedBox(height: 20),
               Consumer<AuthProvider>(
@@ -96,7 +99,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 50),
                         ),
-                        child: const Text('Register'),
+                        child: Text(l10n.register),
                       ),
               ),
             ],

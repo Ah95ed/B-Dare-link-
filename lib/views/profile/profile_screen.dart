@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../l10n/app_localizations.dart';
 import '../auth/login_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -8,8 +9,9 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: Text(l10n.profile)),
       body: Consumer<AuthProvider>(
         builder: (context, auth, _) {
           final user = auth.user;
@@ -23,7 +25,7 @@ class ProfileScreen extends StatelessWidget {
                     (route) => false,
                   );
                 },
-                child: const Text("Login"),
+                child: Text(l10n.login),
               ),
             );
           }
@@ -84,14 +86,12 @@ class ProfileScreen extends StatelessWidget {
                       showDialog(
                         context: context,
                         builder: (_) => AlertDialog(
-                          title: const Text("Delete Account?"),
-                          content: const Text(
-                            "This action cannot be undone. All progress will be lost.",
-                          ),
+                          title: Text(l10n.deleteAccountConfirm),
+                          content: Text(l10n.deleteAccountWarning),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text("Cancel"),
+                              child: Text(l10n.cancel),
                             ),
                             TextButton(
                               onPressed: () async {
@@ -101,8 +101,8 @@ class ProfileScreen extends StatelessWidget {
                                   Navigator.pop(context); // Screen
                                 }
                               },
-                              child: const Text(
-                                "DELETE",
+                              child: Text(
+                                l10n.delete,
                                 style: TextStyle(color: Colors.red),
                               ),
                             ),
@@ -110,8 +110,8 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    child: const Text(
-                      "Delete Account",
+                    child: Text(
+                      l10n.deleteAccount,
                       style: TextStyle(color: Colors.red),
                     ),
                   ),

@@ -5,6 +5,7 @@ import '../data/level_data.dart';
 import '../controllers/game_provider.dart';
 import '../controllers/locale_provider.dart';
 import 'game_play_view.dart';
+import '../l10n/app_localizations.dart';
 
 class LevelsView extends StatelessWidget {
   const LevelsView({super.key});
@@ -13,12 +14,13 @@ class LevelsView extends StatelessWidget {
   Widget build(BuildContext context) {
     final isArabic =
         Provider.of<LocaleProvider>(context).locale.languageCode == 'ar';
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
-          isArabic ? "اللعب الفردي" : "Levels",
+          l10n.soloPlay,
           style: TextStyle(
             fontWeight: FontWeight.w900,
             letterSpacing: 1,
@@ -43,10 +45,12 @@ class LevelsView extends StatelessWidget {
               icon: const Icon(Icons.bug_report, color: Color(0xFFFF006E)),
               tooltip: "Test API (20 Questions)",
               onPressed: () {
-                Provider.of<GameProvider>(
-                  context,
-                  listen: false,
-                ).debugGeneratePuzzles(isArabic);
+                // Debug functionality removed - use admin panel instead
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Use admin panel to generate puzzles'),
+                  ),
+                );
               },
             ),
           ),

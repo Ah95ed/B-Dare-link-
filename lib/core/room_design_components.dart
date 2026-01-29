@@ -375,8 +375,7 @@ class _AnswerButtonState extends State<AnswerButton>
         animation: _glowController,
         builder: (context, child) {
           return Container(
-            margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: borderColor, width: 2),

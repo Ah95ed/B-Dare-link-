@@ -1,14 +1,160 @@
 {
   "@@locale": "ar",
-  "appTitle": "الرابط العجيب",
-  "startGame": "ابدأ اللعبة",
+  "appTitle": "رابط العجائب",
+  "appSubtitle": "اكتشف الصلة الخفية!",
+  "startGame": "ابدأ اللعب",
   "linkStart": "الكلمة الأولى",
   "linkEnd": "الكلمة الأخيرة",
-  "yourLink": "كيف ربطت بينهم؟",
+  "yourLink": "كيف ربطت بينهما؟",
   "submit": "اربط!",
   "loading": "جاري التحقق...",
-  "winMessage": "مذهل! لقد وجدت الرابط!",
+  "winMessage": "رائع! لقد وجدت الرابط!",
   "loseMessage": "حاول مرة أخرى!",
   "steps": "خطوات",
-  "changeLanguage": "English"
+  "changeLanguage": "English",
+
+  "levelsTitle": "المراحل",
+  "soloPlay": "اللعب الفردي",
+  "tournaments": "البطولات",
+  "profile": "الملف الشخصي",
+  "settings": "الإعدادات",
+  "login": "تسجيل الدخول",
+  "register": "إنشاء حساب",
+  "logout": "تسجيل الخروج",
+  "deleteAccount": "حذف الحساب",
+  
+  "loginTitle": "تسجيل الدخول",
+  "registerTitle": "إنشاء حساب جديد",
+  "welcomeBack": "مرحباً بعودتك!",
+  "createAccount": "إنشاء حساب",
+  "username": "اسم المستخدم",
+  "email": "البريد الإلكتروني",
+  "password": "كلمة المرور",
+  "newPassword": "كلمة المرور الجديدة",
+  "forgotPassword": "نسيت كلمة المرور؟",
+  "resetPassword": "إعادة تعيين كلمة المرور",
+  "dontHaveAccount": "ليس لديك حساب؟ سجل الآن",
+  "enterValidEmail": "أدخل بريداً إلكترونياً صحيحاً",
+  "enterUsername": "أدخل اسم المستخدم",
+  "passwordTooShort": "كلمة المرور قصيرة جداً",
+  "loginFailed": "فشل تسجيل الدخول",
+  "registrationFailed": "فشل إنشاء الحساب",
+  
+  "resetPasswordInstructions": "أدخل بريدك الإلكتروني المسجل لتلقي رمز التحقق.",
+  "sendOTP": "إرسال رمز التحقق",
+  "verifyAndReset": "تحقق وأعد التعيين",
+  "otpSent": "تم إرسال رمز التحقق إلى {email}",
+  "@otpSent": {
+    "placeholders": {
+      "email": {"type": "String"}
+    }
+  },
+  "failedToSendOTP": "فشل إرسال رمز التحقق",
+  "errorSendingOTP": "خطأ في إرسال رمز التحقق: {error}",
+  "@errorSendingOTP": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "passwordResetSuccessful": "تم إعادة تعيين كلمة المرور بنجاح",
+  "invalidOTP": "رمز التحقق غير صحيح",
+  "errorVerifyingOTP": "خطأ في التحقق من الرمز: {error}",
+  "@errorVerifyingOTP": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "levelComplete": "اكتملت المرحلة!",
+  "levelCompleted": "تم إكمال المرحلة!",
+  "continueButton": "متابعة",
+  "next": "التالي",
+  "tryAgain": "حاول مرة أخرى!",
+  "checkAnswer": "تحقق",
+  "amazing": "رائع! وجدت الطريق.",
+  "excellent": "ممتاز! الترتيب صحيح.",
+  "wrongChoice": "اختيار خاطئ! اتبع السلسلة.",
+  "incorrectOrder": "الترتيب غير صحيح!",
+  "greatJob": "عظيم! لقد وجدت الإجابة الصحيحة.",
+  
+  "chooseCorrectOption": "اختر الإجابة الصحيحة",
+  "whatLinks": "ما الذي يربط بين \"{start}\" و \"{end}\"؟",
+  "@whatLinks": {
+    "placeholders": {
+      "start": {"type": "String"},
+      "end": {"type": "String"}
+    }
+  },
+  "tapWordsInOrder": "اضغط على الكلمات بالترتيب: {start} <- ... <- {end}",
+  "@tapWordsInOrder": {
+    "placeholders": {
+      "start": {"type": "String"},
+      "end": {"type": "String"}
+    }
+  },
+  
+  "authRequired": "للمتابعة بعد المرحلة الثالثة، يرجى التسجيل أو تسجيل الدخول.",
+  "cantAdvanceWithoutLogin": "لا يمكنك المتابعة دون تسجيل الدخول.",
+  "backToLevels": "العودة للمراحل",
+  
+  "coins": "العملات",
+  "streak": "السلسلة",
+  "badges": "الأوسمة",
+  "dailyBonus": "مكافأة يومية!",
+  "newStreakStarted": "بدأت سلسلة جديدة",
+  "streakDays": "السلسلة: {days} أيام",
+  "@streakDays": {
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  "awesome": "رائع!",
+  "achievementUnlocked": "إنجاز جديد!",
+  "gotIt": "حسناً!",
+  
+  "daily": "اليومي",
+  "weekly": "الأسبوعي",
+  "dailyChallenge": "التحدي اليومي",
+  "weeklyChampionship": "بطولة الأسبوع",
+  "yourScore": "نتيجتك",
+  "yourRank": "ترتيبك",
+  "playNow": "العب الآن",
+  "todaysLeaders": "المتصدرون اليوم",
+  "weeklyStandings": "ترتيب الأسبوع",
+  "accumulatePointsWeekly": "اجمع النقاط طوال الأسبوع!",
+  "nextChallengeIn": "التحدي القادم خلال: {hours} ساعة و {minutes} دقيقة",
+  "@nextChallengeIn": {
+    "placeholders": {
+      "hours": {"type": "int"},
+      "minutes": {"type": "int"}
+    }
+  },
+  "noDataYet": "لا توجد بيانات بعد",
+  "unknown": "غير معروف",
+  "dailyChallengeWillOpen": "سيفتح التحدي اليومي هنا!",
+  
+  "totalScore": "النقاط الإجمالية",
+  "deleteAccountConfirm": "هل تريد حذف الحساب؟",
+  "deleteAccountWarning": "لا يمكن التراجع عن هذا الإجراء. سيتم فقدان كل التقدم.",
+  "cancel": "إلغاء",
+  "delete": "حذف",
+  
+  "arMode": "الواقع المعزز",
+  "contextualRealityStart": "الواقع المعزز بالمعنى",
+  "arInstructions": "التقط صورة وسنحولها إلى لغز فريد ينطلق من عالمك!",
+  "analyzingImage": "جاري تحليل الصورة...",
+  "camera": "الكاميرا",
+  "gallery": "المعرض",
+  "visionNotSupported": "المسح البصري غير مدعوم على الويب حالياً.",
+  "scannerNotSupported": "الماسح غير مدعوم على سطح المكتب حالياً.\nاستخدم Android أو iOS.",
+  "errorPickingImage": "خطأ في اختيار الصورة: {error}",
+  "@errorPickingImage": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "failedToAnalyzeImage": "فشل تحليل الصورة. حاول مرة أخرى.",
+  
+  "chooseGameMode": "اختر نمط اللعب",
+  "choices": "خيارات متعددة"
 }

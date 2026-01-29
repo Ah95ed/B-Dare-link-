@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/game_level.dart';
 import '../controllers/game_provider.dart';
 import 'game_play_view.dart';
+import '../l10n/app_localizations.dart';
 
 class GameModeSelectionView extends StatelessWidget {
   final GameLevel level;
@@ -16,9 +17,10 @@ class GameModeSelectionView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(isArabic ? "اختر نظام اللعب" : "Choose Game Mode"),
+        title: Text(l10n.chooseGameMode),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -33,7 +35,7 @@ class GameModeSelectionView extends StatelessWidget {
                 context,
                 GameMode.multipleChoice,
                 Icons.alt_route,
-                isArabic ? "اختيارات" : "Choices",
+                l10n.choices,
                 Colors.blue.shade100,
               ),
             ],

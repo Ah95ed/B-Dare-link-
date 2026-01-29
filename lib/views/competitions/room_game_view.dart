@@ -266,29 +266,40 @@ class _RoomGameViewState extends State<RoomGameView> {
               const SizedBox(height: 12),
 
               // Answers grid; stays within the available height
+              // Answers vertical list
               Expanded(
-                child: GridView.builder(
+                child: ListView.builder(
                   physics: const BouncingScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    childAspectRatio: isWide ? 2.8 : 2.35,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
                   ),
                   itemCount: options.length,
                   itemBuilder: (context, index) {
                     final optionText = options[index];
                     final isSelected = _selectedAnswerIndex == index;
-                    return AnswerButton(
-                      answer: optionText,
-                      index: index,
-                      isSelected: isSelected,
-                      isCorrect: false,
-                      isRevealed: false,
-                      onTap: () {
-                        setState(() => _selectedAnswerIndex = index);
-                        _submitAnswer(provider, optionText);
-                      },
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: AnswerButton(
+                        answer: optionText,
+                        index: index,
+                        isSelected: isSelected,
+                        isCorrect: false,
+                        isRevealed: false,
+                        onTap: _isSubmitting
+                            ? () {} // Disable tap while submitting
+                            : () async {
+                                if (_selectedAnswerIndex == index) return;
+                                setState(() => _selectedAnswerIndex = index);
+                                // Show selection feedback before submitting
+                                await Future.delayed(
+                                  const Duration(milliseconds: 400),
+                                );
+                                if (mounted) {
+                                  _submitAnswer(provider, optionText);
+                                }
+                              },
+                      ),
                     );
                   },
                 ),

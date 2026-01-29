@@ -1,6 +1,7 @@
 {
   "@@locale": "en",
   "appTitle": "Wonder Link",
+  "appSubtitle": "Discover the hidden connection!",
   "startGame": "Start Game",
   "linkStart": "Start Word",
   "linkEnd": "End Word",
@@ -10,5 +11,150 @@
   "winMessage": "Amazing! You found the link!",
   "loseMessage": "Not quite right. Try again!",
   "steps": "Steps",
-  "changeLanguage": "اللغة العربية"
+  "changeLanguage": "اللغة العربية",
+
+  "levelsTitle": "Levels",
+  "soloPlay": "Solo Play",
+  "tournaments": "Tournaments",
+  "profile": "Profile",
+  "settings": "Settings",
+  "login": "Login",
+  "register": "Register",
+  "logout": "Logout",
+  "deleteAccount": "Delete Account",
+  
+  "loginTitle": "Login",
+  "registerTitle": "Register",
+  "welcomeBack": "Welcome Back!",
+  "createAccount": "Create Account",
+  "username": "Username",
+  "email": "Email",
+  "password": "Password",
+  "newPassword": "New Password",
+  "forgotPassword": "Forgot Password?",
+  "resetPassword": "Reset Password",
+  "dontHaveAccount": "Don't have an account? Register",
+  "enterValidEmail": "Enter a valid email",
+  "enterUsername": "Enter a username",
+  "passwordTooShort": "Password too short",
+  "loginFailed": "Login Failed",
+  "registrationFailed": "Registration Failed",
+  
+  "resetPasswordInstructions": "Enter your registered email to receive a reset code.",
+  "sendOTP": "Send OTP",
+  "verifyAndReset": "Verify & Reset",
+  "otpSent": "OTP sent to {email}",
+  "@otpSent": {
+    "placeholders": {
+      "email": {"type": "String"}
+    }
+  },
+  "failedToSendOTP": "Failed to send OTP",
+  "errorSendingOTP": "Error sending OTP: {error}",
+  "@errorSendingOTP": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "passwordResetSuccessful": "Password reset successful",
+  "invalidOTP": "Invalid OTP",
+  "errorVerifyingOTP": "Error verifying OTP: {error}",
+  "@errorVerifyingOTP": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  
+  "levelComplete": "Level Complete!",
+  "levelCompleted": "Level Completed!",
+  "continueButton": "Continue",
+  "next": "Next",
+  "tryAgain": "Try again!",
+  "checkAnswer": "Check",
+  "amazing": "Amazing! Path Found.",
+  "excellent": "Excellent! Order Correct.",
+  "wrongChoice": "Wrong choice! Follow the chain.",
+  "incorrectOrder": "Incorrect Order!",
+  "greatJob": "Great! You found the correct path.",
+  
+  "chooseCorrectOption": "Choose the correct option",
+  "whatLinks": "What links \"{start}\" and \"{end}\"?",
+  "@whatLinks": {
+    "placeholders": {
+      "start": {"type": "String"},
+      "end": {"type": "String"}
+    }
+  },
+  "tapWordsInOrder": "Tap words in order: {start} -> ... -> {end}",
+  "@tapWordsInOrder": {
+    "placeholders": {
+      "start": {"type": "String"},
+      "end": {"type": "String"}
+    }
+  },
+  
+  "authRequired": "To continue after level 3, please register or log in.",
+  "cantAdvanceWithoutLogin": "You can't advance without logging in.",
+  "backToLevels": "Back to levels",
+  
+  "coins": "Coins",
+  "streak": "Streak",
+  "badges": "Badges",
+  "dailyBonus": "Daily Bonus!",
+  "newStreakStarted": "New streak started",
+  "streakDays": "Streak: {days} days",
+  "@streakDays": {
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  "awesome": "Awesome!",
+  "achievementUnlocked": "Achievement Unlocked!",
+  "gotIt": "Got it!",
+  
+  "daily": "Daily",
+  "weekly": "Weekly",
+  "dailyChallenge": "Daily Challenge",
+  "weeklyChampionship": "Weekly Championship",
+  "yourScore": "Your Score",
+  "yourRank": "Your Rank",
+  "playNow": "Play Now",
+  "todaysLeaders": "Today's Leaders",
+  "weeklyStandings": "Weekly Standings",
+  "accumulatePointsWeekly": "Accumulate points throughout the week!",
+  "nextChallengeIn": "Next challenge in: {hours}h {minutes}m",
+  "@nextChallengeIn": {
+    "placeholders": {
+      "hours": {"type": "int"},
+      "minutes": {"type": "int"}
+    }
+  },
+  "noDataYet": "No data yet",
+  "unknown": "Unknown",
+  "dailyChallengeWillOpen": "Daily challenge will open here!",
+  
+  "totalScore": "Total Score",
+  "deleteAccountConfirm": "Delete Account?",
+  "deleteAccountWarning": "This action cannot be undone. All progress will be lost.",
+  "cancel": "Cancel",
+  "delete": "DELETE",
+  
+  "arMode": "AR Mode",
+  "contextualRealityStart": "Contextual Reality Start",
+  "arInstructions": "Capture a photo and we will transform it into a unique puzzle starting from your world!",
+  "analyzingImage": "Analyzing Image...",
+  "camera": "Camera",
+  "gallery": "Gallery",
+  "visionNotSupported": "Vision scanning is not supported on Web yet.",
+  "scannerNotSupported": "Scanner not supported on Desktop yet.\nUse Android/iOS.",
+  "errorPickingImage": "Error picking image: {error}",
+  "@errorPickingImage": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "failedToAnalyzeImage": "Failed to analyze image. Try again.",
+  
+  "chooseGameMode": "Choose Game Mode",
+  "choices": "Choices"
 }

@@ -1,25 +1,39 @@
-import { jsonResponse, errorResponse, CORS_HEADERS } from './utils.js';
-import { buildSystemPrompt } from './prompt.js';
+import { jsonResponse, errorResponse } from './utils.js';
 
-// License agreement flag - set once per deployment
-let licenseAgreed = false;
+function getPrompt(language) {
+  if (language === 'ar') {
+    return `انظر للصورة. حدد شيئين مختلفين وواضحين. أنشئ 3 خطوات للربط بينهما بشكل إبداعي.
+كل خطوة لها 3 خيارات (1 صحيح + 2 خاطئ).
 
-async function agreeLicenseIfNeeded(env) {
-  if (!licenseAgreed) {
-    try {
-      // Submit agreement to use llama-3.2-11b-vision-instruct
-      await env.AI.run('@cf/meta/llama-3.2-11b-vision-instruct', {
-        prompt: 'agree',
-        max_tokens: 1,
-      });
-      licenseAgreed = true;
-      console.log('✅ License agreement accepted for vision model');
-    } catch (e) {
-      console.error('License agreement error:', e);
-      // Continue anyway - might already be agreed
-      licenseAgreed = true;
-    }
+أعطني JSON فقط بهذا الشكل الدقيق:
+{
+  "startWord": "الشيء الأول",
+  "endWord": "الشيء الثاني",
+  "steps": [
+    {"word": "خطوة1", "options": ["خطوة1", "خاطئ1", "خاطئ2"]},
+    {"word": "خطوة2", "options": ["خطوة2", "خاطئ3", "خاطئ4"]},
+    {"word": "خطوة3", "options": ["خطوة3", "خاطئ5", "خاطئ6"]}
+  ],
+  "hint": "تلميح مفيد",
+  "puzzleId": "v1"
+}`;
   }
+
+  return `Look at the image. Identify 2 different, clear objects. Create 3 creative steps to link them.
+Each step has 3 options (1 correct + 2 wrong).
+
+Give me ONLY JSON in this exact format:
+{
+  "startWord": "first object",
+  "endWord": "second object",
+  "steps": [
+    {"word": "step1", "options": ["step1", "wrong1", "wrong2"]},
+    {"word": "step2", "options": ["step2", "wrong3", "wrong4"]},
+    {"word": "step3", "options": ["step3", "wrong5", "wrong6"]}
+  ],
+  "hint": "helpful hint",
+  "puzzleId": "v1"
+}`;
 }
 
 export async function generatePuzzleFromImage(request, env) {
@@ -32,132 +46,122 @@ export async function generatePuzzleFromImage(request, env) {
       return errorResponse('No image provided', 400);
     }
 
-    // Convert image to ArrayBuffer/Uint8Array
+    const geminiApiKey = env?.GEMINI_API_KEY;
+    // Use vision-capable model - remove version suffixes
+    let geminiModel = env?.GEMINI_MODEL || 'gemini-1.5-flash';
+    // Remove -001, -002 etc suffixes that cause 404
+    geminiModel = geminiModel.replace(/-\d+$/, '');
+
+    if (!geminiApiKey) {
+      return errorResponse('GEMINI_API_KEY not configured', 500);
+    }
+
+    // Convert image to base64
     const arrayBuffer = await imageFile.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
+    const base64Image = btoa(
+      new Uint8Array(arrayBuffer).reduce(
+        (data, byte) => data + String.fromCharCode(byte),
+        ''
+      )
+    );
 
-    // Simplified prompt for better JSON output
-    const userPrompt = language === 'ar'
-      ? `انظر للصورة. حدد شيئين مختلفين. 
-أنشئ 3 خطوات للربط بينهما.
-كل خطوة لها 3 خيارات (1 صحيح + 2 خاطئ).
+    const prompt = getPrompt(language);
 
-أعطني JSON فقط بهذا الشكل:
-{
-  "startWord": "الشيء الأول",
-  "endWord": "الشيء الثاني",
-  "steps": [
-    {"word": "خطوة1", "options": ["خطوة1", "خاطئ1", "خاطئ2"]},
-    {"word": "خطوة2", "options": ["خطوة2", "خاطئ3", "خاطئ4"]},
-    {"word": "خطوة3", "options": ["خطوة3", "خاطئ5", "خاطئ6"]}
-  ],
-  "hint": "تلميح مفيد",
-  "puzzleId": "vision_${Date.now()}"
-}`
-      : `Look at the image. Identify 2 different objects.
-Create 3 steps to link them.
-Each step has 3 options (1 correct + 2 wrong).
+    // Simple model name without 'models/' prefix for vision
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
 
-Give me ONLY JSON in this format:
-{
-  "startWord": "first object",
-  "endWord": "second object",
-  "steps": [
-    {"word": "step1", "options": ["step1", "wrong1", "wrong2"]},
-    {"word": "step2", "options": ["step2", "wrong3", "wrong4"]},
-    {"word": "step3", "options": ["step3", "wrong5", "wrong6"]}
-  ],
-  "hint": "helpful hint",
-  "puzzleId": "vision_${Date.now()}"
-}`;
+    console.log('📸 Analyzing image with Gemini Vision:', geminiModel);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: `${prompt}\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no explanations.` },
+            {
+              inline_data: {
+                mime_type: imageFile.type || 'image/jpeg',
+                data: base64Image
+              }
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+        }
+      })
+    });
 
-    // Ensure license is agreed before using the model
-    await agreeLicenseIfNeeded(env);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Gemini API Error:', errorText);
+      return errorResponse(`Gemini API error: ${response.status}`, 500);
+    }
 
-    const input = {
-      image: [...uint8Array],
-      prompt: `${userPrompt}\n\nIMPORTANT: Return ONLY valid JSON. No explanations, no markdown, no extra text.`,
-      max_tokens: 800,
-    };
+    const data = await response.json();
 
-    const response = await env.AI.run('@cf/meta/llama-3.2-11b-vision-instruct', input);
+    if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+      console.error('Invalid Gemini response:', JSON.stringify(data));
+      return errorResponse('Invalid response from Gemini', 500);
+    }
 
-    // Parse response with better error handling
-    let jsonStr = response.response || response.text || "";
+    // Extract JSON from response
+    let jsonStr = data.candidates[0].content.parts[0].text;
+    console.log('Raw Gemini response:', jsonStr.substring(0, 300));
 
-    console.log('Raw AI Response:', jsonStr);
+    // Clean up response
+    jsonStr = jsonStr
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim();
 
-    // Try to extract JSON from response
-    // Remove markdown code blocks
-    jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-
-    // Try to find JSON object in the text
+    // Extract JSON object
     const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       jsonStr = jsonMatch[0];
     }
 
-    jsonStr = jsonStr.trim();
+    // Parse and validate
+    const puzzle = JSON.parse(jsonStr);
 
-    try {
-      const puzzle = JSON.parse(jsonStr);
+    if (!puzzle.startWord || !puzzle.endWord || !Array.isArray(puzzle.steps)) {
+      throw new Error('Invalid puzzle structure from AI');
+    }
 
-      // Validate and fix structure
-      if (!puzzle.startWord || !puzzle.endWord || !puzzle.steps) {
-        throw new Error("Missing required fields");
-      }
+    // Ensure valid steps
+    puzzle.steps = puzzle.steps
+      .map(step => {
+        if (!step.word || !Array.isArray(step.options)) return null;
 
-      // Ensure steps array exists and has valid format
-      if (!Array.isArray(puzzle.steps) || puzzle.steps.length < 2) {
-        throw new Error("Invalid steps array");
-      }
-
-      // Fix each step to ensure 3 options
-      puzzle.steps = puzzle.steps.map(step => {
-        if (!step.word || !Array.isArray(step.options)) {
-          return null;
-        }
-
-        // Ensure correct word is in options
+        // Ensure correct answer is in options
         if (!step.options.includes(step.word)) {
           step.options[0] = step.word;
         }
 
-        // Fill to 3 options if needed
+        // Ensure exactly 3 options
         while (step.options.length < 3) {
-          step.options.push(`option_${Math.random().toString(36).substr(2, 5)}`);
+          step.options.push(`option_${Date.now()}_${Math.random()}`);
         }
-
-        // Limit to 3 options
         step.options = step.options.slice(0, 3);
 
         return step;
-      }).filter(Boolean);
+      })
+      .filter(Boolean);
 
-      // Ensure we have at least 2 valid steps
-      if (puzzle.steps.length < 2) {
-        throw new Error("Not enough valid steps");
-      }
-
-      // Set defaults
-      puzzle.hint = puzzle.hint || (language === 'ar' ? 'فكر بشكل إبداعي' : 'Think creatively');
-      puzzle.puzzleId = puzzle.puzzleId || `vision_${Date.now()}`;
-
-      console.log('✅ Valid puzzle generated:', JSON.stringify(puzzle));
-      return jsonResponse(puzzle);
-
-    } catch (parseError) {
-      console.error("❌ JSON Parse Error:", parseError.message);
-      console.error("Received text:", jsonStr);
-
-      return errorResponse(
-        `Failed to generate valid puzzle from image. AI returned: ${jsonStr.substring(0, 200)}`,
-        500
-      );
+    if (puzzle.steps.length < 2) {
+      throw new Error('Not enough valid steps');
     }
 
-  } catch (e) {
-    console.error('Image Generation Error', e);
-    return errorResponse(e.message, 500);
+    // Set defaults
+    puzzle.hint = puzzle.hint || 'Think creatively';
+    puzzle.puzzleId = puzzle.puzzleId || `vision_${Date.now()}`;
+
+    console.log('✅ Puzzle generated:', puzzle.startWord, '->', puzzle.endWord);
+    return jsonResponse(puzzle);
+
+  } catch (error) {
+    console.error('Vision Error:', error.message);
+    return errorResponse(`Vision error: ${error.message}`, 500);
   }
 }
