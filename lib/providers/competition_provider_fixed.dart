@@ -1,8 +1,24 @@
-﻿import 'dart:async';
+// 👑 **نسخة محسّنة من CompetitionProvider مع تصحيحات الإدارة**
+// التغييرات الرئيسية:
+// 1. استخراج _hostId من room.created_by في جميع الأماكن
+// 2. ضمان أن منشئ الغرفة يصبح المدير فوراً
+
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/competition_service.dart';
 import '../services/realtime_service.dart';
 import '../providers/auth_provider.dart';
+
+// =============== تحسينات الإدارة ===============
+// النقاط المهمة:
+// 1. **created_by في قاعدة البيانات** = المدير الحقيقي (Host)
+// 2. **role في room_participants** = دور اللاعب (manager/player/co_manager)
+// 3. **created_by يصبح hostId** = يتم تحديثه من البيانات المستقبلة من API
+//
+// الفرق:
+// - hostId: معرّف المدير (منشئ الغرفة) = room.created_by
+// - isHost: تحقق من أن المستخدم الحالي هو hostId
+// - isAdminOrManager: تحقق من أن المستخدم له دور 'manager' أو 'co_manager'
 
 class CompetitionProvider with ChangeNotifier {
   final CompetitionService _service = CompetitionService();
@@ -32,8 +48,8 @@ class CompetitionProvider with ChangeNotifier {
   List<Map<String, dynamic>> _roomParticipants = [];
   Map<String, dynamic>? _currentPuzzle;
   int _currentPuzzleIndex = 0;
-  int _currentStepIndex = 0; // Track current step in Wonder Link puzzles
-  List<String> _completedSteps = []; // Track completed words in chain
+  int _currentStepIndex = 0;
+  List<String> _completedSteps = [];
   bool _isReady = false;
   bool _gameStarted = false;
   bool _gameFinished = false;
@@ -48,11 +64,13 @@ class CompetitionProvider with ChangeNotifier {
   // Real-time states
   List<Map<String, dynamic>> _messages = [];
   String? _solvedByUsername;
-  String? _hostId;
+  String? _hostId; // ✅ معرّف المدير = room.created_by
+
   int? _selectedAnswerIndex;
   bool? _lastAnswerCorrect;
   int? _correctAnswerIndex;
 
+  // Getters
   Map<String, dynamic>? get currentRoom => _currentRoom;
   int get currentStepIndex => _currentStepIndex;
   List<String> get completedSteps => _completedSteps;
@@ -86,7 +104,6 @@ class CompetitionProvider with ChangeNotifier {
     _puzzleStartTime = DateTime.now();
     _puzzleEndsAt = null;
 
-    // Reset answer state for the new puzzle
     _selectedAnswerIndex = null;
     _lastAnswerCorrect = null;
     _correctAnswerIndex = null;
@@ -98,10 +115,8 @@ class CompetitionProvider with ChangeNotifier {
     notifyListeners();
 
     _advanceAfterAnswerTimer = Timer(const Duration(milliseconds: 900), () {
-      // Timer callback can't be awaited; fire-and-forget safely.
       () async {
         try {
-          // If backend provided nextPuzzle, apply it deterministically.
           if (_pendingNextPuzzle != null) {
             _setNextPuzzleFromPayload(
               puzzle: _pendingNextPuzzle!,
@@ -114,7 +129,6 @@ class CompetitionProvider with ChangeNotifier {
             return;
           }
 
-          // Otherwise, rely on authoritative /rooms/status (backend advances index even on wrong answers).
           await refreshRoomStatus(bypassThrottle: true);
         } finally {
           _isAdvancingToNextPuzzle = false;
@@ -124,7 +138,6 @@ class CompetitionProvider with ChangeNotifier {
     });
   }
 
-  /// Reset game state to go back to lobby without leaving room
   void goBackToLobby() {
     _gameStarted = false;
     _currentPuzzle = null;
@@ -137,16 +150,20 @@ class CompetitionProvider with ChangeNotifier {
   List<Map<String, dynamic>> get messages => _messages;
   String? get solvedByUsername => _solvedByUsername;
   String? get hostId => _hostId;
+
+  // ✅ **تحقق من أن المستخدم الحالي هو منشئ الغرفة (Host)**
   bool get isHost =>
       _hostId != null &&
       _hostId!.isNotEmpty &&
       _authProvider != null &&
       _authProvider!.userId.toString() == _hostId;
 
-  // Check if current user is admin or manager
+  // ✅ **تحقق من أن المستخدم له دور إداري (manager/co_manager)**
   bool get isAdminOrManager {
     if (_authProvider == null || _authProvider!.userId == null) return false;
     final myId = _authProvider!.userId?.toString();
+    if (myId == null) return false;
+
     final me = _roomParticipants.firstWhere(
       (p) => _participantId(p) == myId,
       orElse: () => {},
@@ -156,19 +173,16 @@ class CompetitionProvider with ChangeNotifier {
     return role == 'manager' || role == 'admin' || role == 'co_manager';
   }
 
-  // Check if user can be kicked (can't kick self or other managers)
   bool _canKickUser(Map<String, dynamic> targetUser) {
     if (!isAdminOrManager) return false;
 
     final targetRole = targetUser['role']?.toString() ?? 'player';
-    // Can't kick managers or admins unless you're the host
     if ((targetRole == 'manager' || targetRole == 'admin') && !isHost) {
       return false;
     }
 
     final targetId = _participantId(targetUser);
     final myId = _authProvider?.userId?.toString();
-    // Can't kick yourself
     return targetId != myId;
   }
 
@@ -205,13 +219,12 @@ class CompetitionProvider with ChangeNotifier {
       final out = existing != null
           ? Map<String, dynamic>.from(existing)
           : <String, dynamic>{};
-      // realtime updates: username + isReady (do not clobber score fields)
       out['userId'] = id;
       out['username'] = inc['username'] ?? out['username'];
       if (inc.containsKey('isReady')) out['isReady'] = inc['isReady'] == true;
       merged.add(out);
     }
-    // Keep any existing participants that weren't in realtime list (rare, but defensive)
+
     for (final p in _roomParticipants) {
       final id = _participantId(p);
       if (id == null) continue;
@@ -233,24 +246,14 @@ class CompetitionProvider with ChangeNotifier {
     });
   }
 
-  // Normalize puzzle to always have question/options/type for UI
   Map<String, dynamic> _normalizePuzzle(Map<String, dynamic> puzzle) {
     final normalized = Map<String, dynamic>.from(puzzle);
-
-    // Standard quiz format - simple normalization
     normalized['question'] = normalized['question'] ?? 'سؤال غير متوفر';
     normalized['options'] = (normalized['options'] as List?) ?? <dynamic>[];
     normalized['type'] = normalized['type'] ?? 'quiz';
-
-    // Preserve metadata for display
-    if (normalized['startWord'] != null || normalized['endWord'] != null) {
-      // This is a Wonder Link puzzle, keep the metadata
-    }
-
     return normalized;
   }
 
-  // Competition state
   List<Map<String, dynamic>> _activeCompetitions = [];
   List<Map<String, dynamic>> _myRooms = [];
   List<Map<String, dynamic>> get activeCompetitions => _activeCompetitions;
@@ -286,9 +289,13 @@ class CompetitionProvider with ChangeNotifier {
         language: language,
       );
       _currentRoom = result['room'];
+
+      // ✅ استخرج hostId من room.created_by عند الإنشاء
       if (_currentRoom != null && _currentRoom!['created_by'] != null) {
         _hostId = _currentRoom!['created_by'].toString();
+        debugPrint('👑 Host ID set from createRoom: $_hostId');
       }
+
       _connectRealtime();
       _errorMessage = null;
       notifyListeners();
@@ -303,21 +310,21 @@ class CompetitionProvider with ChangeNotifier {
     try {
       final result = await _service.joinRoom(code);
       _currentRoom = result['room'];
+
+      // ✅ استخرج hostId من room.created_by عند الانضمام
       if (_currentRoom != null && _currentRoom!['created_by'] != null) {
         _hostId = _currentRoom!['created_by'].toString();
+        debugPrint('👑 Host ID set from joinRoom: $_hostId');
       }
+
       _connectRealtime();
-      // Fetch current puzzle if game is already active
       await refreshRoomStatus();
-      // Refresh the list of my rooms after joining
       await loadMyRooms();
       notifyListeners();
     } catch (e) {
-      // Capture error message for UI feedback
       _errorMessage = e.toString();
       notifyListeners();
       debugPrint(_errorMessage);
-      // Do not rethrow to avoid crashing the UI
       return;
     }
   }
@@ -333,17 +340,12 @@ class CompetitionProvider with ChangeNotifier {
     }
 
     _realtimeSub?.cancel();
-    // Note: We're using HTTP polling instead of WebSocket for compatibility
-    // WebSocket is not properly supported on this Cloudflare Workers setup
-
     _usePolling = true;
     _startHttpPolling();
   }
 
   void _startHttpPolling() {
     _pollingTimer?.cancel();
-
-    // Start immediate polling
     _pollOnce();
 
     _pollingTimer = Timer.periodic(Duration(seconds: _pollingIntervalSeconds), (
@@ -362,7 +364,6 @@ class CompetitionProvider with ChangeNotifier {
       final response = await _service.getRoomEvents(roomId);
 
       if (response != null) {
-        // Check if this is a new event
         final eventHash = response.toString().hashCode.toString();
         if (eventHash != _lastPolledEventHash) {
           _lastPolledEventHash = eventHash;
@@ -375,11 +376,8 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   void _handleRealtimeEvent(Map<String, dynamic> event) {
-    // Surface transport-level errors to the UI
     if (event['type'] == 'error' || event['type'] == 'closed') {
-      // Only show error message if polling is enabled (HTTP polling mode)
       if (_usePolling) {
-        // HTTP polling errors are handled silently with retry
         debugPrint('HTTP polling event error/closed: ${event['message']}');
       } else {
         _errorMessage =
@@ -395,7 +393,6 @@ class CompetitionProvider with ChangeNotifier {
         _mergeRoomParticipantsFromRealtime(event['participants'] ?? []);
         _hostId = event['hostId']?.toString();
 
-        // Find my own ready status in the participants list
         final myId = _authProvider?.userId?.toString();
         if (myId != null) {
           final me = _roomParticipants.firstWhere(
@@ -450,11 +447,8 @@ class CompetitionProvider with ChangeNotifier {
         _lastAnswerCorrect = null;
         _correctAnswerIndex = null;
 
-        // IMPORTANT: We don't trust WS puzzle payload for per-user progression.
-        // Always hydrate from API which returns the per-user current puzzle/index.
         refreshRoomStatus();
         _puzzleStartTime = DateTime.now();
-        // Read timer info from gameState if present
         final gs = event['gameState'];
         if (gs != null && gs['puzzleEndsAt'] != null) {
           _puzzleEndsAt = DateTime.fromMillisecondsSinceEpoch(
@@ -484,7 +478,6 @@ class CompetitionProvider with ChangeNotifier {
           '✅ Answer state cleared: selectedIdx=$_selectedAnswerIndex, lastCorrect=$_lastAnswerCorrect, correctIdx=$_correctAnswerIndex',
         );
 
-        // IMPORTANT: Always hydrate from API (per-user current puzzle/index).
         refreshRoomStatus();
         _puzzleStartTime = DateTime.now();
         final gs2 = event['gameState'];
@@ -532,7 +525,6 @@ class CompetitionProvider with ChangeNotifier {
             int.tryParse(idxRaw.toString()) ?? _currentPuzzleIndex;
       }
     }
-    // Safety defaults to avoid null UI
     if (_currentPuzzle != null) {
       _currentPuzzle = _normalizePuzzle(_currentPuzzle!);
     }
@@ -547,12 +539,10 @@ class CompetitionProvider with ChangeNotifier {
           _timePerPuzzleSeconds;
     }
 
-    // Load puzzle if provided
     if (puzzle != null) {
       _currentPuzzle = _normalizePuzzle(Map<String, dynamic>.from(puzzle));
       _puzzleStartTime = DateTime.now();
     }
-    // Also check if gameState has currentPuzzle (from init/websocket)
     if (gameState['currentPuzzle'] != null) {
       _currentPuzzle = _normalizePuzzle(
         Map<String, dynamic>.from(gameState['currentPuzzle']),
@@ -570,10 +560,8 @@ class CompetitionProvider with ChangeNotifier {
   Future<void> refreshRoomStatus({bool bypassThrottle = false}) {
     if (_currentRoom == null) return Future.value();
 
-    // Avoid overlapping refresh calls (common when WS + UI both trigger refresh).
     if (_refreshInFlight != null) return _refreshInFlight!;
 
-    // Throttle overly-frequent refresh bursts (except when explicitly bypassed after answer submission).
     final now = DateTime.now();
     final last = _lastRefreshAt;
     if (!bypassThrottle &&
@@ -596,20 +584,20 @@ class CompetitionProvider with ChangeNotifier {
       final prevPuzzleIndex = _currentPuzzleIndex;
       final result = await _service.getRoomStatus(_currentRoom!['id']);
       _currentRoom = result['room'];
+
+      // ✅ **الخطوة الحاسمة: استخراج hostId من room.created_by**
       if (_currentRoom != null && _currentRoom!['created_by'] != null) {
         _hostId = _currentRoom!['created_by'].toString();
+        debugPrint('👑 Host ID set from getRoomStatus: $_hostId');
       }
 
       final roomStatus = _currentRoom!['status']?.toString() ?? 'unknown';
 
-      // Prefer per-user puzzle index from backend (prevents repeats after wrong answers)
       final idxRaw =
           result['currentPuzzleIndex'] ?? result['current_puzzle_index'];
       if (idxRaw != null) {
         final parsed = int.tryParse(idxRaw.toString());
         if (parsed != null) {
-          // Never allow refresh to move the user backwards; this can happen if we
-          // already advanced locally and the server is briefly behind.
           if (roomStatus == 'active' && parsed < _currentPuzzleIndex) {
             debugPrint(
               '⚠️ Ignoring server puzzle index rollback: server=$parsed local=$_currentPuzzleIndex',
@@ -620,8 +608,6 @@ class CompetitionProvider with ChangeNotifier {
         }
       }
 
-      // If the server advanced the puzzle index, clear previous answer UI state
-      // so the next question is interactive and doesn't appear "stuck".
       if (_currentPuzzleIndex != prevPuzzleIndex) {
         _selectedAnswerIndex = null;
         _lastAnswerCorrect = null;
@@ -645,7 +631,6 @@ class CompetitionProvider with ChangeNotifier {
         );
       });
 
-      // Get current puzzle from API result if game is active
       final puzzle = result['currentPuzzle'];
       final globalPuzzle = result['globalCurrentPuzzle'];
       debugPrint(
@@ -653,8 +638,6 @@ class CompetitionProvider with ChangeNotifier {
       );
 
       if (puzzle != null) {
-        // If user has already answered this question and we're waiting to auto-advance,
-        // do not overwrite the current puzzle again (this causes visible repeats).
         if (_selectedAnswerIndex != null && !_isAdvancingToNextPuzzle) {
           debugPrint('⏸️ Skipping puzzle overwrite during answered window');
           notifyListeners();
@@ -665,13 +648,11 @@ class CompetitionProvider with ChangeNotifier {
         final opts = (normalized['options'] as List?) ?? const [];
         final q = normalized['question']?.toString().trim() ?? '';
 
-        // ✅ LOG PUZZLE CHANGE FOR DEBUGGING
         debugPrint('🔄 PUZZLE REFRESH: Index=$_currentPuzzleIndex');
         debugPrint('📄 Question: $q');
         debugPrint('📄 Options: ${opts.length}');
         debugPrint('📄 Puzzle ID: ${normalized['puzzleId'] ?? 'N/A'}');
 
-        // Validate puzzle has valid options
         if (opts.isEmpty) {
           debugPrint('⚠️ Received puzzle without options');
           if (_currentPuzzle != null &&
@@ -680,16 +661,12 @@ class CompetitionProvider with ChangeNotifier {
             notifyListeners();
             return;
           }
-          // If no valid current puzzle, log and keep trying
           debugPrint('⚠️ No valid puzzle available');
           notifyListeners();
           return;
         }
 
-        // Update puzzle successfully
         _gameStarted = roomStatus == 'active';
-        // _updateGameState reads currentPuzzleIndex from gameState (camelCase) which room doesn't have.
-        // We already set _currentPuzzleIndex above from result['currentPuzzleIndex'].
         _updateGameState(
           _currentRoom!,
           puzzle: normalized,
@@ -700,8 +677,6 @@ class CompetitionProvider with ChangeNotifier {
         return;
       }
 
-      // Fallback: sometimes host-forced advance updates the global puzzle first.
-      // If per-user currentPuzzle is temporarily missing, use the global puzzle so UI doesn't get stuck loading.
       if (roomStatus == 'active' && globalPuzzle != null) {
         final normalized = _normalizePuzzle(
           Map<String, dynamic>.from(globalPuzzle),
@@ -719,7 +694,6 @@ class CompetitionProvider with ChangeNotifier {
         }
       }
 
-      // No puzzle from server - update without puzzle
       _updateGameState(_currentRoom!, puzzle: null, trustPuzzleIndex: false);
       notifyListeners();
     } catch (e) {
@@ -730,25 +704,8 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   Future<bool> sendMessage(String text) async {
-    if (_currentRoom == null) return false;
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return false;
     try {
-      // If WebSocket is unavailable, use HTTP chat endpoint
-      if (_usePolling || !_realtime.isConnected) {
-        final result = await _service.sendRoomChat(
-          _currentRoom!['id'],
-          trimmed,
-        );
-        final msg = result['message'];
-        if (msg != null) {
-          _messages = [..._messages, Map<String, dynamic>.from(msg)];
-          notifyListeners();
-        }
-        return true;
-      }
-
-      final sent = _realtime.send({'type': 'chat', 'text': trimmed});
+      final sent = _realtime.send({'type': 'chat', 'text': text});
       if (!sent) {
         debugPrint('Message not sent - WebSocket not connected');
       }
@@ -764,13 +721,11 @@ class CompetitionProvider with ChangeNotifier {
     _isStartingGame = true;
     notifyListeners();
     try {
-      // Refresh first to get latest status and any existing puzzle
       await refreshRoomStatus();
       final status = _currentRoom?['status']?.toString() ?? 'unknown';
       debugPrint('Starting game requested. Current room status: $status');
 
       if (status != 'waiting') {
-        // If already active, just ensure we fetch the current puzzle and surface an error
         await refreshRoomStatus();
         final msg =
             'فشل بدء اللعبة: الغرفة ليست في وضع الانتظار (الحالة: $status)';
@@ -782,16 +737,12 @@ class CompetitionProvider with ChangeNotifier {
 
       debugPrint('Starting game via HTTP API for room ${_currentRoom!['id']}');
       await _service.startGame(_currentRoom!['id']);
-      // The game_started event will come via WebSocket after puzzles are generated
-      // Also pull status to hydrate puzzle if event is delayed
       await refreshRoomStatus();
-      // Optimistically mark started to allow UI while waiting for WS event
       _gameStarted = true;
       notifyListeners();
     } catch (e) {
       debugPrint('Error starting game: $e');
       _errorMessage = 'فشل بدء اللعبة: $e';
-      // Try to fetch current state/puzzle to keep UI consistent
       await refreshRoomStatus();
       notifyListeners();
     } finally {
@@ -810,7 +761,6 @@ class CompetitionProvider with ChangeNotifier {
       );
 
       if (status == 'waiting') {
-        // إذا كانت الغرفة في وضع الانتظار، ابدأ اللعبة
         debugPrint('Room is waiting; starting game via startGame');
         await startGame();
         return;
@@ -823,7 +773,6 @@ class CompetitionProvider with ChangeNotifier {
         return;
       }
 
-      // إذا كانت نشطة، انتقل للسؤال التالي
       await _service.nextPuzzle(_currentRoom!['id']);
       await refreshRoomStatus(bypassThrottle: true);
     } catch (e) {
@@ -839,9 +788,7 @@ class CompetitionProvider with ChangeNotifier {
     try {
       _isReady = ready;
       notifyListeners();
-      // Call API to set ready (no auto-start; host will start manually)
       await _service.setReady(_currentRoom!['id'], ready);
-      // Also notify via WebSocket for immediate UI update
       _realtime.send({'type': 'toggle_ready', 'isReady': ready});
     } catch (e) {
       debugPrint('Error toggling ready: $e');
@@ -850,9 +797,6 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> solvePuzzle(int puzzleIndex) async {
     _realtime.send({'type': 'solve_puzzle', 'puzzleIndex': puzzleIndex});
-
-    // Also submit to DB for persistence
-    // (This part will be handled in the Game UI logic)
   }
 
   Future<void> setReady(bool ready) async {
@@ -887,20 +831,14 @@ class CompetitionProvider with ChangeNotifier {
         _score += result['points'] as int? ?? 0;
         _puzzlesSolved++;
 
-        // Show success message
         if (result['isFirstCorrect'] == true) {
           // Will be updated by WebSocket event 'puzzle_solved_first'
         } else if (result['rank'] != null) {
-          // Show rank if not first
           debugPrint('Solved correctly! Rank: ${result['rank']}');
         }
       } else {
-        // Show error for incorrect answer
         debugPrint('Incorrect answer');
       }
-
-      // nextPuzzle and gameFinished are handled by WebSocket events
-      // to keep all players synchronized
 
       notifyListeners();
     } catch (e) {
@@ -910,7 +848,6 @@ class CompetitionProvider with ChangeNotifier {
     }
   }
 
-  // Quiz format answer submission (answerIndex instead of steps)
   Future<void> submitQuizAnswer(int answerIndex) async {
     if (_currentRoom == null || _currentPuzzle == null) return;
 
@@ -919,7 +856,6 @@ class CompetitionProvider with ChangeNotifier {
         : 0;
 
     try {
-      // Validate puzzle shape before sending to backend to avoid "Invalid puzzle format"
       final opts = (_currentPuzzle!['options'] as List?) ?? const [];
       if (opts.isEmpty) {
         _errorMessage =
@@ -934,16 +870,13 @@ class CompetitionProvider with ChangeNotifier {
         return;
       }
 
-      // تحديث الإجابة المختارة فوراً لعرض النتيجة للمستخدم
       _selectedAnswerIndex = answerIndex;
       notifyListeners();
 
-      // Save puzzle index BEFORE any operations that might change it
       final submissionPuzzleIndex = _currentPuzzleIndex;
 
       final status = _currentRoom?['status']?.toString() ?? 'unknown';
 
-      // يجب أن تكون اللعبة نشطة لإرسال الإجابة، أو يوجد لغز حالي مع بدء محلي
       if (status != 'active' && !_gameStarted) {
         _errorMessage =
             'لا يمكن إرسال الإجابة لأن اللعبة لم تبدأ بعد (الحالة: $status)';
@@ -951,7 +884,6 @@ class CompetitionProvider with ChangeNotifier {
         return;
       }
 
-      // Guard: ensure the puzzleIndex we send is within known total puzzles
       if (_totalPuzzles > 0 && submissionPuzzleIndex >= _totalPuzzles) {
         _errorMessage = 'رقم اللغز غير صالح، يرجى تحديث حالة الغرفة.';
         notifyListeners();
@@ -959,7 +891,6 @@ class CompetitionProvider with ChangeNotifier {
         return;
       }
 
-      // IMPORTANT: Send answer with the puzzle index that was current when user selected it
       final result = await _service.submitQuizAnswer(
         roomId: _currentRoom!['id'],
         puzzleIndex: submissionPuzzleIndex,
@@ -982,9 +913,6 @@ class CompetitionProvider with ChangeNotifier {
         debugPrint('Incorrect answer');
       }
 
-      // ✅ المطلوب: حتى لو كانت الإجابة خاطئة، انتقل للسؤال التالي.
-      // لكن: اعرض نتيجة السؤال الحالي مرة واحدة فقط ثم انتقل.
-      // لذلك لا نبدّل اللغز فوراً هنا، بل نخزّن اللغز التالي (إن وُجد) ثم ننتقل بعد فترة قصيرة.
       _pendingNextPuzzle = null;
       _pendingNextPuzzleIndex = null;
       if (result['nextPuzzle'] != null) {
@@ -996,7 +924,6 @@ class CompetitionProvider with ChangeNotifier {
         }
       }
 
-      // If game finished, keep this question/result as the last screen and refresh final state.
       if (result['gameFinished'] == true) {
         _gameFinished = true;
         _advanceAfterAnswerTimer?.cancel();
@@ -1007,8 +934,6 @@ class CompetitionProvider with ChangeNotifier {
         notifyListeners();
         await refreshRoomStatus(bypassThrottle: true);
       } else {
-        // Lock this question (prevent multiple answers) until we advance.
-        // Then auto-advance regardless of correctness.
         _scheduleAdvanceToNextPuzzle();
       }
 
@@ -1096,7 +1021,6 @@ class CompetitionProvider with ChangeNotifier {
     if (_currentRoom == null) return;
     try {
       await _service.reopenRoom(_currentRoom!['id']);
-      // reset local state like going back to lobby
       _gameStarted = false;
       _gameFinished = false;
       _currentPuzzle = null;
@@ -1149,7 +1073,6 @@ class CompetitionProvider with ChangeNotifier {
   int? get currentRoomId => _currentRoom?['id'] as int?;
   int? get currentDifficulty => _currentRoom?['difficulty'] as int?;
 
-  // Manager actions
   Future<void> skipPuzzle(int roomId) async {
     await _service.skipPuzzle(roomId);
     notifyListeners();
@@ -1157,7 +1080,6 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> resetScores(int roomId) async {
     await _service.resetScores(roomId);
-    // Reset local scores
     _score = 0;
     _puzzlesSolved = 0;
     for (var participant in _roomParticipants) {
@@ -1183,7 +1105,6 @@ class CompetitionProvider with ChangeNotifier {
 
     try {
       await _service.freezePlayer(roomId, userId, freeze);
-      // Update local participant
       final participantIndex = _roomParticipants.indexWhere(
         (p) => _participantId(p) == userId,
       );
@@ -1205,7 +1126,6 @@ class CompetitionProvider with ChangeNotifier {
       return;
     }
 
-    // Find the target user
     final targetUser = _roomParticipants.firstWhere(
       (p) => _participantId(p) == userId,
       orElse: () => {},
@@ -1225,7 +1145,6 @@ class CompetitionProvider with ChangeNotifier {
 
     try {
       await _service.kickPlayer(roomId, userId);
-      // Remove from local participants
       _roomParticipants.removeWhere((p) => _participantId(p) == userId);
       notifyListeners();
     } catch (e) {
@@ -1242,7 +1161,6 @@ class CompetitionProvider with ChangeNotifier {
       return;
     }
 
-    // Find the target user
     final targetUser = _roomParticipants.firstWhere(
       (p) => _participantId(p) == userId,
       orElse: () => {},
@@ -1265,7 +1183,6 @@ class CompetitionProvider with ChangeNotifier {
 
     try {
       await _service.promoteToCoManager(roomId, userId);
-      // Update local participant
       final participantIndex = _roomParticipants.indexWhere(
         (p) => _participantId(p) == userId,
       );
@@ -1306,10 +1223,10 @@ class CompetitionProvider with ChangeNotifier {
     _timePerPuzzleSeconds = 30;
     _messages = [];
     _solvedByUsername = null;
+    _hostId = null; // ✅ أعد تعيين hostId عند إعادة تعيين الحالة
     notifyListeners();
   }
 
-  // Delete room (only host can delete)
   @override
   void dispose() {
     _advanceAfterAnswerTimer?.cancel();

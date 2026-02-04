@@ -16,52 +16,12 @@ class RealtimeService {
   bool get isConnecting => _isConnecting;
 
   void connect(String url, String token) {
+    // WebSocket connection is disabled due to Cloudflare Workers limitations
+    // Using HTTP polling instead in CompetitionProvider
+    debugPrint('WebSocket connection deprecated. Using HTTP polling instead.');
     disconnect();
-    _isConnecting = true;
+    _isConnecting = false;
     _isConnected = false;
-
-    // URL format: wss://.../rooms/ws?roomId=...
-    final uri = Uri.parse(url);
-    try {
-      // Pass token via Sec-WebSocket-Protocol (e.g. "bearer, <token>")
-      // so the Cloudflare Worker can authenticate the websocket handshake.
-      if (token.isNotEmpty) {
-        _channel = WebSocketChannel.connect(uri, protocols: ['bearer', token]);
-      } else {
-        _channel = WebSocketChannel.connect(uri);
-      }
-
-      _channel!.stream.listen(
-        (data) {
-          _isConnecting = false;
-          _isConnected = true;
-          try {
-            final event = jsonDecode(data);
-            _eventController.add(event);
-          } catch (e) {
-            debugPrint('Error decoding websocket message: $data');
-          }
-        },
-        onError: (error) {
-          debugPrint('WebSocket error: $error');
-          _isConnecting = false;
-          _isConnected = false;
-          _eventController.add({'type': 'error', 'message': error.toString()});
-        },
-        onDone: () {
-          debugPrint('WebSocket closed');
-          _isConnecting = false;
-          _isConnected = false;
-          _channel = null;
-          _eventController.add({'type': 'closed'});
-        },
-      );
-    } catch (e) {
-      _isConnecting = false;
-      _isConnected = false;
-      debugPrint('Connection error: $e');
-      _eventController.add({'type': 'error', 'message': e.toString()});
-    }
   }
 
   bool send(Map<String, dynamic> data) {

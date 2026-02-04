@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/game_level.dart';
 import '../models/game_puzzle.dart';
+import '../models/spot_diff_puzzle.dart';
 import '../core/exceptions/app_exceptions.dart';
 
 class CloudflareApiService {
@@ -226,6 +227,51 @@ class CloudflareApiService {
       rethrow;
     } catch (e) {
       throw NetworkException.badRequest('Vision processing error: $e');
+    }
+  }
+
+  Future<SpotDiffPuzzle?> generateSpotDiffPuzzle({
+    required bool isArabic,
+    int differencesCount = 5,
+    String theme = '',
+    String conflict = '',
+    String stage = '',
+    int width = 512,
+    int height = 512,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_workerUrl/api/generate-spot-diff'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'language': isArabic ? 'ar' : 'en',
+          'differencesCount': differencesCount,
+          'theme': theme,
+          'conflict': conflict,
+          'stage': stage,
+          'width': width,
+          'height': height,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is! Map<String, dynamic>) {
+          throw GameException.puzzleLoadFailed('Invalid response format');
+        }
+        return SpotDiffPuzzle.fromJson(data);
+      } else {
+        debugPrint('[SpotDiff] HTTP ${response.statusCode}: ${response.body}');
+        throw NetworkException.badRequest(
+          'Failed to generate spot diff: ${response.statusCode}',
+        );
+      }
+    } on NetworkException {
+      rethrow;
+    } on GameException {
+      rethrow;
+    } catch (e) {
+      throw NetworkException.badRequest('Spot diff error: $e');
     }
   }
 }

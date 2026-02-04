@@ -387,3 +387,396 @@ class GlassedContainer extends StatelessWidget {
     );
   }
 }
+
+/// 🎯 Pulse Button with Neon Glow Effect
+class PulseButton extends StatefulWidget {
+  final String label;
+  final VoidCallback onPressed;
+  final bool enabled;
+  final bool isPrimary;
+  final IconData? icon;
+  final double? width;
+  final double? height;
+
+  const PulseButton({
+    required this.label,
+    required this.onPressed,
+    this.enabled = true,
+    this.isPrimary = true,
+    this.icon,
+    this.width,
+    this.height = 56,
+    super.key,
+  });
+
+  @override
+  State<PulseButton> createState() => _PulseButtonState();
+}
+
+class _PulseButtonState extends State<PulseButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _glowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.03,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+    _glowAnimation = Tween<double>(
+      begin: 0.4,
+      end: 0.8,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final glowColor = widget.isPrimary ? AppColors.cyan : AppColors.purple;
+    final bgColor = widget.isPrimary ? AppColors.cyan : AppColors.darkSurface;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: Container(
+            width: widget.width,
+            height: widget.height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                // Primary glow
+                BoxShadow(
+                  color: glowColor.withOpacity(_glowAnimation.value),
+                  blurRadius: 24 + (_glowAnimation.value * 8),
+                  spreadRadius: 2 + (_glowAnimation.value * 4),
+                ),
+                // Secondary glow (darker)
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 12,
+                  spreadRadius: 0,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.enabled ? widget.onPressed : null,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: widget.enabled ? bgColor : bgColor.withOpacity(0.5),
+                    border: Border.all(
+                      color: widget.enabled
+                          ? glowColor.withOpacity(0.5)
+                          : glowColor.withOpacity(0.2),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.icon != null) ...[
+                        Icon(widget.icon, color: Colors.white, size: 20),
+                        const SizedBox(width: 12),
+                      ],
+                      Text(
+                        widget.label,
+                        style: TextStyle(
+                          color: widget.isPrimary
+                              ? Colors.white
+                              : AppColors.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 🌈 Gradient Button with Glow
+class GradientButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+  final bool isPrimary;
+  final IconData? icon;
+  final bool enabled;
+
+  const GradientButton({
+    required this.label,
+    required this.onPressed,
+    this.isPrimary = true,
+    this.icon,
+    this.enabled = true,
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = isPrimary
+        ? [AppColors.cyan, AppColors.purple]
+        : [AppColors.darkSurfaceLight, AppColors.darkSurface];
+
+    final glowColor = isPrimary ? AppColors.cyan : AppColors.darkSurfaceLight;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: glowColor.withOpacity(enabled ? 0.5 : 0.2),
+            blurRadius: 12,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  Icon(
+                    icon,
+                    color: isPrimary ? Colors.white : AppColors.textPrimary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isPrimary ? Colors.white : AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 🌊 Animated Background with Moving Gradient
+class AnimatedBackgroundGradient extends StatefulWidget {
+  final Widget child;
+  final Duration? duration;
+
+  const AnimatedBackgroundGradient({
+    required this.child,
+    this.duration = const Duration(seconds: 8),
+    super.key,
+  });
+
+  @override
+  State<AnimatedBackgroundGradient> createState() =>
+      _AnimatedBackgroundGradientState();
+}
+
+class _AnimatedBackgroundGradientState extends State<AnimatedBackgroundGradient>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(duration: widget.duration, vsync: this)
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final value = _controller.value;
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment(-1.0 + value * 2.0, -1.0 + value),
+              end: Alignment(1.0 - value * 2.0, 1.0 - value),
+              colors: [
+                AppColors.darkBackground,
+                AppColors.darkSurface,
+                AppColors.darkBackground,
+              ],
+            ),
+          ),
+          child: widget.child,
+        );
+      },
+    );
+  }
+}
+
+/// 🌊 Wave Loading Widget with Animated Waves
+class WaveLoadingWidget extends StatefulWidget {
+  final String? label;
+  final Color waveColor;
+
+  const WaveLoadingWidget({
+    this.label,
+    this.waveColor = const Color(0xFF00D9FF),
+    super.key,
+  });
+
+  @override
+  State<WaveLoadingWidget> createState() => _WaveLoadingWidgetState();
+}
+
+class _WaveLoadingWidgetState extends State<WaveLoadingWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return SizedBox(
+                width: 200,
+                height: 100,
+                child: CustomPaint(
+                  painter: WavePainter(
+                    animation: _controller.value,
+                    color: widget.waveColor,
+                  ),
+                ),
+              );
+            },
+          ),
+          if (widget.label != null) ...[
+            const SizedBox(height: 24),
+            Text(
+              widget.label!,
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Wave painter for loading animation
+class WavePainter extends CustomPainter {
+  final double animation;
+  final Color color;
+
+  WavePainter({required this.animation, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withOpacity(0.3)
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    final waveHeight = 20.0;
+    const frequency = 2;
+    final pi = 3.14159265359;
+
+    // Draw 3 waves with different phases
+    for (int waveIndex = 0; waveIndex < 3; waveIndex++) {
+      final offset = animation * 360 + (waveIndex * 120);
+      final wavePaint = Paint()
+        ..color = color.withOpacity(0.3 - (waveIndex * 0.08))
+        ..style = PaintingStyle.fill;
+
+      path.moveTo(0, size.height / 2);
+      for (double x = 0; x <= size.width; x += 5) {
+        final y =
+            size.height / 2 +
+            waveHeight *
+                sin((x / size.width * frequency * pi + offset * pi / 180));
+        path.lineTo(x, y);
+      }
+      path.lineTo(size.width, size.height);
+      path.lineTo(0, size.height);
+      path.close();
+
+      canvas.drawPath(path, wavePaint);
+      path.reset();
+    }
+  }
+
+  double sin(double value) {
+    return (value).sign;
+  }
+
+  @override
+  bool shouldRepaint(WavePainter oldDelegate) =>
+      oldDelegate.animation != animation;
+}

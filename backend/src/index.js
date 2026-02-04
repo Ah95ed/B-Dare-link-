@@ -9,9 +9,11 @@ import { generatePathLevel } from './game_path.js';
 import { listPuzzles, deletePuzzle, regeneratePuzzle, generateBulkPuzzles } from './admin.js';
 import { getDailyChallenge, submitDailyScore, getDailyLeaderboard, getWeeklyStandings } from './tournament.js';
 import { generatePuzzleFromImage } from './vision.js';
+import { generateSpotDiffPuzzle } from './spot_diff.js';
 import {
   createRoom,
   joinRoom,
+  sendRoomChat,
   getRoomStatus,
   setReady,
   submitAnswer,
@@ -116,6 +118,76 @@ export default {
         return await generatePuzzleFromImage(request, env);
       }
 
+      // ---------- Spot the Difference (AI Images) ----------
+      if (
+        (path === '/api/generate-spot-diff' ||
+          path === '/generate-spot-diff') &&
+        request.method === 'POST'
+      ) {
+        return await generateSpotDiffPuzzle(request, env);
+      }
+
+      // ---------- List Available Gemini Models ----------
+      if (
+        (path === '/api/list-gemini-models' || path === '/list-gemini-models') &&
+        request.method === 'GET'
+      ) {
+        const apiKey = env?.GEMINI_API_KEY;
+        if (!apiKey) {
+          return errorResponse('GEMINI_API_KEY not configured', 500);
+        }
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        const textModels = data.models?.filter(m =>
+          m.supportedGenerationMethods?.includes('generateContent')
+        ).map(m => ({
+          name: m.name,
+          displayName: m.displayName,
+          description: m.description
+        })) || [];
+
+        return new Response(JSON.stringify({
+          models: textModels,
+          count: textModels.length
+        }), {
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // ---------- Test Gemini Text Generation ----------
+      if (
+        (path === '/api/test-gemini-text' || path === '/test-gemini-text') &&
+        request.method === 'GET'
+      ) {
+        const apiKey = env?.GEMINI_API_KEY;
+        if (!apiKey) {
+          return errorResponse('GEMINI_API_KEY not configured', 500);
+        }
+
+        const model = 'gemini-2.5-flash';
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const testResponse = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'Say hello in Arabic' }] }]
+          })
+        });
+
+        const responseText = await testResponse.text();
+        return new Response(JSON.stringify({
+          model,
+          status: testResponse.status,
+          ok: testResponse.ok,
+          body: responseText
+        }), {
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+
       // ---------- Admin ----------
       if (path.startsWith('/admin/puzzles')) {
         if (request.method === 'GET') return await listPuzzles(request, env);
@@ -168,6 +240,18 @@ export default {
       if ((path === '/rooms/status' || url.pathname === '/api/rooms/status') && request.method === 'GET') {
         return await getRoomStatus(request, env);
       }
+      if (url.pathname.startsWith('/rooms/') && url.pathname.endsWith('/events') && request.method === 'GET') {
+        const parts = url.pathname.split('/').filter(Boolean);
+        const roomId = parts.length >= 3 ? parts[1] : null;
+        if (!roomId) return errorResponse('roomId required', 400);
+
+        const user = await getUserFromRequest(request, env);
+        if (!user) return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
+
+        const id = env.ROOM_DO.idFromName(roomId.toString());
+        const roomObject = env.ROOM_DO.get(id);
+        return roomObject.fetch(new Request('http://room/events', { method: 'GET' }));
+      }
       if (url.pathname === '/api/rooms/leave' && request.method === 'POST') {
         return await leaveRoom(request, env);
       }
@@ -179,6 +263,9 @@ export default {
       }
       if (path === '/rooms/ready' && request.method === 'POST') {
         return await setReady(request, env);
+      }
+      if (path === '/rooms/chat' && request.method === 'POST') {
+        return await sendRoomChat(request, env);
       }
       if (path === '/rooms/answer' && request.method === 'POST') {
         return await submitAnswer(request, env, ctx);

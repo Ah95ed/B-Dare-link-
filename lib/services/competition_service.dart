@@ -415,4 +415,31 @@ class CompetitionService {
   Future<void> promoteToCoManager(int roomId, String userId) async {
     await _post('/manager/promote', {'roomId': roomId, 'userId': userId});
   }
+
+  Future<Map<String, dynamic>> sendRoomChat(int roomId, String text) async {
+    return _post('/rooms/chat', {'roomId': roomId, 'text': text});
+  }
+
+  // HTTP polling fallback for WebSocket
+  Future<Map<String, dynamic>?> getRoomEvents(int roomId) async {
+    try {
+      final token = await _getToken();
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/rooms/$roomId/events'),
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 }

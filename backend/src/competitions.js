@@ -72,10 +72,13 @@ export async function createRoom(request, env) {
     const roomId = result.meta.last_row_id;
     console.log('Room created with ID:', roomId);
 
-    // Add creator as participant with manager role
+    // Add creator as participant with MANAGER role (full admin control)
+    // The creator is automatically the room admin with all permissions
     await env.DB.prepare('INSERT INTO room_participants (room_id, user_id, is_ready, role) VALUES (?, ?, ?, ?)')
-      .bind(roomId, user.id, 1, 'manager') // Creator is manager
+      .bind(roomId, user.id, 1, 'manager') // Creator = Manager = Admin
       .run();
+
+    console.log(`User ${user.id} (${user.username}) set as MANAGER for room ${roomId}`);
 
     // Create default room settings
     await env.DB.prepare(`
@@ -155,6 +158,18 @@ export async function joinRoom(request, env) {
       return jsonResponse({ success: true, room, message: 'Already in room' }, 200);
     }
 
+    // Check if user is already in another active room (prevent multi-room participation)
+    const activeParticipation = await env.DB.prepare(
+      `SELECT rp.room_id, r.name, r.status 
+       FROM room_participants rp 
+       JOIN rooms r ON rp.room_id = r.id 
+       WHERE rp.user_id = ? AND r.status IN ('waiting', 'active')`
+    ).bind(user.id).first();
+
+    if (activeParticipation) {
+      return errorResponse(`أنت بالفعل في غرفة أخرى (${activeParticipation.name}). يجب الخروج منها أولاً.`, 400);
+    }
+
     // Check max participants
     const participantCount = await env.DB.prepare('SELECT COUNT(*) AS c FROM room_participants WHERE room_id = ?')
       .bind(room.id)
@@ -169,6 +184,47 @@ export async function joinRoom(request, env) {
       .run();
 
     return jsonResponse({ success: true, room }, 200);
+  } catch (e) {
+    return errorResponse(e.message, 500);
+  }
+}
+
+// Send chat message (HTTP fallback when WebSocket is unavailable)
+export async function sendRoomChat(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return errorResponse('Unauthorized', 401);
+
+  const body = await request.json();
+  const { roomId, text } = body || {};
+
+  if (!roomId) return errorResponse('roomId required', 400);
+  const messageText = String(text ?? '').trim();
+  if (!messageText) return errorResponse('Message text required', 400);
+
+  try {
+    // Verify participation and not kicked
+    const participant = await env.DB.prepare(
+      'SELECT role, is_kicked FROM room_participants WHERE room_id = ? AND user_id = ?'
+    ).bind(roomId, user.id).first();
+    if (!participant) return errorResponse('You are not in this room', 403);
+    if (participant.is_kicked) return errorResponse('You are kicked from this room', 403);
+
+    const chatMsg = {
+      id: crypto.randomUUID(),
+      userId: user.id.toString(),
+      username: user.username,
+      text: messageText,
+      timestamp: Date.now(),
+    };
+
+    const doId = env.ROOM_DO.idFromName(roomId.toString());
+    const roomObject = env.ROOM_DO.get(doId);
+    await roomObject.fetch(new Request('http://room/chat-event', {
+      method: 'POST',
+      body: JSON.stringify({ message: chatMsg, roomId })
+    }));
+
+    return jsonResponse({ success: true, message: chatMsg });
   } catch (e) {
     return errorResponse(e.message, 500);
   }
@@ -425,6 +481,16 @@ export async function getRoomStatus(request, env) {
       }
     }
 
+    // Add admin/manager information
+    const myParticipant = participants.results.find(p => p.user_id === user.id);
+    const isAdmin = room.created_by === user.id;
+    const isManager = myParticipant?.role === 'manager';
+    const isCoManager = myParticipant?.role === 'co_manager';
+
+    const adminUser = await env.DB.prepare('SELECT id, username FROM users WHERE id = ?')
+      .bind(room.created_by)
+      .first();
+
     return jsonResponse({
       room,
       participants: participants.results,
@@ -434,6 +500,12 @@ export async function getRoomStatus(request, env) {
       // Extra fields for debugging/admin
       globalCurrentPuzzle,
       globalCurrentPuzzleIndex,
+      // Admin/Manager info
+      admin: adminUser,
+      isAdmin,
+      isManager,
+      isCoManager,
+      canManage: isAdmin || isManager || isCoManager,
     });
   } catch (e) {
     return errorResponse(e.message, 500);
@@ -1889,14 +1961,17 @@ export async function getMyRooms(request, env) {
   if (!user) return errorResponse('Unauthorized', 401);
 
   try {
-    // Get all rooms user participated in (exclude deleted rooms)
+    // Get only rooms where user is CURRENTLY a participant
+    // If user left permanently (deleted from room_participants), room won't show
     const rooms = await env.DB.prepare(
       `SELECT r.id, r.name, r.code, r.status, r.created_by, r.puzzle_count, 
               r.time_per_puzzle, r.difficulty, r.language, r.puzzle_source, r.created_at,
               u.username as creator_name,
-              COUNT(DISTINCT rp.user_id) as participant_count
+              rp.role as my_role,
+              COUNT(DISTINCT rp2.user_id) as participant_count
       FROM rooms r 
       JOIN room_participants rp ON r.id = rp.room_id 
+      JOIN room_participants rp2 ON r.id = rp2.room_id
       JOIN users u ON r.created_by = u.id
       WHERE rp.user_id = ? 
       GROUP BY r.id
@@ -1920,17 +1995,22 @@ export async function leaveRoom(request, env) {
   if (!roomId) return errorResponse('roomId required', 400);
 
   try {
-    // IMPORTANT:
-    // Do not delete the participant row by default.
-    // Many clients call "leave" when navigating away, and deleting resets
-    // per-user progress (current_puzzle_index), which makes questions repeat
-    // when the user reopens the room.
-    if (permanent === true) {
+    // Check if user is manager/owner of this room
+    const room = await env.DB.prepare('SELECT created_by FROM rooms WHERE id = ?').bind(roomId).first();
+    if (room && room.created_by === user.id) {
+      return errorResponse('المنشئ لا يمكنه مغادرة الغرفة. يجب حذف الغرفة بالكامل.', 400);
+    }
+
+    // Default behavior: permanent leave (delete participation record)
+    // This ensures the room won't appear in "My Rooms" list
+    const shouldDelete = permanent !== false; // Delete by default unless explicitly soft leave
+
+    if (shouldDelete) {
       await env.DB.prepare('DELETE FROM room_participants WHERE room_id = ? AND user_id = ?')
         .bind(roomId, user.id)
         .run();
     } else {
-      // Soft leave: keep progress, just mark not ready.
+      // Soft leave: keep progress, just mark not ready (for temporary navigation)
       await env.DB.prepare('UPDATE room_participants SET is_ready = 0 WHERE room_id = ? AND user_id = ?')
         .bind(roomId, user.id)
         .run();

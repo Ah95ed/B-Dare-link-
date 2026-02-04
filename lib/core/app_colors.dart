@@ -12,9 +12,22 @@ class AppColors {
   static const Color cyanLight = Color(0xFF33E6FF); // Lighter cyan
   static const Color cyanDark = Color(0xFF0099CC); // Darker cyan
 
-  static const Color magenta = Color(0xFFFF006E); // Vibrant magenta
-  static const Color magentaLight = Color(0xFFFF4DA6); // Lighter magenta
-  static const Color magentaDark = Color(0xFFCC0056); // Darker magenta
+  static const Color purple = Color(0xFF9D4EDD); // Mystical purple (Wonder)
+  static const Color purpleLight = Color(0xFFC77DFF); // Lighter purple
+  static const Color purpleDark = Color(0xFF7209B7); // Darker purple
+
+  // Legacy magenta (deprecated - use purple instead)
+  @Deprecated('Use purple instead for Wonder theme')
+  static const Color magenta = Color(0xFF9D4EDD); // Maps to purple
+  @Deprecated('Use purpleLight instead')
+  static const Color magentaLight = Color(0xFFC77DFF);
+  @Deprecated('Use purpleDark instead')
+  static const Color magentaDark = Color(0xFF7209B7);
+
+  // Gold/Achievement Colors - Wonder theme
+  static const Color gold = Color(0xFFFFD60A); // Achievement gold
+  static const Color goldLight = Color(0xFFFFE55C); // Light gold
+  static const Color goldDark = Color(0xFFD4AA00); // Dark gold
 
   // Status Colors - Modern
   static const Color success = Color(0xFF00D084); // Vibrant green
@@ -33,15 +46,27 @@ class AppColors {
   static const Color divider = Color(0xFF252D48); // Divider color
   static const Color shadow = Color(0xFF000000); // Shadow color
 
-  // Gradients
-  static const LinearGradient gradientCyanToMagenta = LinearGradient(
-    colors: [cyan, magenta],
+  // Gradients - Wonder Theme
+  static const LinearGradient gradientCyanToPurple = LinearGradient(
+    colors: [cyan, purple],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  static const LinearGradient gradientAurora = LinearGradient(
-    colors: [cyan, magenta, darkBackground],
+  static const LinearGradient gradientWonder = LinearGradient(
+    colors: [cyan, purple, purpleDark],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient gradientMagical = LinearGradient(
+    colors: [purpleLight, purple, purpleDark],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
+  static const LinearGradient gradientAchievement = LinearGradient(
+    colors: [gold, goldLight, cyan],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -53,7 +78,22 @@ class AppColors {
   );
 
   static const LinearGradient gradientError = LinearGradient(
-    colors: [error, magenta],
+    colors: [error, purple],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  // Legacy gradients (deprecated)
+  @Deprecated('Use gradientCyanToPurple instead')
+  static const LinearGradient gradientCyanToMagenta = LinearGradient(
+    colors: [cyan, purple],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  @Deprecated('Use gradientWonder instead')
+  static const LinearGradient gradientAurora = LinearGradient(
+    colors: [cyan, purple, darkBackground],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

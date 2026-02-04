@@ -14,6 +14,7 @@ class ParticipantCard extends StatelessWidget {
   final String? avatar;
   final int score;
   final bool isHost;
+  final bool isManager;
   final bool isActive;
   final VoidCallback? onTap;
   final Color? statusColor;
@@ -23,6 +24,7 @@ class ParticipantCard extends StatelessWidget {
     this.avatar,
     required this.score,
     this.isHost = false,
+    this.isManager = false,
     this.isActive = true,
     this.onTap,
     this.statusColor,
@@ -121,24 +123,50 @@ class ParticipantCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Host Badge
-                if (isHost)
+                // Manager/Host Badge with Star
+                if (isManager || isHost)
                   Positioned(
                     left: -2,
                     top: -3,
                     child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppColors.magenta,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'مضيف',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                        gradient: LinearGradient(
+                          colors: [
+                            Color(0xFFFFD700), // Gold
+                            Color(0xFFFFA500), // Orange
+                          ],
                         ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color(0xFFFFD700).withOpacity(0.4),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('⭐', style: TextStyle(fontSize: 10)),
+                          SizedBox(width: 2),
+                          Text(
+                            isManager ? 'مدير' : 'مضيف',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  offset: Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -265,23 +293,11 @@ class QuestionCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: 12),
-          // Question Text
-          ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(
-              colors: [AppColors.cyan, AppColors.magenta],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ).createShader(bounds),
-            child: Text(
-              question,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-                height: 1.5,
-              ),
-            ),
+          // Question Text with Neon Glow
+          _buildNeonText(
+            text: question,
+            color1: AppColors.cyan,
+            color2: AppColors.magenta,
           ),
         ],
       ),
@@ -317,17 +333,17 @@ class AnswerButton extends StatefulWidget {
 
 class _AnswerButtonState extends State<AnswerButton>
     with SingleTickerProviderStateMixin {
-  late AnimationController _glowController;
+  late AnimationController glowController;
 
   @override
   void initState() {
     super.initState();
-    _glowController = AnimationController(
+    glowController = AnimationController(
       duration: Duration(milliseconds: 1500),
       vsync: this,
     );
     if (widget.isSelected) {
-      _glowController.repeat(reverse: true);
+      glowController.repeat(reverse: true);
     }
   }
 
@@ -335,15 +351,15 @@ class _AnswerButtonState extends State<AnswerButton>
   void didUpdateWidget(AnswerButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isSelected && !oldWidget.isSelected) {
-      _glowController.repeat(reverse: true);
+      glowController.repeat(reverse: true);
     } else if (!widget.isSelected && oldWidget.isSelected) {
-      _glowController.stop();
+      glowController.stop();
     }
   }
 
   @override
   void dispose() {
-    _glowController.dispose();
+    glowController.dispose();
     super.dispose();
   }
 
@@ -372,7 +388,7 @@ class _AnswerButtonState extends State<AnswerButton>
     return GestureDetector(
       onTap: widget.isRevealed ? null : widget.onTap,
       child: AnimatedBuilder(
-        animation: _glowController,
+        animation: glowController,
         builder: (context, child) {
           return Container(
             padding: const EdgeInsets.all(16),
@@ -388,10 +404,10 @@ class _AnswerButtonState extends State<AnswerButton>
                   ? [
                       BoxShadow(
                         color: borderColor.withOpacity(
-                          0.2 + (_glowController.value * 0.2),
+                          0.2 + (glowController.value * 0.2),
                         ),
                         blurRadius: 20,
-                        spreadRadius: 2 + (_glowController.value * 3),
+                        spreadRadius: 2 + (glowController.value * 3),
                       ),
                     ]
                   : [
@@ -650,20 +666,7 @@ class LeaderboardTile extends StatelessWidget {
             ),
           ),
           SizedBox(width: 12),
-          // Name & Avatar
-          if (avatar != null)
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                image: DecorationImage(
-                  image: NetworkImage(avatar!),
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          SizedBox(width: avatar != null ? 10 : 0),
+          SizedBox(width: 0),
           // Name
           Expanded(
             child: Text(
@@ -784,14 +787,6 @@ class RoomInfoHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              if (onSettingsTap != null)
-                IconButton(
-                  icon: Icon(Icons.settings, color: AppColors.cyan),
-                  onPressed: onSettingsTap,
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.cyan.withOpacity(0.1),
-                  ),
-                ),
             ],
           ),
           SizedBox(height: 12),
@@ -807,15 +802,6 @@ class RoomInfoHeader extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              if (gameStartsIn != null)
-                Text(
-                  'اللعبة بعد ${gameStartsIn!.inSeconds} ثانية',
-                  style: TextStyle(
-                    color: AppColors.magenta,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
             ],
           ),
           SizedBox(height: 10),
@@ -966,14 +952,14 @@ class GameResultDialog extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _buildStatRow('النقاط', '$score/$totalPoints'),
+                  buildStatRow('النقاط', '$score/$totalPoints'),
                   SizedBox(height: 10),
-                  _buildStatRow(
+                  buildStatRow(
                     'الإجابات الصحيحة',
                     '$correctAnswers/$totalQuestions',
                   ),
                   SizedBox(height: 10),
-                  _buildStatRow('دقة الإجابة', '$accuracy%'),
+                  buildStatRow('دقة الإجابة', '$accuracy%'),
                 ],
               ),
             ),
@@ -998,23 +984,6 @@ class GameResultDialog extends StatelessWidget {
                     child: Text('إغلاق'),
                   ),
                 ),
-                if (onNextAction != null) ...[
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: onNextAction,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.cyan,
-                        foregroundColor: AppColors.darkBackground,
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(nextActionLabel ?? 'التالي'),
-                    ),
-                  ),
-                ],
               ],
             ),
           ],
@@ -1023,7 +992,7 @@ class GameResultDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildStatRow(String label, String value) {
+  Widget buildStatRow(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1046,4 +1015,37 @@ class GameResultDialog extends StatelessWidget {
       ],
     );
   }
+}
+
+// ============================================================================
+// ✨ Helper Functions for Design Components
+// ============================================================================
+
+/// Builds neon glowing text with gradient colors
+Widget _buildNeonText({
+  required String text,
+  required Color color1,
+  required Color color2,
+}) {
+  return ShaderMask(
+    shaderCallback: (bounds) => LinearGradient(
+      colors: [color1, color2],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ).createShader(bounds),
+    child: Text(
+      text,
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.5,
+        height: 1.5,
+        shadows: [
+          Shadow(color: color1.withOpacity(0.5), blurRadius: 8),
+          Shadow(color: color2.withOpacity(0.3), blurRadius: 16),
+        ],
+      ),
+    ),
+  );
 }

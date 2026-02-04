@@ -41,15 +41,22 @@ class DesignUtils {
         ),
       ];
 
-  // Modern gradients
+  // Modern gradients - Wonder Theme
+  static LinearGradient get cyanToPurpleGradient => LinearGradient(
+    colors: [Color(0xFF00D9FF), Color(0xFF9D4EDD)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  @Deprecated('Use cyanToPurpleGradient instead')
   static LinearGradient get cyanToMagentaGradient => LinearGradient(
-    colors: [Color(0xFF00D9FF), Color(0xFFFF006E)],
+    colors: [Color(0xFF00D9FF), Color(0xFF9D4EDD)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static LinearGradient get auroraGradient => LinearGradient(
-    colors: [Color(0xFF00D9FF), Color(0xFFFF006E), Color(0xFF0F1729)],
+    colors: [Color(0xFF00D9FF), Color(0xFF9D4EDD), Color(0xFF0F1729)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

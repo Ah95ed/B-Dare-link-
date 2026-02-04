@@ -260,11 +260,14 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                     final pId = p['userId']?.toString();
                     final isPHost = pId == competitionProvider.hostId;
                     final isPReady = p['isReady'] == true;
+                    final role = p['role']?.toString() ?? 'player';
+                    final isPManager = role == 'manager' || role == 'admin';
 
                     return ParticipantCard(
                       name: p['username'] ?? 'اللاعب',
                       score: p['score'] ?? 0,
-                      isHost: isPHost,
+                      isHost: isPHost && !isPManager,
+                      isManager: isPManager,
                       isActive: isPReady,
                       statusColor: isPReady
                           ? AppColors.success
@@ -1226,6 +1229,46 @@ Drawer _buildLobbyDrawer(
                 _pushSettings(context, provider, room);
               },
             ),
+          if (isHost) const Divider(height: 1),
+          if (isHost)
+            ListTile(
+              leading: Icon(Icons.admin_panel_settings, color: AppColors.cyan),
+              title: const Text('إدارة اللاعبين'),
+              onTap: () {
+                Navigator.of(context).maybePop();
+                _showPlayersDialog(context, provider);
+              },
+            ),
+          if (isHost)
+            ListTile(
+              leading: Icon(Icons.skip_next_rounded, color: AppColors.magenta),
+              title: const Text('تخطي السؤال الحالي'),
+              onTap: () async {
+                Navigator.of(context).maybePop();
+                final roomId = provider.currentRoomId;
+                if (roomId != null) {
+                  await provider.skipPuzzle(roomId);
+                }
+              },
+            ),
+          if (isHost)
+            ListTile(
+              leading: Icon(Icons.refresh_rounded, color: AppColors.warning),
+              title: const Text('إعادة تعيين النقاط'),
+              onTap: () {
+                Navigator.of(context).maybePop();
+                _confirmResetScores(context, provider);
+              },
+            ),
+          if (isHost)
+            ListTile(
+              leading: Icon(Icons.tune_rounded, color: AppColors.cyan),
+              title: const Text('تغيير الصعوبة'),
+              onTap: () {
+                Navigator.of(context).maybePop();
+                _showDifficultyDialog(context, provider);
+              },
+            ),
           ListTile(
             leading: Icon(Icons.copy_rounded, color: AppColors.magenta),
             title: const Text('نسخ كود الغرفة'),
@@ -1274,6 +1317,152 @@ Drawer _buildLobbyDrawer(
           ),
         ],
       ),
+    ),
+  );
+}
+
+void _confirmResetScores(BuildContext context, CompetitionProvider provider) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('إعادة تعيين النقاط'),
+      content: const Text('هل تريد إعادة تعيين نقاط جميع اللاعبين؟'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+          onPressed: () async {
+            Navigator.pop(context);
+            final roomId = provider.currentRoomId;
+            if (roomId != null) {
+              await provider.resetScores(roomId);
+            }
+          },
+          child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showDifficultyDialog(BuildContext context, CompetitionProvider provider) {
+  final current = provider.currentDifficulty ?? 1;
+  int selected = current;
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('تغيير الصعوبة'),
+      content: StatefulBuilder(
+        builder: (context, setState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('الصعوبة الحالية: $current'),
+            const SizedBox(height: 12),
+            Slider(
+              value: selected.toDouble(),
+              min: 1,
+              max: 5,
+              divisions: 4,
+              label: selected.toString(),
+              onChanged: (value) => setState(() => selected = value.toInt()),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            Navigator.pop(context);
+            final roomId = provider.currentRoomId;
+            if (roomId != null) {
+              await provider.changeDifficulty(roomId, selected);
+            }
+          },
+          child: const Text('حفظ'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showPlayersDialog(BuildContext context, CompetitionProvider provider) {
+  final participants = provider.roomParticipants;
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('إدارة اللاعبين'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: participants.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final p = participants[index];
+            final username = p['username']?.toString() ?? 'لاعب';
+            final score = (p['score'] as num?)?.toInt() ?? 0;
+            final role = p['role']?.toString() ?? 'player';
+            final userId = (p['user_id'] ?? p['userId'])?.toString() ?? '';
+            final isFrozen = p['is_frozen'] == true || p['is_frozen'] == 1;
+
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: AppColors.cyan.withOpacity(0.2),
+                child: Text(username.isNotEmpty ? username[0] : '?'),
+              ),
+              title: Text(username),
+              subtitle: Text('النقاط: $score • الدور: $role'),
+              trailing: PopupMenuButton<String>(
+                onSelected: (action) async {
+                  final roomId = provider.currentRoomId;
+                  if (roomId == null || userId.isEmpty) return;
+                  if (action == 'freeze') {
+                    await provider.freezePlayer(roomId, userId, true);
+                  }
+                  if (action == 'unfreeze') {
+                    await provider.freezePlayer(roomId, userId, false);
+                  }
+                  if (action == 'kick') {
+                    await provider.kickPlayer(roomId, userId);
+                  }
+                  if (action == 'promote') {
+                    await provider.promoteToCoManager(roomId, userId);
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (!isFrozen)
+                    const PopupMenuItem(value: 'freeze', child: Text('تجميد')),
+                  if (isFrozen)
+                    const PopupMenuItem(
+                      value: 'unfreeze',
+                      child: Text('إلغاء التجميد'),
+                    ),
+                  const PopupMenuItem(
+                    value: 'promote',
+                    child: Text('ترقية لمدير مساعد'),
+                  ),
+                  const PopupMenuItem(value: 'kick', child: Text('طرد')),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إغلاق'),
+        ),
+      ],
     ),
   );
 }

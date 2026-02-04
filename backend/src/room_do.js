@@ -16,6 +16,7 @@ export class GroupRoom {
     this.roomData = null; // Keeping this as it was in the original and not explicitly removed
     this.messages = [];
     this.hostId = null; // creator user id
+    this.lastEvent = null; // last broadcast event for HTTP polling
     this.gameState = {
       isStarted: false,
       currentPuzzleIndex: 0,
@@ -37,11 +38,33 @@ export class GroupRoom {
 
       let storedMessages = await this.state.storage.get('messages');
       if (storedMessages) this.messages = storedMessages;
+
+      let storedLastEvent = await this.state.storage.get('lastEvent');
+      if (storedLastEvent) this.lastEvent = storedLastEvent;
     });
   }
 
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname.includes('/events')) {
+      const payload = this.lastEvent || { type: 'noop' };
+      return new Response(JSON.stringify(payload), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.pathname.includes('/chat-event')) {
+      const data = await request.json();
+      const chatMsg = data?.message;
+      if (chatMsg) {
+        this.messages.push(chatMsg);
+        if (this.messages.length > 100) this.messages.shift();
+        await this.state.storage.put('messages', this.messages);
+        this.broadcast({ type: 'chat', message: chatMsg });
+      }
+      return new Response('OK');
+    }
 
     if (url.pathname.includes('/delete-event')) {
       const data = await request.json();
@@ -441,6 +464,8 @@ export class GroupRoom {
 
   broadcast(message) {
     const data = JSON.stringify(message);
+    this.lastEvent = message;
+    this.state.storage.put('lastEvent', message);
     this.sessions.forEach(s => {
       try {
         s.ws.send(data);

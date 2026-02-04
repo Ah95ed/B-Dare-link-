@@ -12,9 +12,9 @@ class AppTheme {
   static const Color secondary = Color(0xFF00D9FF); // Electric Cyan
   static const Color secondaryDark = Color(0xFF0099CC); // Deep Teal
 
-  // Accent: Magenta/Pink for energy
-  static const Color accent = Color(0xFFFF006E); // Vibrant Magenta
-  static const Color accentLight = Color(0xFFFF4DA6); // Soft Magenta
+  // Accent: Purple/Violet for Wonder & Magic
+  static const Color accent = Color(0xFF9D4EDD); // Mystical Purple
+  static const Color accentLight = Color(0xFFC77DFF); // Soft Purple
 
   // Background: Ultra-dark for modern feel
   static const Color background = Color(0xFF0A0E27); // Near-black dark
@@ -35,7 +35,7 @@ class AppTheme {
   static const Color error = Color(0xFFFF1744); // Bright Red
   static const Color info = Color(0xFF00D9FF); // Cyan Info
 
-  // Gradients: Aurora-inspired, modern 2026 style
+  // Gradients: Wonder-inspired, magical 2026 style
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [Color(0xFF0F1729), Color(0xFF00D9FF)],
     begin: Alignment.topLeft,
@@ -43,7 +43,7 @@ class AppTheme {
   );
 
   static const LinearGradient auroraGradient = LinearGradient(
-    colors: [Color(0xFF00D9FF), Color(0xFFFF006E), Color(0xFF0F1729)],
+    colors: [Color(0xFF00D9FF), Color(0xFF9D4EDD), Color(0xFF0F1729)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

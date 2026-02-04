@@ -7,6 +7,7 @@ import 'levels_view.dart';
 import 'competitions/competitions_view.dart';
 import 'groups/create_group_view.dart';
 import 'groups/join_group_view.dart';
+import 'modes/spot_diff_view.dart';
 
 /// Handles home view content and action buttons
 class HomeContent {
@@ -103,12 +104,37 @@ class HomeContent {
           children: [
             _buildSoloPlayButton(context, l10n),
             const SizedBox(height: 12),
+            _buildSpotDiffButton(context, isArabic),
+            const SizedBox(height: 12),
             _buildCompetitionsButton(context, l10n),
             const SizedBox(height: 12),
             _buildGroupButtons(context, isArabic),
           ],
         );
       },
+    );
+  }
+
+  static Widget _buildSpotDiffButton(BuildContext context, bool isArabic) {
+    return ElevatedButton.icon(
+      onPressed: () => _navigateTo(context, const SpotDiffView()),
+      icon: const Icon(Icons.find_in_page),
+      label: Text(
+        isArabic ? 'اكتشف الفروق' : 'Spot the Difference',
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.magenta,
+        foregroundColor: const Color(0xFF0F1729),
+        elevation: 10,
+        shadowColor: AppColors.magenta.withOpacity(0.35),
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
     );
   }
 

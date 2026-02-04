@@ -4,6 +4,7 @@ import '../models/game_level.dart';
 import '../data/level_data.dart';
 import '../controllers/game_provider.dart';
 import '../controllers/locale_provider.dart';
+import '../core/app_colors.dart';
 import 'game_play_view.dart';
 import '../l10n/app_localizations.dart';
 
@@ -34,15 +35,15 @@ class LevelsView extends StatelessWidget {
           Container(
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
-              color: Color(0xFFFF006E).withOpacity(0.15),
+              color: AppColors.purple.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Color(0xFFFF006E).withOpacity(0.3),
+                color: AppColors.purple.withOpacity(0.3),
                 width: 1.5,
               ),
             ),
             child: IconButton(
-              icon: const Icon(Icons.bug_report, color: Color(0xFFFF006E)),
+              icon: const Icon(Icons.bug_report, color: AppColors.purple),
               tooltip: "Test API (20 Questions)",
               onPressed: () {
                 // Debug functionality removed - use admin panel instead
@@ -137,7 +138,7 @@ class LevelsView extends StatelessWidget {
               : LinearGradient(
                   colors: [
                     Color(0xFF00D9FF).withOpacity(0.1),
-                    Color(0xFFFF006E).withOpacity(0.08),
+                    AppColors.purple.withOpacity(0.08),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -164,7 +165,7 @@ class LevelsView extends StatelessWidget {
                     spreadRadius: 3,
                   ),
                   BoxShadow(
-                    color: Color(0xFFFF006E).withOpacity(0.08),
+                    color: AppColors.purple.withOpacity(0.08),
                     blurRadius: 15,
                     spreadRadius: 1,
                   ),
@@ -191,7 +192,7 @@ class LevelsView extends StatelessWidget {
               // Level Number with Gradient
               ShaderMask(
                 shaderCallback: (bounds) => LinearGradient(
-                  colors: [Color(0xFF00D9FF), Color(0xFFFF006E)],
+                  colors: [Color(0xFF00D9FF), AppColors.purple],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ).createShader(bounds),
