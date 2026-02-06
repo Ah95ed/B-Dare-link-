@@ -22,13 +22,13 @@ dependencies:
     sdk: flutter
   shared_preferences:
   flutter_secure_storage:
-  email_otp: ^3.1.0
+  email_otp: 
   web_socket_channel:
   qr_flutter:
   share_plus:
   mobile_scanner:
-  app_links: ^6.3.2
-  image_picker: ^1.1.2
+  app_links: 
+  image_picker:
   # http_parser: ^4.1.2
 
 dev_dependencies:

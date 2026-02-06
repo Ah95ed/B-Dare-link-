@@ -6,6 +6,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:wonder_link_game/providers/chat_provider.dart';
+import 'package:wonder_link_game/providers/competition_provider.dart';
+import 'package:wonder_link_game/providers/participants_provider.dart';
+import 'package:wonder_link_game/providers/puzzle_state_provider.dart';
+import 'package:wonder_link_game/providers/realtime_provider.dart';
 
 // ✅ NEW PROVIDERS (Optimized Architecture)
 // import 'lib/providers/realtime_provider.dart';
