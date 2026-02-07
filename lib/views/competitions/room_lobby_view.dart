@@ -20,12 +20,34 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
 
   int _prevMessageCount = 0;
   bool _hasShownResults = false;
+  bool _isSubmittingAnswer = false;
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleOptionTap(
+    CompetitionProvider provider,
+    int optionIndex,
+  ) async {
+    if (_isSubmittingAnswer || provider.isAdvancingToNextPuzzle) {
+      return;
+    }
+    if (provider.selectedAnswerIndex != null) {
+      return;
+    }
+
+    setState(() => _isSubmittingAnswer = true);
+    try {
+      await provider.submitQuizAnswer(optionIndex);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingAnswer = false);
+      }
+    }
   }
 
   void _scrollToBottom() {
@@ -1010,79 +1032,86 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         bgColor = AppColors.success.withOpacity(0.15);
                         borderColor = AppColors.success;
                       } else {
-                        bgColor = AppColors.error.withOpacity(0.15);
-                        borderColor = AppColors.error;
+                        bgColor = Colors.blue.withOpacity(0.15);
+                        borderColor = Colors.blue;
                       }
                     }
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: bgColor,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _handleOptionTap(provider, idx),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: borderColor,
-                            width: isSelected ? 2.5 : 1.5,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: bgColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: borderColor,
+                                width: isSelected ? 2.5 : 1.5,
+                              ),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: borderColor.withOpacity(0.3),
+                                        blurRadius: 8,
+                                        spreadRadius: 2,
+                                      ),
+                                    ]
+                                  : [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.08),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 14,
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: borderColor.withOpacity(0.2),
+                                    border: Border.all(
+                                      color: borderColor,
+                                      width: 1.4,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      String.fromCharCode(65 + idx),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                        color: borderColor,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    optText,
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: borderColor.withOpacity(0.3),
-                                    blurRadius: 8,
-                                    spreadRadius: 2,
-                                  ),
-                                ]
-                              : [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.08),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 14,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: borderColor.withOpacity(0.2),
-                                border: Border.all(
-                                  color: borderColor,
-                                  width: 1.4,
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  String.fromCharCode(65 + idx),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                    color: borderColor,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                optText,
-                                style: TextStyle(
-                                  color: textColor,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
                         ),
                       ),
                     );

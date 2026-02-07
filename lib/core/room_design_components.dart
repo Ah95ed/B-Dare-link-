@@ -385,91 +385,97 @@ class _AnswerButtonState extends State<AnswerButton>
       textColor = AppColors.cyan;
     }
 
-    return GestureDetector(
-      onTap: widget.isRevealed ? null : widget.onTap,
-      child: AnimatedBuilder(
-        animation: glowController,
-        builder: (context, child) {
-          return Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: borderColor, width: 2),
-              gradient: LinearGradient(
-                colors: [buttonColor, buttonColor.withOpacity(0.5)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: widget.isSelected
-                  ? [
-                      BoxShadow(
-                        color: borderColor.withOpacity(
-                          0.2 + (glowController.value * 0.2),
+    return AnimatedBuilder(
+      animation: glowController,
+      builder: (context, child) {
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.isRevealed ? null : widget.onTap,
+            borderRadius: BorderRadius.circular(16),
+            splashColor: borderColor.withOpacity(0.3),
+            highlightColor: borderColor.withOpacity(0.2),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor, width: 2),
+                gradient: LinearGradient(
+                  colors: [buttonColor, buttonColor.withOpacity(0.5)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: widget.isSelected
+                    ? [
+                        BoxShadow(
+                          color: borderColor.withOpacity(
+                            0.2 + (glowController.value * 0.2),
+                          ),
+                          blurRadius: 20,
+                          spreadRadius: 2 + (glowController.value * 3),
                         ),
-                        blurRadius: 20,
-                        spreadRadius: 2 + (glowController.value * 3),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                    ],
-            ),
-            child: Row(
-              children: [
-                // Letter Badge
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        borderColor.withOpacity(0.2),
-                        borderColor.withOpacity(0.1),
+                      ]
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          spreadRadius: 0,
+                        ),
                       ],
+              ),
+              child: Row(
+                children: [
+                  // Letter Badge
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          borderColor.withOpacity(0.2),
+                          borderColor.withOpacity(0.1),
+                        ],
+                      ),
+                      border: Border.all(color: borderColor, width: 1.5),
                     ),
-                    border: Border.all(color: borderColor, width: 1.5),
-                  ),
-                  child: Center(
-                    child: Text(
-                      String.fromCharCode(65 + widget.index),
-                      style: TextStyle(
-                        color: borderColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                    child: Center(
+                      child: Text(
+                        String.fromCharCode(65 + widget.index),
+                        style: TextStyle(
+                          color: borderColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                SizedBox(width: 12),
-                // Answer Text
-                Expanded(
-                  child: Text(
-                    widget.answer,
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
+                  SizedBox(width: 12),
+                  // Answer Text
+                  Expanded(
+                    child: Text(
+                      widget.answer,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
                     ),
                   ),
-                ),
-                // Status Icon
-                if (widget.isRevealed)
-                  Icon(
-                    widget.isCorrect ? Icons.check_circle : Icons.cancel,
-                    color: borderColor,
-                    size: 20,
-                  ),
-              ],
+                  // Status Icon
+                  if (widget.isRevealed)
+                    Icon(
+                      widget.isCorrect ? Icons.check_circle : Icons.cancel,
+                      color: borderColor,
+                      size: 20,
+                    ),
+                ],
+              ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

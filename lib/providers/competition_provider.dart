@@ -97,7 +97,7 @@ class CompetitionProvider with ChangeNotifier {
     _isAdvancingToNextPuzzle = true;
     notifyListeners();
 
-    _advanceAfterAnswerTimer = Timer(const Duration(milliseconds: 900), () {
+    _advanceAfterAnswerTimer = Timer(const Duration(milliseconds: 300), () {
       // Timer callback can't be awaited; fire-and-forget safely.
       () async {
         try {

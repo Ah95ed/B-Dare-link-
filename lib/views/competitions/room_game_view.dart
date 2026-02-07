@@ -44,7 +44,7 @@ class _RoomGameViewState extends State<RoomGameView> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'السؤال $currentIndex/$totalPuzzles',
+              'السال $currentIndex/$totalPuzzles',
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w700,
@@ -223,19 +223,35 @@ class _RoomGameViewState extends State<RoomGameView> {
                         isSelected: isSelected,
                         isCorrect: false,
                         isRevealed: false,
-                        onTap: _isSubmitting
-                            ? () {} // Disable tap while submitting
-                            : () async {
-                                if (_selectedAnswerIndex == index) return;
-                                setState(() => _selectedAnswerIndex = index);
-                                // Show selection feedback before submitting
-                                await Future.delayed(
-                                  const Duration(milliseconds: 400),
-                                );
-                                if (mounted) {
-                                  _submitAnswer(provider, optionText);
-                                }
-                              },
+                        onTap: () {
+                          debugPrint(
+                            '🔘 Button tapped - Option: $optionText (index: $index)',
+                          );
+
+                          if (_isSubmitting) {
+                            debugPrint('⚠️ Currently submitting, ignoring tap');
+                            return;
+                          }
+
+                          if (_selectedAnswerIndex == index) {
+                            debugPrint('✓ Same option selected, submitting...');
+                            _submitAnswer(provider, index);
+                            return;
+                          }
+
+                          debugPrint('→ Selecting option...');
+                          setState(() => _selectedAnswerIndex = index);
+
+                          Future.delayed(const Duration(milliseconds: 300), () {
+                            debugPrint(
+                              '→ 300ms delay completed, preparing to submit',
+                            );
+                            if (mounted && !_isSubmitting) {
+                              debugPrint('→ Submitting after delay...');
+                              _submitAnswer(provider, index);
+                            }
+                          });
+                        },
                       ),
                     );
                   },
@@ -248,17 +264,28 @@ class _RoomGameViewState extends State<RoomGameView> {
     );
   }
 
-  void _submitAnswer(
-    CompetitionProvider provider,
-    String selectedOption,
-  ) async {
-    if (_isSubmitting) return;
+  void _submitAnswer(CompetitionProvider provider, int answerIndex) async {
+    if (_isSubmitting) {
+      debugPrint('⚠️ Already submitting, ignoring duplicate submission');
+      return;
+    }
+
+    debugPrint('📤 Submitting answer at index: $answerIndex');
     setState(() => _isSubmitting = true);
+
     try {
-      await provider.submitAnswer([selectedOption]);
+      debugPrint('📡 Calling provider.submitQuizAnswer($answerIndex)...');
+      await provider.submitQuizAnswer(answerIndex);
+      debugPrint('✅ Answer submitted successfully');
+    } catch (e) {
+      debugPrint('❌ Error submitting answer: $e');
     } finally {
       if (mounted) {
-        setState(() => _isSubmitting = false);
+        debugPrint('🔄 Resetting state...');
+        setState(() {
+          _isSubmitting = false;
+          _selectedAnswerIndex = null;
+        });
       }
     }
   }

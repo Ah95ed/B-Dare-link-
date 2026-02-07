@@ -248,7 +248,6 @@ class _RoomGameViewState extends State<RoomGameView> {
                 _buildHintCard(hint),
               ],
               const SizedBox(height: 24),
-              _buildSubmitButton(provider, options),
             ],
           ),
         );
@@ -333,11 +332,30 @@ class _RoomGameViewState extends State<RoomGameView> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: _isSubmitting
-              ? null
-              : () {
-                  setState(() => _selectedAnswerIndex = index);
-                },
+          onTap: () {
+            debugPrint('🔘 Button tapped - Option: $option (index: $index)');
+
+            if (_isSubmitting) {
+              debugPrint('⚠️ Currently submitting, ignoring tap');
+              return;
+            }
+
+            if (_selectedAnswerIndex == index) {
+              debugPrint('✓ Same option selected, submitting...');
+              _submitAnswerDirectly(provider, index);
+              return;
+            }
+
+            debugPrint('→ Selecting option...');
+            setState(() => _selectedAnswerIndex = index);
+
+            Future.delayed(const Duration(milliseconds: 300), () {
+              debugPrint('→ 300ms delay completed, submitting...');
+              if (mounted && !_isSubmitting) {
+                _submitAnswerDirectly(provider, index);
+              }
+            });
+          },
           borderRadius: BorderRadius.circular(12),
           child: Container(
             padding: const EdgeInsets.all(16),
@@ -407,55 +425,24 @@ class _RoomGameViewState extends State<RoomGameView> {
     );
   }
 
-  Widget _buildSubmitButton(
+  Future<void> _submitAnswerDirectly(
     CompetitionProvider provider,
-    List<String> options,
-  ) {
-    final isAnswered = _selectedAnswerIndex != null;
-    final isAdvancing = provider.isAdvancingToNextPuzzle;
-
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: (isAnswered && !_isSubmitting && !isAdvancing)
-            ? () => _submitAnswer(provider, options.length)
-            : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.cyan,
-          disabledBackgroundColor: AppColors.darkSurface,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: Text(
-          isAdvancing ? 'الانتقال للسؤال التالي...' : 'إرسال الإجابة',
-          style: TextStyle(
-            color: isAnswered && !isAdvancing
-                ? Colors.white
-                : AppColors.textSecondary,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _submitAnswer(
-    CompetitionProvider provider,
-    int optionsCount,
+    int answerIndex,
   ) async {
-    if (_selectedAnswerIndex == null || _selectedAnswerIndex! >= optionsCount) {
+    if (_isSubmitting) {
+      debugPrint('⚠️ Already submitting, ignoring duplicate');
       return;
     }
 
+    debugPrint('📤 Submitting answer at index: $answerIndex');
     setState(() => _isSubmitting = true);
 
     try {
-      await provider.submitQuizAnswer(_selectedAnswerIndex!);
+      debugPrint('📡 Calling provider.submitQuizAnswer($answerIndex)...');
+      await provider.submitQuizAnswer(answerIndex);
+      debugPrint('✅ Answer submitted successfully');
     } catch (e) {
-      debugPrint('Error submitting answer: $e');
+      debugPrint('❌ Error submitting answer: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -466,7 +453,11 @@ class _RoomGameViewState extends State<RoomGameView> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isSubmitting = false);
+        debugPrint('🔄 Resetting state...');
+        setState(() {
+          _isSubmitting = false;
+          _selectedAnswerIndex = null;
+        });
       }
     }
   }
