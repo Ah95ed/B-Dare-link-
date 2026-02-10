@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 import 'package:flutter/material.dart';
 import 'package:email_otp/email_otp.dart';
 import 'package:provider/provider.dart';
@@ -17,14 +15,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
-  final bool _sent = false;
+  bool _sent = false;
   bool _loading = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final l10n = AppLocalizations.of(context)!;
     EmailOTP.config(
-      appName: 'MyApp',
+      appName: l10n.appTitle,
       otpType: OTPType.numeric,
       emailTheme: EmailTheme.v1,
     );
@@ -36,17 +35,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _loading = true);
     try {
-      await EmailOTP.sendOTP(
-        email: email,
-      ).then((value) => log('  OTP sent: $value'));
+      final ok = await EmailOTP.sendOTP(email: email);
+      // log(l10n.otpSentLog(ok.toString()));
       final l10n = AppLocalizations.of(context)!;
-      setState(() {});
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.otpSent(email))));
+      if (ok) {
+        setState(() => _sent = true);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.otpSent(email))));
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.errorSendingOTP(''))));
+      }
     } catch (e) {
       final l10n = AppLocalizations.of(context)!;
-      debugPrint('EmailOTP.sendOTP error: $e');
+      debugPrint(l10n.otpSendErrorLog(e.toString()));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.errorSendingOTP(e.toString()))),
       );
@@ -63,7 +67,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     try {
       final ok = EmailOTP.verifyOTP(otp: otp);
       final l10n = AppLocalizations.of(context)!;
-      debugPrint('EmailOTP.verifyOTP ok=$ok otp=$otp');
+      debugPrint(l10n.otpVerifyLog(ok.toString()));
       if (ok) {
         // Call backend to update password
         await Provider.of<AuthProvider>(
@@ -81,7 +85,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       }
     } catch (e) {
       final l10n = AppLocalizations.of(context)!;
-      debugPrint('EmailOTP.verifyOTP error: $e');
+      debugPrint(l10n.otpVerifyErrorLog(e.toString()));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.errorVerifyingOTP(e.toString()))),
       );
@@ -126,9 +130,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 const SizedBox(height: 20),
                 TextField(
                   controller: _otpController,
-                  decoration: const InputDecoration(
-                    labelText: 'OTP',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l10n.otpLabel,
+                    border: const OutlineInputBorder(),
                   ),
                   keyboardType: TextInputType.number,
                 ),

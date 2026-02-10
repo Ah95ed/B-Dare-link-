@@ -135,6 +135,8 @@ export function buildQuizSystemPrompt({ language = 'ar', level = 1 } = {}) {
 4. 4 خيارات مختلفة
 5. خيار واحد فقط صحيح
 6. يجب وضع الإجابة الصحيحة في الفهرس ${correctIndex} وعدم تثبيتها دائماً عند 0
+7. كل خيار يتكون من 4 كلمات بالضبط
+8. إذا كان أي خيار أقل من 4 كلمات، ارفض السؤال وأعد التوليد حتى يحقق الشرط
 
 الإخراج JSON فقط:
 {
@@ -160,6 +162,8 @@ Requirements:
 4. All 4 options must be distinct
 5. Exactly one correct answer
 6. Place the correct answer at index ${correctIndex} (0-3) and do not always use 0
+7. Each option must be exactly 4 words
+8. If any option has fewer than 4 words, reject and regenerate until the rule is met
 
 Output JSON only:
 {
@@ -185,6 +189,8 @@ export function buildQuizUserPrompt({ language = 'ar', level = 1, seed } = {}) {
 - جميع الخيارات مختلفة
 - خيار واحد فقط صحيح
 - لا تكرر
+- كل خيار يتكون من 4 كلمات بالضبط
+- إذا كان أي خيار أقل من 4 كلمات، ارفض السؤال وأعد التوليد
 
 أخرج JSON فقط.${seedLine}`;
   }
@@ -197,6 +203,8 @@ Requirements:
 - All 4 options distinct
 - Exactly one correct
 - No repetition
+- Each option must be exactly 4 words
+- If any option has fewer than 4 words, reject and regenerate
 
 Output JSON only.${seedLine}`;
 }

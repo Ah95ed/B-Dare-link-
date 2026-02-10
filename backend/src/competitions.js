@@ -409,9 +409,15 @@ export async function getRoomStatus(request, env) {
               validator,
             );
             if (repaired) {
+              const shuffled = shufflePuzzleOptions(repaired, { enabled: true });
+              const qh = computeQuestionHash(shuffled);
               await env.DB.prepare(
                 'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
-              ).bind(roomId, currentPuzzleIndex, JSON.stringify(repaired)).run();
+              ).bind(roomId, currentPuzzleIndex, JSON.stringify(shuffled)).run();
+              await ensureRoomPuzzleHistoryTable(env);
+              await env.DB.prepare(
+                'INSERT INTO room_puzzle_history (room_id, puzzle_id, question_hash) VALUES (?, ?, ?)'
+              ).bind(roomId, shuffled.puzzleId ?? null, qh).run();
               puzzleRow = await env.DB.prepare(
                 'SELECT id, puzzle_json, solved_by FROM room_puzzles WHERE room_id = ? AND puzzle_index = ?'
               ).bind(roomId, currentPuzzleIndex).first();
@@ -439,10 +445,11 @@ export async function getRoomStatus(request, env) {
                 await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
               );
               if (repaired) {
+                const shuffled = shufflePuzzleOptions(repaired, { enabled: true });
                 await env.DB.prepare('UPDATE room_puzzles SET puzzle_json = ? WHERE id = ?')
-                  .bind(JSON.stringify(repaired), puzzleRow.id)
+                  .bind(JSON.stringify(shuffled), puzzleRow.id)
                   .run();
-                currentPuzzle = repaired;
+                currentPuzzle = shuffled;
               }
             } catch (e) {
               console.error('[REPAIR PUZZLE] Failed to regenerate puzzle', e);
@@ -565,7 +572,7 @@ async function startRoomGame(env, roomId, ctx) {
   // This avoids blocking /rooms/start on multiple AI generations when DB is low.
   const PREFILL_SYNC_COUNT = Math.min(2, puzzleCount);
   const puzzlesData = [];
-  const seenQuestions = new Set();
+  const seenQuestions = await getRoomUsedQuestionHashes(env, roomId);
 
   const questionHashOf = (normalized) => JSON.stringify({
     q: (normalized?.question || '').trim().toLowerCase(),
@@ -606,9 +613,11 @@ async function startRoomGame(env, roomId, ctx) {
     seenQuestions.add(qh);
     const withId = await ensurePuzzleId(normalized);
     if (!withId) return false;
+    const shuffled = shufflePuzzleOptions(withId, { enabled: true });
     puzzlesData.push({
-      puzzleId: withId.puzzleId ?? null,
-      puzzleJson: JSON.stringify(withId),
+      puzzleId: shuffled.puzzleId ?? null,
+      puzzleJson: JSON.stringify(shuffled),
+      questionHash: qh,
       source: sourceTag,
     });
     return true;
@@ -696,6 +705,11 @@ async function startRoomGame(env, roomId, ctx) {
     await env.DB.prepare(
       'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
     ).bind(roomId, i, puzzlesData[i].puzzleJson).run();
+    if (puzzlesData[i].questionHash) {
+      await env.DB.prepare(
+        'INSERT INTO room_puzzle_history (room_id, puzzle_id, question_hash) VALUES (?, ?, ?)'
+      ).bind(roomId, puzzlesData[i].puzzleId, puzzlesData[i].questionHash).run();
+    }
   }
 
   await env.DB.batch([
@@ -771,6 +785,12 @@ async function startRoomGame(env, roomId, ctx) {
         await env.DB.prepare(
           'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
         ).bind(roomId, idx, puzzlesData[puzzlesData.length - 1].puzzleJson).run();
+        const last = puzzlesData[puzzlesData.length - 1];
+        if (last?.questionHash) {
+          await env.DB.prepare(
+            'INSERT INTO room_puzzle_history (room_id, puzzle_id, question_hash) VALUES (?, ?, ?)'
+          ).bind(roomId, last.puzzleId, last.questionHash).run();
+        }
       }
     } catch (e) {
       console.warn('[BG FILL] Failed to fill remaining puzzles', String(e?.message || e));
@@ -792,9 +812,75 @@ function computeQuestionHash(normalized) {
   });
 }
 
+async function ensureRoomPuzzleHistoryTable(env) {
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS room_puzzle_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_id INTEGER NOT NULL,
+        puzzle_id INTEGER,
+        question_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.DB.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_room_puzzle_history_room ON room_puzzle_history(room_id)'
+    ).run();
+    await env.DB.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_room_puzzle_history_hash ON room_puzzle_history(room_id, question_hash)'
+    ).run();
+  } catch (_) {
+    // ignore
+  }
+}
+
+async function getRoomUsedQuestionHashes(env, roomId) {
+  const seen = new Set();
+  try {
+    await ensureRoomPuzzleHistoryTable(env);
+    const rows = await env.DB.prepare(
+      'SELECT question_hash FROM room_puzzle_history WHERE room_id = ?'
+    ).bind(roomId).all();
+    for (const r of rows.results || []) {
+      if (r?.question_hash) seen.add(String(r.question_hash));
+    }
+  } catch (_) {
+    // ignore
+  }
+  return seen;
+}
+
+function shufflePuzzleOptions(puzzle, { enabled = true } = {}) {
+  if (!enabled || !puzzle || typeof puzzle !== 'object') return puzzle;
+  if (!Array.isArray(puzzle.options) || puzzle.options.length < 2) return puzzle;
+  if (puzzle.correctIndex === undefined || puzzle.correctIndex === null) return puzzle;
+
+  const options = puzzle.options.map((o) => String(o));
+  const correctIndex = Number(puzzle.correctIndex);
+  if (!Number.isFinite(correctIndex) || correctIndex < 0 || correctIndex >= options.length) {
+    return puzzle;
+  }
+
+  const indices = options.map((_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+
+  const shuffledOptions = indices.map((i) => options[i]);
+  const newCorrectIndex = indices.indexOf(correctIndex);
+  return {
+    ...puzzle,
+    options: shuffledOptions,
+    correctIndex: newCorrectIndex,
+  };
+}
+
 async function getRoomSeenQuestionHashes(env, roomId) {
   const seen = new Set();
   try {
+    const history = await getRoomUsedQuestionHashes(env, roomId);
+    for (const h of history) seen.add(h);
     const rows = await env.DB.prepare(
       'SELECT puzzle_json FROM room_puzzles WHERE room_id = ?'
     ).bind(roomId).all();
@@ -2203,10 +2289,16 @@ export async function forceNextPuzzle(request, env) {
           await generatePuzzleWithRetry(env, room.language || 'ar', room.difficulty || 1)
         );
         if (generated) {
+          const shuffled = shufflePuzzleOptions(generated, { enabled: true });
+          const qh = computeQuestionHash(shuffled);
           await env.DB.prepare(
             'INSERT INTO room_puzzles (room_id, puzzle_index, puzzle_json) VALUES (?, ?, ?)'
-          ).bind(roomId, nextIdx, JSON.stringify(generated)).run();
-          nextRow = { puzzle_json: JSON.stringify(generated) };
+          ).bind(roomId, nextIdx, JSON.stringify(shuffled)).run();
+          await ensureRoomPuzzleHistoryTable(env);
+          await env.DB.prepare(
+            'INSERT INTO room_puzzle_history (room_id, puzzle_id, question_hash) VALUES (?, ?, ?)'
+          ).bind(roomId, shuffled.puzzleId ?? null, qh).run();
+          nextRow = { puzzle_json: JSON.stringify(shuffled) };
         }
       } catch (e) {
         console.error('[FORCE NEXT] Failed to generate next puzzle', String(e?.message || e));

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../providers/rewards_provider.dart';
-import '../../controllers/locale_provider.dart';
 import '../../core/app_colors.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -15,7 +15,7 @@ class RewardsDisplayWidget extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -23,7 +23,7 @@ class RewardsDisplayWidget extends StatelessWidget {
             AppColors.magenta.withOpacity(0.1),
           ],
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(16.r),
         border: Border.all(color: AppColors.cyan.withOpacity(0.3)),
       ),
       child: Row(
@@ -71,21 +71,21 @@ class RewardsDisplayWidget extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: iconColor, size: 20),
-            const SizedBox(width: 4),
+            SizedBox(width: 4.w),
             Text(
               value,
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: 16.sp,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 2),
+        SizedBox(height: 2.h),
         Text(
           label,
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12.sp),
         ),
       ],
     );
@@ -107,18 +107,16 @@ class DailyBonusDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isArabic =
-        context.watch<LocaleProvider>().locale.languageCode == 'ar';
     final l10n = AppLocalizations.of(context)!;
 
     return AlertDialog(
       backgroundColor: AppColors.darkSurface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
       title: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.celebration, color: Colors.amber, size: 28),
-          const SizedBox(width: 8),
+          SizedBox(width: 8.w),
           Text(
             l10n.dailyBonus,
             style: TextStyle(
@@ -133,7 +131,7 @@ class DailyBonusDialog extends StatelessWidget {
         children: [
           // Coins earned
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(16.r),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -141,18 +139,18 @@ class DailyBonusDialog extends StatelessWidget {
                   Colors.orange.withOpacity(0.1),
                 ],
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(12.r),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.monetization_on, color: Colors.amber, size: 32),
-                const SizedBox(width: 8),
+                SizedBox(width: 8.w),
                 Text(
                   '+$bonusEarned',
                   style: TextStyle(
                     color: Colors.amber,
-                    fontSize: 28,
+                    fontSize: 28.sp,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -160,7 +158,7 @@ class DailyBonusDialog extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 16),
+          SizedBox(height: 16.h),
 
           // Streak info
           Row(
@@ -170,13 +168,9 @@ class DailyBonusDialog extends StatelessWidget {
                 streakBroken ? Icons.heart_broken : Icons.local_fire_department,
                 color: streakBroken ? Colors.red : Colors.orange,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8.w),
               Text(
-                streakBroken
-                    ? (isArabic ? 'بداية سلسلة جديدة' : 'New streak started')
-                    : (isArabic
-                          ? 'سلسلة: $streak أيام'
-                          : 'Streak: $streak days'),
+                streakBroken ? l10n.newStreakStarted : l10n.streakDays(streak),
                 style: TextStyle(color: AppColors.textSecondary),
               ),
             ],
@@ -215,12 +209,12 @@ class AchievementUnlockedDialog extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
       backgroundColor: AppColors.darkSurface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
       title: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.emoji_events, color: AppColors.cyan, size: 28),
-          const SizedBox(width: 8),
+          SizedBox(width: 8.w),
           Text(
             l10n.achievementUnlocked,
             style: TextStyle(
@@ -235,8 +229,8 @@ class AchievementUnlockedDialog extends StatelessWidget {
         children: [
           // Achievement icon
           Container(
-            width: 80,
-            height: 80,
+            width: 80.w,
+            height: 80.w,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
@@ -249,19 +243,19 @@ class AchievementUnlockedDialog extends StatelessWidget {
             child: Icon(achievement.icon, color: AppColors.cyan, size: 40),
           ),
 
-          const SizedBox(height: 16),
+          SizedBox(height: 16.h),
 
           // Achievement name
           Text(
             achievement.getName(isArabic),
             style: TextStyle(
               color: AppColors.textPrimary,
-              fontSize: 20,
+              fontSize: 20.sp,
               fontWeight: FontWeight.bold,
             ),
           ),
 
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
 
           // Description
           Text(
@@ -277,7 +271,7 @@ class AchievementUnlockedDialog extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.monetization_on, color: Colors.amber, size: 20),
-              const SizedBox(width: 4),
+              SizedBox(width: 4.w),
               Text(
                 '+${achievement.reward}',
                 style: TextStyle(

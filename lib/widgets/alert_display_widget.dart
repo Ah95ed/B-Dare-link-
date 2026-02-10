@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wonder_link_game/controllers/locale_provider.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../providers/alerts_provider.dart';
+import '../l10n/app_localizations.dart';
 
 /// Widget لعرض التنبيهات
 class AlertDisplayWidget extends StatefulWidget {
@@ -60,24 +62,24 @@ class _AlertDisplayWidgetState extends State<AlertDisplayWidget>
         return SlideTransition(
           position: _slideAnimation,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(16.r),
             child: GestureDetector(
               onTap: alertsProvider.dismissCurrentAlert,
               child: Container(
                 decoration: BoxDecoration(
                   color: alert.getColor(),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(16.r),
                   boxShadow: [
                     BoxShadow(
                       color: alert.getColor().withOpacity(0.4),
-                      blurRadius: 16,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 4),
+                      blurRadius: 16.r,
+                      spreadRadius: 2.r,
+                      offset: Offset(0, 4.h),
                     ),
                   ],
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(16.r),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -86,14 +88,14 @@ class _AlertDisplayWidgetState extends State<AlertDisplayWidget>
                         children: [
                           Text(
                             alert.getIcon(),
-                            style: const TextStyle(fontSize: 28),
+                            style: TextStyle(fontSize: 28.sp),
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12.w),
                           Expanded(
                             child: Text(
                               alert.getTitle(isArabic),
-                              style: const TextStyle(
-                                fontSize: 18,
+                              style: TextStyle(
+                                fontSize: 18.sp,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                               ),
@@ -105,11 +107,11 @@ class _AlertDisplayWidgetState extends State<AlertDisplayWidget>
                       ),
                       // الرسالة
                       if (alert.getMessage(isArabic) != null) ...[
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8.h),
                         Text(
                           alert.getMessage(isArabic)!,
-                          style: const TextStyle(
-                            fontSize: 14,
+                          style: TextStyle(
+                            fontSize: 14.sp,
                             color: Colors.white,
                             fontWeight: FontWeight.w500,
                             height: 1.4,
@@ -120,12 +122,12 @@ class _AlertDisplayWidgetState extends State<AlertDisplayWidget>
                         ),
                       ],
                       // شريط التقدم
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12.h),
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(4.r),
                         child: LinearProgressIndicator(
                           value: 1.0,
-                          minHeight: 3,
+                          minHeight: 3.h,
                           backgroundColor: Colors.white.withOpacity(0.2),
                           valueColor: AlwaysStoppedAnimation(
                             Colors.white.withOpacity(0.7),
@@ -196,11 +198,14 @@ class _AchievementUnlockedDialogState extends State<AchievementUnlockedDialog>
   Widget build(BuildContext context) {
     final isArabic =
         Provider.of<LocaleProvider>(context).locale.languageCode == 'ar';
+    final l10n = AppLocalizations.of(context)!;
 
     return ScaleTransition(
       scale: _scaleAnimation,
       child: Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20.r),
+        ),
         child: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -211,66 +216,63 @@ class _AchievementUnlockedDialogState extends State<AchievementUnlockedDialog>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(20.r),
           ),
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(24.r),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // الرمز الكبير
               ScaleTransition(
                 scale: _scaleAnimation,
-                child: Text(widget.icon, style: const TextStyle(fontSize: 80)),
+                child: Text(widget.icon, style: TextStyle(fontSize: 80.sp)),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24.h),
 
               // العنوان
               Text(
                 isArabic ? widget.titleAr : widget.titleEn,
-                style: const TextStyle(
-                  fontSize: 24,
+                style: TextStyle(
+                  fontSize: 24.sp,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12.h),
 
               // الوصف
               if ((isArabic ? widget.descriptionAr : widget.descriptionEn) !=
                   null)
                 Text(
                   isArabic ? widget.descriptionAr! : widget.descriptionEn!,
-                  style: const TextStyle(
-                    fontSize: 14,
+                  style: TextStyle(
+                    fontSize: 14.sp,
                     color: Colors.white,
                     fontWeight: FontWeight.w500,
                     height: 1.4,
                   ),
                   textAlign: TextAlign.center,
                 ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20.h),
 
               // جائزة XP
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12.r),
                 ),
                 child: Text(
-                  '⚡ +${widget.xpReward} XP',
-                  style: const TextStyle(
-                    fontSize: 16,
+                  l10n.xpRewardLabel(widget.xpReward),
+                  style: TextStyle(
+                    fontSize: 16.sp,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24.h),
 
               // زر الإغلاق
               ElevatedButton(
@@ -278,18 +280,18 @@ class _AchievementUnlockedDialogState extends State<AchievementUnlockedDialog>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: const Color(0xFFD946EF),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 12,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 32.w,
+                    vertical: 12.h,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(12.r),
                   ),
                 ),
                 child: Text(
-                  isArabic ? 'رائع!' : 'Awesome!',
-                  style: const TextStyle(
-                    fontSize: 16,
+                  l10n.awesome,
+                  style: TextStyle(
+                    fontSize: 16.sp,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

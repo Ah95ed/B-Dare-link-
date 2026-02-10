@@ -27,6 +27,13 @@ class CompetitionProvider with ChangeNotifier {
     _authProvider = auth;
   }
 
+  bool _ensureAuthenticated() {
+    if (_authProvider?.isAuthenticated == true) return true;
+    _errorMessage = 'يجب تسجيل الدخول أولاً لإكمال هذه العملية.';
+    notifyListeners();
+    return false;
+  }
+
   // Room state
   Map<String, dynamic>? _currentRoom;
   List<Map<String, dynamic>> _roomParticipants = [];
@@ -275,6 +282,7 @@ class CompetitionProvider with ChangeNotifier {
     int difficulty = 1,
     String language = 'ar',
   }) async {
+    if (!_ensureAuthenticated()) return;
     try {
       final result = await _service.createRoom(
         name: name,
@@ -300,6 +308,7 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   Future<void> joinRoom(String code) async {
+    if (!_ensureAuthenticated()) return;
     try {
       final result = await _service.joinRoom(code);
       _currentRoom = result['room'];
@@ -655,7 +664,9 @@ class CompetitionProvider with ChangeNotifier {
       if (puzzle != null) {
         // If user has already answered this question and we're waiting to auto-advance,
         // do not overwrite the current puzzle again (this causes visible repeats).
-        if (_selectedAnswerIndex != null && !_isAdvancingToNextPuzzle) {
+        if (_currentPuzzle != null &&
+            _selectedAnswerIndex != null &&
+            !_isAdvancingToNextPuzzle) {
           debugPrint('⏸️ Skipping puzzle overwrite during answered window');
           notifyListeners();
           return;
@@ -731,6 +742,7 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<bool> sendMessage(String text) async {
     if (_currentRoom == null) return false;
+    if (!_ensureAuthenticated()) return false;
     final trimmed = text.trim();
     if (trimmed.isEmpty) return false;
     try {
@@ -761,6 +773,7 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> startGame() async {
     if (_currentRoom == null) return;
+    if (!_ensureAuthenticated()) return;
     _isStartingGame = true;
     notifyListeners();
     try {
@@ -802,6 +815,7 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> nextPuzzle() async {
     if (_currentRoom == null) return;
+    if (!_ensureAuthenticated()) return;
     try {
       await refreshRoomStatus(bypassThrottle: true);
       final status = _currentRoom?['status']?.toString() ?? 'unknown';
@@ -836,6 +850,7 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> toggleReady(bool ready) async {
     if (_currentRoom == null) return;
+    if (!_ensureAuthenticated()) return;
     try {
       _isReady = ready;
       notifyListeners();
@@ -857,6 +872,7 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> setReady(bool ready) async {
     if (_currentRoom == null) return;
+    if (!_ensureAuthenticated()) return;
     try {
       await _service.setReady(_currentRoom!['id'], ready);
       _isReady = ready;
@@ -870,6 +886,7 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> submitAnswer(List<String> steps) async {
     if (_currentRoom == null || _currentPuzzle == null) return;
+    if (!_ensureAuthenticated()) return;
 
     final timeTaken = _puzzleStartTime != null
         ? DateTime.now().difference(_puzzleStartTime!).inMilliseconds
@@ -913,6 +930,7 @@ class CompetitionProvider with ChangeNotifier {
   // Quiz format answer submission (answerIndex instead of steps)
   Future<void> submitQuizAnswer(int answerIndex) async {
     if (_currentRoom == null || _currentPuzzle == null) return;
+    if (!_ensureAuthenticated()) return;
 
     final timeTaken = _puzzleStartTime != null
         ? DateTime.now().difference(_puzzleStartTime!).inMilliseconds
@@ -1033,6 +1051,7 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   Future<void> joinCompetition(int competitionId) async {
+    if (!_ensureAuthenticated()) return;
     try {
       await _service.joinCompetition(competitionId);
       await loadActiveCompetitions();
@@ -1044,6 +1063,7 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   Future<void> loadMyRooms() async {
+    if (!_ensureAuthenticated()) return;
     try {
       final result = await _service.getMyRooms();
       _myRooms = List<Map<String, dynamic>>.from(result['rooms'] ?? []);
@@ -1094,8 +1114,21 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> reopenRoom() async {
     if (_currentRoom == null) return;
+    if (!_ensureAuthenticated()) return;
     try {
       await _service.reopenRoom(_currentRoom!['id']);
+      _advanceAfterAnswerTimer?.cancel();
+      _advanceAfterAnswerTimer = null;
+      _pendingNextPuzzle = null;
+      _pendingNextPuzzleIndex = null;
+      _isAdvancingToNextPuzzle = false;
+      _selectedAnswerIndex = null;
+      _lastAnswerCorrect = null;
+      _correctAnswerIndex = null;
+      _currentStepIndex = 0;
+      _completedSteps = [];
+      _puzzleStartTime = null;
+      _puzzleEndsAt = null;
       // reset local state like going back to lobby
       _gameStarted = false;
       _gameFinished = false;
@@ -1114,6 +1147,7 @@ class CompetitionProvider with ChangeNotifier {
 
   Future<void> kickUser(String userId) async {
     if (_currentRoom != null) {
+      if (!_ensureAuthenticated()) return;
       try {
         await _service.kickUser(_currentRoom!['id'], userId);
       } catch (e) {
@@ -1123,6 +1157,7 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> getRoomSettings(int roomId) async {
+    if (!_ensureAuthenticated()) return {};
     return _service.getRoomSettings(roomId);
   }
 
@@ -1130,10 +1165,12 @@ class CompetitionProvider with ChangeNotifier {
     int roomId,
     Map<String, dynamic> settings,
   ) async {
+    if (!_ensureAuthenticated()) return;
     await _service.updateRoomSettings(roomId, settings);
   }
 
   Future<Map<String, dynamic>> getHint(int roomId, int puzzleIndex) async {
+    if (!_ensureAuthenticated()) return {};
     return _service.getHint(roomId, puzzleIndex);
   }
 
@@ -1143,6 +1180,7 @@ class CompetitionProvider with ChangeNotifier {
     String reportType,
     String details,
   ) async {
+    if (!_ensureAuthenticated()) return;
     await _service.reportBadPuzzle(roomId, puzzleIndex, reportType, details);
   }
 
@@ -1151,11 +1189,13 @@ class CompetitionProvider with ChangeNotifier {
 
   // Manager actions
   Future<void> skipPuzzle(int roomId) async {
+    if (!_ensureAuthenticated()) return;
     await _service.skipPuzzle(roomId);
     notifyListeners();
   }
 
   Future<void> resetScores(int roomId) async {
+    if (!_ensureAuthenticated()) return;
     await _service.resetScores(roomId);
     // Reset local scores
     _score = 0;
@@ -1167,6 +1207,7 @@ class CompetitionProvider with ChangeNotifier {
   }
 
   Future<void> changeDifficulty(int roomId, int difficulty) async {
+    if (!_ensureAuthenticated()) return;
     await _service.changeDifficulty(roomId, difficulty);
     if (_currentRoom != null) {
       _currentRoom!['difficulty'] = difficulty;
@@ -1180,6 +1221,8 @@ class CompetitionProvider with ChangeNotifier {
       notifyListeners();
       return;
     }
+
+    if (!_ensureAuthenticated()) return;
 
     try {
       await _service.freezePlayer(roomId, userId, freeze);
@@ -1204,6 +1247,8 @@ class CompetitionProvider with ChangeNotifier {
       notifyListeners();
       return;
     }
+
+    if (!_ensureAuthenticated()) return;
 
     // Find the target user
     final targetUser = _roomParticipants.firstWhere(
@@ -1241,6 +1286,8 @@ class CompetitionProvider with ChangeNotifier {
       notifyListeners();
       return;
     }
+
+    if (!_ensureAuthenticated()) return;
 
     // Find the target user
     final targetUser = _roomParticipants.firstWhere(

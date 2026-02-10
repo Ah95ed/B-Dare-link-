@@ -6,6 +6,7 @@ import '../../core/modern_widgets.dart';
 import '../../core/room_design_components.dart';
 import '../../providers/competition_provider.dart';
 import 'room_settings_view.dart';
+import '../../l10n/app_localizations.dart';
 
 class RoomGameView extends StatefulWidget {
   const RoomGameView({super.key});
@@ -21,6 +22,7 @@ class _RoomGameViewState extends State<RoomGameView> {
   @override
   Widget build(BuildContext context) {
     final competitionProvider = context.watch<CompetitionProvider>();
+    final l10n = AppLocalizations.of(context)!;
 
     if (!competitionProvider.gameStarted ||
         competitionProvider.currentPuzzle == null) {
@@ -44,7 +46,10 @@ class _RoomGameViewState extends State<RoomGameView> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'السال $currentIndex/$totalPuzzles',
+              l10n.roomQuestionCount(
+                 currentIndex,
+                 totalPuzzles,
+              ),
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w700,
@@ -101,13 +106,14 @@ class _RoomGameViewState extends State<RoomGameView> {
   }
 
   Widget _buildLoadingScreen(CompetitionProvider provider) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
       appBar: AppBar(
         backgroundColor: AppColors.darkSurface,
         elevation: 0,
         title: Text(
-          'انتظار اللغز...',
+          l10n.roomWaitingPuzzle,
           style: TextStyle(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
@@ -120,7 +126,7 @@ class _RoomGameViewState extends State<RoomGameView> {
       ),
       body: AnimatedBackgroundGradient(
         child: WaveLoadingWidget(
-          label: 'جاري تحميل اللغز...',
+          label: l10n.roomLoadingPuzzle,
           waveColor: AppColors.cyan,
         ),
       ),
@@ -135,6 +141,7 @@ class _RoomGameViewState extends State<RoomGameView> {
     final options = List<String>.from(puzzle['options'] ?? []);
     final hint = puzzle['hint']?.toString() ?? '';
     final category = puzzle['category']?.toString() ?? '';
+    final l10n = AppLocalizations.of(context)!;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -225,29 +232,30 @@ class _RoomGameViewState extends State<RoomGameView> {
                         isRevealed: false,
                         onTap: () {
                           debugPrint(
-                            '🔘 Button tapped - Option: $optionText (index: $index)',
+                            l10n.roomLogButtonTapped(
+                               optionText,
+                              index,
+                            ),
                           );
 
                           if (_isSubmitting) {
-                            debugPrint('⚠️ Currently submitting, ignoring tap');
+                            debugPrint(l10n.roomLogSubmittingIgnored);
                             return;
                           }
 
                           if (_selectedAnswerIndex == index) {
-                            debugPrint('✓ Same option selected, submitting...');
+                            debugPrint(l10n.roomLogSameOptionSubmitting);
                             _submitAnswer(provider, index);
                             return;
                           }
 
-                          debugPrint('→ Selecting option...');
+                          debugPrint(l10n.roomLogSelectingOption);
                           setState(() => _selectedAnswerIndex = index);
 
                           Future.delayed(const Duration(milliseconds: 300), () {
-                            debugPrint(
-                              '→ 300ms delay completed, preparing to submit',
-                            );
+                            debugPrint(l10n.roomLogDelayComplete);
                             if (mounted && !_isSubmitting) {
-                              debugPrint('→ Submitting after delay...');
+                              debugPrint(l10n.roomLogSubmittingAfterDelay);
                               _submitAnswer(provider, index);
                             }
                           });
@@ -265,23 +273,24 @@ class _RoomGameViewState extends State<RoomGameView> {
   }
 
   void _submitAnswer(CompetitionProvider provider, int answerIndex) async {
+    final l10n = AppLocalizations.of(context)!;
     if (_isSubmitting) {
-      debugPrint('⚠️ Already submitting, ignoring duplicate submission');
+      debugPrint(l10n.roomLogAlreadySubmitting);
       return;
     }
 
-    debugPrint('📤 Submitting answer at index: $answerIndex');
+    debugPrint(l10n.roomLogSubmittingAnswer( answerIndex));
     setState(() => _isSubmitting = true);
 
     try {
-      debugPrint('📡 Calling provider.submitQuizAnswer($answerIndex)...');
+      debugPrint(l10n.roomLogCallingSubmit(answerIndex));
       await provider.submitQuizAnswer(answerIndex);
-      debugPrint('✅ Answer submitted successfully');
+      debugPrint(l10n.roomLogSubmittedSuccess);
     } catch (e) {
-      debugPrint('❌ Error submitting answer: $e');
+      debugPrint(l10n.roomLogSubmitError( e.toString()));
     } finally {
       if (mounted) {
-        debugPrint('🔄 Resetting state...');
+        debugPrint(l10n.roomLogResettingState);
         setState(() {
           _isSubmitting = false;
           _selectedAnswerIndex = null;
@@ -294,6 +303,7 @@ class _RoomGameViewState extends State<RoomGameView> {
     Map<String, dynamic> puzzle,
     CompetitionProvider provider,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     final startWord = puzzle['startWord']?.toString() ?? '';
     final endWord = puzzle['endWord']?.toString() ?? '';
     final hint = puzzle['hint']?.toString() ?? '';
@@ -304,7 +314,7 @@ class _RoomGameViewState extends State<RoomGameView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'ابدأ من: $startWord',
+            l10n.roomStartFrom( startWord),
             style: TextStyle(
               color: AppColors.cyan,
               fontSize: 18,
@@ -313,7 +323,7 @@ class _RoomGameViewState extends State<RoomGameView> {
           ),
           const SizedBox(height: 12),
           Text(
-            'انتهِ عند: $endWord',
+            l10n.roomEndAt( endWord),
             style: TextStyle(
               color: AppColors.success,
               fontSize: 18,
@@ -323,7 +333,7 @@ class _RoomGameViewState extends State<RoomGameView> {
           const SizedBox(height: 16),
           if (hint.isNotEmpty)
             Text(
-              'تلميح: $hint',
+              l10n.roomHintLabel( hint),
               style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
             ),
         ],
@@ -335,6 +345,7 @@ class _RoomGameViewState extends State<RoomGameView> {
     BuildContext context,
     CompetitionProvider provider,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     return Drawer(
       backgroundColor: AppColors.darkSurface,
       child: SafeArea(
@@ -344,7 +355,7 @@ class _RoomGameViewState extends State<RoomGameView> {
             if (provider.currentRoomId != null)
               ListTile(
                 leading: Icon(Icons.settings, color: AppColors.cyan),
-                title: const Text('إعدادات الغرفة'),
+                title: Text(l10n.roomSettings),
                 onTap: () {
                   Navigator.of(context).maybePop();
                   Navigator.of(context).push(
@@ -364,7 +375,7 @@ class _RoomGameViewState extends State<RoomGameView> {
                   Icons.admin_panel_settings,
                   color: AppColors.cyan,
                 ),
-                title: const Text('إدارة اللاعبين'),
+                title: Text(l10n.roomManagePlayers),
                 onTap: () {
                   Navigator.of(context).maybePop();
                   _showPlayersDialog(context, provider);
@@ -375,7 +386,7 @@ class _RoomGameViewState extends State<RoomGameView> {
                   Icons.skip_next_rounded,
                   color: AppColors.magenta,
                 ),
-                title: const Text('تخطي السؤال الحالي'),
+                title: Text(l10n.roomSkipQuestion),
                 onTap: () async {
                   Navigator.of(context).maybePop();
                   final roomId = provider.currentRoomId!;
@@ -384,7 +395,7 @@ class _RoomGameViewState extends State<RoomGameView> {
               ),
               ListTile(
                 leading: Icon(Icons.refresh_rounded, color: AppColors.warning),
-                title: const Text('إعادة تعيين النقاط'),
+                title: Text(l10n.roomResetScores),
                 onTap: () {
                   Navigator.of(context).maybePop();
                   _confirmResetScores(context, provider);
@@ -392,7 +403,7 @@ class _RoomGameViewState extends State<RoomGameView> {
               ),
               ListTile(
                 leading: Icon(Icons.tune_rounded, color: AppColors.cyan),
-                title: const Text('تغيير الصعوبة'),
+                title: Text(l10n.roomChangeDifficulty),
                 onTap: () {
                   Navigator.of(context).maybePop();
                   _showDifficultyDialog(context, provider);
@@ -403,7 +414,7 @@ class _RoomGameViewState extends State<RoomGameView> {
                   Icons.delete_forever_rounded,
                   color: AppColors.error,
                 ),
-                title: const Text('حذف الغرفة'),
+                title: Text(l10n.roomDelete),
                 onTap: () {
                   Navigator.of(context).maybePop();
                   _confirmDeleteRoom(context, provider);
@@ -413,7 +424,7 @@ class _RoomGameViewState extends State<RoomGameView> {
             ],
             ListTile(
               leading: Icon(Icons.refresh_rounded, color: AppColors.cyan),
-              title: const Text('تحديث الحالة'),
+              title: Text(l10n.roomRefreshStatus),
               onTap: () {
                 Navigator.of(context).maybePop();
                 provider.refreshRoomStatus();
@@ -425,7 +436,7 @@ class _RoomGameViewState extends State<RoomGameView> {
                 Icons.meeting_room_outlined,
                 color: AppColors.magenta,
               ),
-              title: const Text('العودة للغرفة'),
+              title: Text(l10n.roomBackToLobby),
               onTap: () {
                 Navigator.of(context).maybePop();
                 provider.goBackToLobby();
@@ -438,15 +449,16 @@ class _RoomGameViewState extends State<RoomGameView> {
   }
 
   void _confirmResetScores(BuildContext context, CompetitionProvider provider) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('إعادة تعيين النقاط'),
-        content: const Text('هل تريد إعادة تعيين نقاط جميع اللاعبين؟'),
+        title: Text(l10n.roomResetScoresTitle),
+        content: Text(l10n.roomResetScoresConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
@@ -457,7 +469,10 @@ class _RoomGameViewState extends State<RoomGameView> {
                 await provider.resetScores(roomId);
               }
             },
-            child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
+            child: Text(
+              l10n.confirm,
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -468,18 +483,19 @@ class _RoomGameViewState extends State<RoomGameView> {
     BuildContext context,
     CompetitionProvider provider,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     final current = provider.currentDifficulty ?? 1;
     int selected = current;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('تغيير الصعوبة'),
+        title: Text(l10n.difficultyTitle),
         content: StatefulBuilder(
           builder: (context, setState) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('الصعوبة الحالية: $current'),
+              Text(l10n.currentDifficulty( current)),
               const SizedBox(height: 12),
               Slider(
                 value: selected.toDouble(),
@@ -495,7 +511,7 @@ class _RoomGameViewState extends State<RoomGameView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -505,7 +521,7 @@ class _RoomGameViewState extends State<RoomGameView> {
                 await provider.changeDifficulty(roomId, selected);
               }
             },
-            child: const Text('حفظ'),
+            child: Text(l10n.save),
           ),
         ],
       ),
@@ -514,11 +530,12 @@ class _RoomGameViewState extends State<RoomGameView> {
 
   void _showPlayersDialog(BuildContext context, CompetitionProvider provider) {
     final participants = provider.roomParticipants;
+    final l10n = AppLocalizations.of(context)!;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('إدارة اللاعبين'),
+        title: Text(l10n.managePlayersTitle),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.separated(
@@ -527,12 +544,18 @@ class _RoomGameViewState extends State<RoomGameView> {
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final p = participants[index];
-              final username = p['username']?.toString() ?? 'لاعب';
+              final username = p['username']?.toString() ?? l10n.playerLabel;
               final score = (p['score'] as num?)?.toInt() ?? 0;
               final role = p['role']?.toString() ?? 'player';
               final userId = (p['user_id'] ?? p['userId'])?.toString() ?? '';
               final isFrozen = p['is_frozen'] == true || p['is_frozen'] == 1;
               final isManager = role == 'manager' || role == 'admin';
+              final roleLabel = switch (role) {
+                'manager' => l10n.roleManager,
+                'admin' => l10n.roleAdmin,
+                'co_manager' => l10n.roleCoManager,
+                _ => role,
+              };
 
               return ListTile(
                 leading: Stack(
@@ -566,7 +589,7 @@ class _RoomGameViewState extends State<RoomGameView> {
                   ],
                 ),
                 subtitle: Text(
-                  'النقاط: $score • الدور: ${isManager ? "مدير" : role}',
+                  l10n.pointsRole(score, roleLabel),
                   style: TextStyle(
                     color: isManager ? Color(0xFFFFD700) : null,
                     fontWeight: isManager ? FontWeight.w600 : null,
@@ -612,20 +635,17 @@ class _RoomGameViewState extends State<RoomGameView> {
                   },
                   itemBuilder: (context) => [
                     if (!isFrozen)
-                      const PopupMenuItem(
-                        value: 'freeze',
-                        child: Text('تجميد'),
-                      ),
+                      PopupMenuItem(value: 'freeze', child: Text(l10n.freeze)),
                     if (isFrozen)
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'unfreeze',
-                        child: Text('إلغاء التجميد'),
+                        child: Text(l10n.unfreeze),
                       ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'promote',
-                      child: Text('ترقية لمدير مساعد'),
+                      child: Text(l10n.promoteCoManager),
                     ),
-                    const PopupMenuItem(value: 'kick', child: Text('طرد')),
+                    PopupMenuItem(value: 'kick', child: Text(l10n.kick)),
                   ],
                 ),
               );
@@ -635,7 +655,7 @@ class _RoomGameViewState extends State<RoomGameView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('إغلاق'),
+            child: Text(l10n.close),
           ),
         ],
       ),
@@ -643,17 +663,16 @@ class _RoomGameViewState extends State<RoomGameView> {
   }
 
   void _confirmDeleteRoom(BuildContext context, CompetitionProvider provider) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('حذف الغرفة'),
-        content: const Text(
-          'هل تريد حذف هذه الغرفة؟ سيتم طرد جميع اللاعبين ولا يمكن التراجع عن هذا الإجراء.',
-        ),
+        title: Text(l10n.deleteRoomTitle),
+        content: Text(l10n.deleteRoomConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
@@ -667,7 +686,10 @@ class _RoomGameViewState extends State<RoomGameView> {
                 }
               }
             },
-            child: const Text('حذف', style: TextStyle(color: Colors.white)),
+            child: Text(
+              l10n.delete,
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

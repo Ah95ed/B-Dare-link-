@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:email_otp/email_otp.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../l10n/app_localizations.dart';
+import 'package:wonder_link_game/l10n/app_localizations.dart';
+import 'package:wonder_link_game/providers/auth_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -14,33 +15,102 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _otpController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _sent = false;
+  bool _loading = false;
 
-  void _submit() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        await Provider.of<AuthProvider>(context, listen: false).register(
-          _usernameController.text.trim(),
-          _emailController.text.trim(),
-          _passwordController.text.trim(),
-        );
-        if (mounted) {
-          Navigator.pop(context); // Pop register
-          Navigator.pop(
-            context,
-          ); // Pop login (if stacked) - or handle navigation better in Main
-        }
-      } catch (e) {
-        if (mounted) {
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '${l10n.registrationFailed}: ${e.toString().replaceAll("Exception: ", "")}',
-              ),
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final l10n = AppLocalizations.of(context)!;
+    EmailOTP.setSMTP(
+      host: 'smtp.gmail.com',
+      emailPort: EmailPort.port587,
+      secureType: SecureType.tls,
+      username: 'amhmeed31@gmail.com',
+
+      /// your google account mail
+      password: 'arhs xupn ktkc ypir',
+
+      /// this password will get while creating app password
+    );
+
+    EmailOTP.config(
+      appName: l10n.appTitle,
+      otpType: OTPType.numeric,
+      expiry: 40000,
+      emailTheme: EmailTheme.v6,
+      appEmail: 'amhmeed31@gmail.com',
+      otpLength: 6,
+    );
+  }
+
+  Future<void> _sendOtp() async {
+    if (!_formKey.currentState!.validate()) return;
+    final email = _emailController.text.trim();
+    setState(() => _loading = true);
+    try {
+      final ok = await EmailOTP.sendOTP(email: email);
+      final l10n = AppLocalizations.of(context)!;
+      if (ok) {
+        setState(() => _sent = true);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.otpSent(email))));
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.errorSendingOTP(''))));
+      }
+    } catch (e) {
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.errorSendingOTP(e.toString()))),
+      );
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _verifyAndRegister() async {
+    if (!_formKey.currentState!.validate()) return;
+    final otp = _otpController.text.trim();
+    if (otp.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      final ok = EmailOTP.verifyOTP(otp: otp);
+      final l10n = AppLocalizations.of(context)!;
+      if (!ok) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.invalidOTP)));
+        return;
+      }
+
+      await Provider.of<AuthProvider>(context, listen: false).register(
+        _usernameController.text.trim(),
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+      );
+      if (mounted) {
+        Navigator.pop(context); // Pop register
+        Navigator.pop(context); // Pop login (if stacked)
+      }
+    } catch (e) {
+      if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${l10n.registrationFailed}: ${e.toString().replaceAll("Exception: ", "")} ',
             ),
-          );
-        }
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
       }
     }
   }
@@ -91,17 +161,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 validator: (v) => v!.length < 6 ? l10n.passwordTooShort : null,
               ),
               const SizedBox(height: 20),
-              Consumer<AuthProvider>(
-                builder: (context, auth, _) => auth.isLoading
-                    ? const CircularProgressIndicator()
-                    : ElevatedButton(
-                        onPressed: _submit,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 50),
-                        ),
-                        child: Text(l10n.register),
-                      ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _sendOtp,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 50),
+                  ),
+                  child: _loading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(l10n.sendOTP),
+                ),
               ),
+              if (_sent) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _otpController,
+                  decoration: InputDecoration(
+                    labelText: l10n.otpLabel,
+                    border: const OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                Consumer<AuthProvider>(
+                  builder: (context, auth, _) => ElevatedButton(
+                    onPressed: (_loading || auth.isLoading)
+                        ? null
+                        : _verifyAndRegister,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                    child: (auth.isLoading || _loading)
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(l10n.register),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

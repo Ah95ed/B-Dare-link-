@@ -264,9 +264,7 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     final endWord = isArabic ? puzzle.endWordAr : puzzle.endWordEn;
     final hint = isArabic ? puzzle.hintAr : puzzle.hintEn;
     final l10n = AppLocalizations.of(context)!;
-    final questionText = isArabic
-        ? 'ما الذي يربط بين "$startWord" و "$endWord"؟'
-        : 'What links "$startWord" and "$endWord"?';
+    final questionText = l10n.whatLinks(startWord, endWord);
 
     final paths = _buildPaths(
       steps,
@@ -523,15 +521,16 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     List<GamePuzzle> puzzlePool,
     bool isArabic,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     final baseSteps = steps.map((s) => s.word as String).toList();
 
     if (baseSteps.isEmpty) {
       _correctAnswerIndex = 0;
       return [
-        ['خيار', 'واحد'],
-        ['خيار', 'اثنان'],
-        ['خيار', 'ثلاثة'],
-        ['خيار', 'أربعة'],
+        [l10n.placeholderOptionOne],
+        [l10n.placeholderOptionTwo],
+        [l10n.placeholderOptionThree],
+        [l10n.placeholderOptionFour],
       ];
     }
 

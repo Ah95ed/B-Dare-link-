@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 import 'package:app_links/app_links.dart';
@@ -93,21 +94,26 @@ class WonderLinkApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: _buildProviders(),
-      child: DeepLinkHandler(
-        child: Consumer<LocaleProvider>(
-          builder: (context, localeProvider, child) {
-            return MaterialApp(
-              title: 'Wonder Link',
-              debugShowCheckedModeBanner: false,
-              theme: AppTheme.lightTheme,
-              locale: localeProvider.locale,
-              localizationsDelegates: _getLocalizationDelegates(),
-              supportedLocales: const [Locale('en'), Locale('ar')],
-              home: _buildHome(),
-            );
-          },
+    return ScreenUtilInit(
+      designSize: const Size(360, 800),
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (_, __) => MultiProvider(
+        providers: _buildProviders(),
+        child: DeepLinkHandler(
+          child: Consumer<LocaleProvider>(
+            builder: (context, localeProvider, child) {
+              return MaterialApp(
+                title: 'Wonder Link',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.lightTheme,
+                locale: localeProvider.locale,
+                localizationsDelegates: _getLocalizationDelegates(),
+                supportedLocales: const [Locale('en'), Locale('ar')],
+                home: _buildHome(),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -169,16 +175,16 @@ class WonderLinkApp extends StatelessWidget {
 
   /// Build loading screen
   Widget _buildLoadingScreen() {
-    return const Scaffold(
+    return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(),
-            SizedBox(height: 20),
+            SizedBox(height: 20.h),
             Text(
               'Wonder Link',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.bold),
             ),
           ],
         ),

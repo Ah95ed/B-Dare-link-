@@ -739,10 +739,6 @@ class WavePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withOpacity(0.3)
-      ..style = PaintingStyle.fill;
-
     final path = Path();
     final waveHeight = 20.0;
     const frequency = 2;

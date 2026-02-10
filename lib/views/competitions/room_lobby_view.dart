@@ -5,7 +5,9 @@ import '../../providers/competition_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/app_colors.dart';
 import '../../core/room_design_components.dart';
+import '../../core/auth_guard.dart';
 import 'room_settings_view.dart';
+import '../../l10n/app_localizations.dart';
 
 class RoomLobbyView extends StatefulWidget {
   const RoomLobbyView({super.key});
@@ -65,6 +67,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
   Widget build(BuildContext context) {
     final competitionProvider = context.watch<CompetitionProvider>();
     final authProvider = context.watch<AuthProvider>();
+    final l10n = AppLocalizations.of(context)!;
     final room = competitionProvider.currentRoom;
     final participants = competitionProvider.roomParticipants;
     final messages = competitionProvider.messages;
@@ -79,7 +82,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     }
 
     if (room == null) {
-      return const Scaffold(body: Center(child: Text('لا توجد غرفة نشطة')));
+      return Scaffold(body: Center(child: Text(l10n.roomNoActiveRoom)));
     }
 
     final currentUserId = authProvider.user?['id']?.toString();
@@ -108,7 +111,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              room['name'] ?? 'غرفة',
+              room['name'] ?? l10n.roomLabel,
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 16,
@@ -116,7 +119,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               ),
             ),
             Text(
-              'عدد اللاعبين : ${participants.length}',
+              l10n.playersCountLabel( participants.length),
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
@@ -235,7 +238,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'جاري تحميل السؤال...',
+                        l10n.loadingQuestion,
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.blue.shade900,
@@ -248,8 +251,8 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         await competitionProvider.refreshRoomStatus();
                       },
                       icon: const Icon(Icons.refresh, size: 14),
-                      label: const Text(
-                        'تحديث',
+                      label:  Text(
+                        l10n.refresh,
                         style: TextStyle(fontSize: 12),
                       ),
                       style: TextButton.styleFrom(
@@ -286,7 +289,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                     final isPManager = role == 'manager' || role == 'admin';
 
                     return ParticipantCard(
-                      name: p['username'] ?? 'اللاعب',
+                      name: p['username'] ?? l10n.playerLabel,
                       score: p['score'] ?? 0,
                       isHost: isPHost && !isPManager,
                       isManager: isPManager,
@@ -395,7 +398,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           child: TextField(
                             controller: _messageController,
                             decoration: InputDecoration(
-                              hintText: 'اكتب رسالة...',
+                              hintText: l10n.chatHint,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
                                 borderSide: BorderSide.none,
@@ -407,15 +410,17 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               ),
                             ),
                             onSubmitted: (val) async {
+                              final authed = await AuthGuard.requireLogin(
+                                context,
+                              );
+                              if (!authed) return;
                               if (val.trim().isNotEmpty) {
                                 final sent = await competitionProvider
                                     .sendMessage(val.trim());
                                 if (!sent && mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'فشل إرسال الرسالة، يرجى التأكد من الاتصال',
-                                      ),
+                                    SnackBar(
+                                      content: Text(l10n.sendMessageFailed),
                                       backgroundColor: Colors.red,
                                     ),
                                   );
@@ -433,15 +438,17 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                             color: Theme.of(context).primaryColor,
                           ),
                           onPressed: () async {
+                            final authed = await AuthGuard.requireLogin(
+                              context,
+                            );
+                            if (!authed) return;
                             if (_messageController.text.trim().isNotEmpty) {
                               final sent = await competitionProvider
                                   .sendMessage(_messageController.text.trim());
                               if (!sent && mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'فشل إرسال الرسالة، يرجى التأكد من الاتصال',
-                                    ),
+                                  SnackBar(
+                                    content: Text(l10n.sendMessageFailed),
                                     backgroundColor: Colors.red,
                                   ),
                                 );
@@ -458,9 +465,12 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          competitionProvider.toggleReady(
-                            !competitionProvider.isReady,
-                          );
+                          AuthGuard.requireLogin(context).then((authed) {
+                            if (!authed) return;
+                            competitionProvider.toggleReady(
+                              !competitionProvider.isReady,
+                            );
+                          });
                         },
                         icon: Icon(
                           competitionProvider.isReady
@@ -483,8 +493,8 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         ),
                         label: Text(
                           competitionProvider.isReady
-                              ? 'أنت جاهز ✓'
-                              : 'إعلان الجاهزية',
+                              ? l10n.readyStatusReady
+                              : l10n.readyStatusAnnounce,
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -501,6 +511,10 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           onPressed: competitionProvider.isStartingGame
                               ? null
                               : () async {
+                                  final authed = await AuthGuard.requireLogin(
+                                    context,
+                                  );
+                                  if (!authed) return;
                                   await competitionProvider.startGame();
                                 },
                           icon: Icon(Icons.play_circle_filled_rounded),
@@ -518,8 +532,8 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           ),
                           label: Text(
                             competitionProvider.isStartingGame
-                                ? 'جاري البدء...'
-                                : 'ابدأ اللعبة',
+                                ? l10n.startingGame
+                                : l10n.startGame,
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
@@ -547,8 +561,8 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          label: const Text(
-                            'جلب السؤال الحالي',
+                          label:  Text(
+                            l10n.fetchCurrentQuestion,
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 14,
@@ -566,6 +580,10 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () async {
+                            final authed = await AuthGuard.requireLogin(
+                              context,
+                            );
+                            if (!authed) return;
                             await competitionProvider.nextPuzzle();
                           },
                           icon: const Icon(
@@ -579,8 +597,8 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          label: const Text(
-                            'السؤال التالي ▶️',
+                          label:  Text(
+                            l10n.nextQuestion,
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 14,
@@ -596,6 +614,10 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () async {
+                            final authed = await AuthGuard.requireLogin(
+                              context,
+                            );
+                            if (!authed) return;
                             await competitionProvider.reopenRoom();
                           },
                           icon: const Icon(Icons.refresh, color: Colors.white),
@@ -606,8 +628,8 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          label: const Text(
-                            'إعادة فتح الغرفة',
+                          label:  Text(
+                            l10n.reopenRoom,
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -635,6 +657,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     CompetitionProvider provider,
     bool isHost,
   ) {
+     final l10n = AppLocalizations.of(context)!;
     final puzzle = provider.currentPuzzle;
     if (puzzle == null) {
       return const SizedBox.shrink();
@@ -662,7 +685,8 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     // - 'question' : String
     // - 'options'  : List<dynamic>
     // - 'type'    : String (e.g., 'quiz' or 'steps')
-    final String question = puzzle['question']?.toString() ?? 'سؤال غير متوفر';
+    final String question =
+        puzzle['question']?.toString() ?? l10n.questionUnavailable;
     final List<dynamic> options = puzzle['options'] as List<dynamic>? ?? [];
     final String? startWord = puzzle['startWord']?.toString();
     final String? endWord = puzzle['endWord']?.toString();
@@ -724,7 +748,10 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'السؤال $currentNumber',
+                          l10n.roomQuestionCount(
+                            currentNumber,
+                           totalPuzzles,
+                          ),
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.w800,
@@ -733,7 +760,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           ),
                         ),
                         Text(
-                          'من $totalPuzzles',
+                          l10n.roomOutOfTotal( totalPuzzles),
                           style: TextStyle(
                             fontSize: 14,
                             color: AppColors.textSecondary,
@@ -766,7 +793,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                             ),
                           ),
                           Text(
-                            'مكتملة',
+                            l10n.completedLabel,
                             style: TextStyle(
                               fontSize: 11,
                               color: AppColors.cyan.withOpacity(0.8),
@@ -813,7 +840,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'انتهت الجولة بالنسبة لك!',
+                          l10n.roundFinishedForYou,
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -852,7 +879,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          'اللغز',
+                          l10n.puzzleLabel,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -904,7 +931,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           ),
                           const SizedBox(width: 12),
                           Text(
-                            'السلسلة',
+                            l10n.chainLabel,
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -972,7 +999,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'تلميح مفيد',
+                              l10n.hintUseful,
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -1004,7 +1031,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               if (options.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
-                  'الخيارات المتاحة:',
+                  l10n.optionsAvailable,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -1186,6 +1213,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     BuildContext context,
     CompetitionProvider provider,
   ) {
+     final l10n = AppLocalizations.of(context)!;
     return StreamBuilder<int>(
       stream: Stream.periodic(const Duration(seconds: 1), (_) {
         final puzzleEnd = provider.puzzleEndsAt;
@@ -1221,7 +1249,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               ),
               const SizedBox(width: 8),
               Text(
-                'الوقت المتبقي: $remaining ثانية',
+                l10n.timeRemaining( remaining),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -1243,6 +1271,7 @@ Drawer _buildLobbyDrawer(
   CompetitionProvider provider,
   bool isHost,
 ) {
+  final l10n = AppLocalizations.of(context)!;
   return Drawer(
     backgroundColor: AppColors.darkSurface,
     child: SafeArea(
@@ -1252,7 +1281,7 @@ Drawer _buildLobbyDrawer(
           if (isHost)
             ListTile(
               leading: Icon(Icons.settings, color: AppColors.cyan),
-              title: const Text('إعدادات الغرفة'),
+              title: Text(l10n.roomSettings),
               onTap: () {
                 Navigator.of(context).maybePop();
                 _pushSettings(context, provider, room);
@@ -1262,7 +1291,7 @@ Drawer _buildLobbyDrawer(
           if (isHost)
             ListTile(
               leading: Icon(Icons.admin_panel_settings, color: AppColors.cyan),
-              title: const Text('إدارة اللاعبين'),
+              title: Text(l10n.roomManagePlayers),
               onTap: () {
                 Navigator.of(context).maybePop();
                 _showPlayersDialog(context, provider);
@@ -1271,7 +1300,7 @@ Drawer _buildLobbyDrawer(
           if (isHost)
             ListTile(
               leading: Icon(Icons.skip_next_rounded, color: AppColors.magenta),
-              title: const Text('تخطي السؤال الحالي'),
+              title: Text(l10n.roomSkipQuestion),
               onTap: () async {
                 Navigator.of(context).maybePop();
                 final roomId = provider.currentRoomId;
@@ -1283,7 +1312,7 @@ Drawer _buildLobbyDrawer(
           if (isHost)
             ListTile(
               leading: Icon(Icons.refresh_rounded, color: AppColors.warning),
-              title: const Text('إعادة تعيين النقاط'),
+              title: Text(l10n.roomResetScores),
               onTap: () {
                 Navigator.of(context).maybePop();
                 _confirmResetScores(context, provider);
@@ -1292,7 +1321,7 @@ Drawer _buildLobbyDrawer(
           if (isHost)
             ListTile(
               leading: Icon(Icons.tune_rounded, color: AppColors.cyan),
-              title: const Text('تغيير الصعوبة'),
+              title: Text(l10n.roomChangeDifficulty),
               onTap: () {
                 Navigator.of(context).maybePop();
                 _showDifficultyDialog(context, provider);
@@ -1300,14 +1329,14 @@ Drawer _buildLobbyDrawer(
             ),
           ListTile(
             leading: Icon(Icons.copy_rounded, color: AppColors.magenta),
-            title: const Text('نسخ كود الغرفة'),
+            title: Text(l10n.copyRoomCode),
             onTap: () {
               final code = room['code'] ?? '';
               Clipboard.setData(ClipboardData(text: code)).then((_) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('تم نسخ الكود: $code'),
+                      content: Text(l10n.roomCodeCopied( code)),
                       backgroundColor: AppColors.cyan.withOpacity(0.8),
                     ),
                   );
@@ -1318,7 +1347,7 @@ Drawer _buildLobbyDrawer(
           ),
           ListTile(
             leading: Icon(Icons.refresh_rounded, color: AppColors.cyan),
-            title: const Text('تحديث الغرفة'),
+            title: Text(l10n.refreshRoom),
             onTap: () {
               Navigator.of(context).maybePop();
               provider.refreshRoomStatus();
@@ -1330,7 +1359,7 @@ Drawer _buildLobbyDrawer(
                 Icons.delete_forever_rounded,
                 color: AppColors.error,
               ),
-              title: const Text('حذف الغرفة'),
+              title: Text(l10n.roomDelete),
               onTap: () {
                 Navigator.of(context).maybePop();
                 _confirmDeleteRoom(context);
@@ -1338,7 +1367,7 @@ Drawer _buildLobbyDrawer(
             ),
           ListTile(
             leading: Icon(Icons.logout_rounded, color: AppColors.error),
-            title: const Text('مغادرة'),
+            title: Text(l10n.leaveRoom),
             onTap: () {
               Navigator.of(context).maybePop();
               provider.leaveRoom();
@@ -1351,15 +1380,16 @@ Drawer _buildLobbyDrawer(
 }
 
 void _confirmResetScores(BuildContext context, CompetitionProvider provider) {
+  final l10n = AppLocalizations.of(context)!;
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('إعادة تعيين النقاط'),
-      content: const Text('هل تريد إعادة تعيين نقاط جميع اللاعبين؟'),
+      title: Text(l10n.roomResetScoresTitle),
+      content: Text(l10n.roomResetScoresConfirm),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('إلغاء'),
+          child: Text(l10n.cancel),
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
@@ -1370,7 +1400,10 @@ void _confirmResetScores(BuildContext context, CompetitionProvider provider) {
               await provider.resetScores(roomId);
             }
           },
-          child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
+          child: Text(
+            l10n.confirm,
+            style: const TextStyle(color: Colors.white),
+          ),
         ),
       ],
     ),
@@ -1381,15 +1414,16 @@ void _showDifficultyDialog(BuildContext context, CompetitionProvider provider) {
   final current = provider.currentDifficulty ?? 1;
   int selected = current;
 
+  final l10n = AppLocalizations.of(context)!;
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('تغيير الصعوبة'),
+      title: Text(l10n.difficultyTitle),
       content: StatefulBuilder(
         builder: (context, setState) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('الصعوبة الحالية: $current'),
+            Text(l10n.currentDifficulty( current)),
             const SizedBox(height: 12),
             Slider(
               value: selected.toDouble(),
@@ -1405,7 +1439,7 @@ void _showDifficultyDialog(BuildContext context, CompetitionProvider provider) {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('إلغاء'),
+          child: Text(l10n.cancel),
         ),
         ElevatedButton(
           onPressed: () async {
@@ -1415,7 +1449,7 @@ void _showDifficultyDialog(BuildContext context, CompetitionProvider provider) {
               await provider.changeDifficulty(roomId, selected);
             }
           },
-          child: const Text('حفظ'),
+          child: Text(l10n.save),
         ),
       ],
     ),
@@ -1425,10 +1459,11 @@ void _showDifficultyDialog(BuildContext context, CompetitionProvider provider) {
 void _showPlayersDialog(BuildContext context, CompetitionProvider provider) {
   final participants = provider.roomParticipants;
 
+  final l10n = AppLocalizations.of(context)!;
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('إدارة اللاعبين'),
+      title: Text(l10n.managePlayersTitle),
       content: SizedBox(
         width: double.maxFinite,
         child: ListView.separated(
@@ -1437,11 +1472,18 @@ void _showPlayersDialog(BuildContext context, CompetitionProvider provider) {
           separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (context, index) {
             final p = participants[index];
-            final username = p['username']?.toString() ?? 'لاعب';
+            final username = p['username']?.toString() ?? l10n.playerLabel;
             final score = (p['score'] as num?)?.toInt() ?? 0;
             final role = p['role']?.toString() ?? 'player';
             final userId = (p['user_id'] ?? p['userId'])?.toString() ?? '';
             final isFrozen = p['is_frozen'] == true || p['is_frozen'] == 1;
+
+            final roleLabel = switch (role) {
+              'manager' => l10n.roleManager,
+              'admin' => l10n.roleAdmin,
+              'co_manager' => l10n.roleCoManager,
+              _ => role,
+            };
 
             return ListTile(
               leading: CircleAvatar(
@@ -1449,7 +1491,7 @@ void _showPlayersDialog(BuildContext context, CompetitionProvider provider) {
                 child: Text(username.isNotEmpty ? username[0] : '?'),
               ),
               title: Text(username),
-              subtitle: Text('النقاط: $score • الدور: $role'),
+              subtitle: Text(l10n.pointsRole(score,  roleLabel)),
               trailing: PopupMenuButton<String>(
                 onSelected: (action) async {
                   final roomId = provider.currentRoomId;
@@ -1469,17 +1511,17 @@ void _showPlayersDialog(BuildContext context, CompetitionProvider provider) {
                 },
                 itemBuilder: (context) => [
                   if (!isFrozen)
-                    const PopupMenuItem(value: 'freeze', child: Text('تجميد')),
+                    PopupMenuItem(value: 'freeze', child: Text(l10n.freeze)),
                   if (isFrozen)
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'unfreeze',
-                      child: Text('إلغاء التجميد'),
+                      child: Text(l10n.unfreeze),
                     ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'promote',
-                    child: Text('ترقية لمدير مساعد'),
+                    child: Text(l10n.promoteCoManager),
                   ),
-                  const PopupMenuItem(value: 'kick', child: Text('طرد')),
+                  PopupMenuItem(value: 'kick', child: Text(l10n.kick)),
                 ],
               ),
             );
@@ -1489,7 +1531,7 @@ void _showPlayersDialog(BuildContext context, CompetitionProvider provider) {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('إغلاق'),
+          child: Text(l10n.close),
         ),
       ],
     ),
@@ -1514,17 +1556,16 @@ void _pushSettings(
 }
 
 void _confirmDeleteRoom(BuildContext context) {
+  final l10n = AppLocalizations.of(context)!;
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('حذف المجموعة'),
-      content: const Text(
-        'هل أنت متأكد من رغبتك في حذف المجموعة نهائياً؟ سيتم طرد جميع الأعضاء.',
-      ),
+      title: Text(l10n.deleteGroupTitle),
+      content: Text(l10n.deleteGroupConfirm),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('إلغاء'),
+          child: Text(l10n.cancel),
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -1535,7 +1576,7 @@ void _confirmDeleteRoom(BuildContext context) {
               Navigator.pop(context); // Exit room view
             }
           },
-          child: const Text('حذف', style: TextStyle(color: Colors.white)),
+          child: Text(l10n.delete, style: const TextStyle(color: Colors.white)),
         ),
       ],
     ),
@@ -1561,6 +1602,7 @@ void _showGameResults(BuildContext context, CompetitionProvider provider) {
     return nameA.compareTo(nameB);
   });
 
+  final l10n = AppLocalizations.of(context)!;
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -1569,7 +1611,7 @@ void _showGameResults(BuildContext context, CompetitionProvider provider) {
         children: [
           Icon(Icons.emoji_events, color: Colors.amber.shade700, size: 28),
           const SizedBox(width: 8),
-          const Text('نتائج اللعبة 🎉'),
+          Text(l10n.gameResultsTitle),
         ],
       ),
       content: SizedBox(
@@ -1577,9 +1619,9 @@ void _showGameResults(BuildContext context, CompetitionProvider provider) {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'تهانينا للجميع! إليكم النتائج النهائية:',
-              style: TextStyle(fontSize: 14),
+            Text(
+              l10n.gameResultsIntro,
+              style: const TextStyle(fontSize: 14),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -1588,7 +1630,8 @@ void _showGameResults(BuildContext context, CompetitionProvider provider) {
               itemCount: sortedParticipants.length,
               itemBuilder: (context, index) {
                 final participant = sortedParticipants[index];
-                final username = participant['username']?.toString() ?? 'لاعب';
+                final username =
+                    participant['username']?.toString() ?? l10n.playerLabel;
                 final score = (participant['score'] as num?)?.toInt() ?? 0;
                 final puzzlesSolved =
                     (participant['puzzles_solved'] as num?)?.toInt() ?? 0;
@@ -1631,7 +1674,9 @@ void _showGameResults(BuildContext context, CompetitionProvider provider) {
                         fontSize: index == 0 ? 16 : 14,
                       ),
                     ),
-                    subtitle: Text('$puzzlesSolved ألغاز محلولة'),
+                    subtitle: Text(
+                      l10n.puzzlesSolvedLabel( puzzlesSolved),
+                    ),
                     trailing: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -1643,7 +1688,7 @@ void _showGameResults(BuildContext context, CompetitionProvider provider) {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        '$score نقطة',
+                        l10n.pointsLabel(score),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: rankColor ?? Colors.blue.shade800,
@@ -1661,7 +1706,7 @@ void _showGameResults(BuildContext context, CompetitionProvider provider) {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('إغلاق'),
+          child: Text(l10n.close),
         ),
         if (provider.isHost)
           ElevatedButton(
@@ -1669,7 +1714,7 @@ void _showGameResults(BuildContext context, CompetitionProvider provider) {
               Navigator.pop(context);
               provider.reopenRoom();
             },
-            child: const Text('لعب مرة أخرى'),
+            child: Text(l10n.playAgain),
           ),
       ],
     ),

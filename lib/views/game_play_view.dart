@@ -6,6 +6,8 @@ import 'modes/multiple_choice_game_widget.dart';
 import 'modes/grid_path_game_widget.dart';
 import 'modes/drag_drop_game_widget.dart';
 import '../controllers/locale_provider.dart';
+import '../l10n/app_localizations.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 class GamePlayView extends StatefulWidget {
   const GamePlayView({super.key});
@@ -20,16 +22,17 @@ class _GamePlayViewState extends State<GamePlayView> {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<GameProvider>(context);
+    final l10n = AppLocalizations.of(context)!;
 
     if (provider.isLoading) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(),
-              SizedBox(height: 20),
-              Text("Generating Puzzles..."),
+              SizedBox(height: 20.h),
+              Text(l10n.generatingPuzzles),
             ],
           ),
         ),
@@ -47,8 +50,8 @@ class _GamePlayViewState extends State<GamePlayView> {
           context: context,
           barrierDismissible: false,
           builder: (context) => AlertDialog(
-            title: const Text("Game Over"),
-            content: const Text("You ran out of lives!"),
+            title: Text(l10n.gameOverTitle),
+            content: Text(l10n.outOfLives),
             actions: [
               TextButton(
                 onPressed: () {
@@ -56,7 +59,7 @@ class _GamePlayViewState extends State<GamePlayView> {
                   Navigator.pop(context); // Go back to levels
                   // No need to reset flag as we are leaving
                 },
-                child: const Text("Exit"),
+                child: Text(l10n.exit),
               ),
               TextButton(
                 onPressed: () {
@@ -72,7 +75,7 @@ class _GamePlayViewState extends State<GamePlayView> {
                   _isDialogShown = false; // Reset flag for next time
                   if (level != null) provider.loadLevel(level, isArabic);
                 },
-                child: const Text("Retry"),
+                child: Text(l10n.retry),
               ),
             ],
           ),
@@ -111,7 +114,10 @@ class _GamePlayViewState extends State<GamePlayView> {
                 ),
                 Text(
                   "${provider.timeLeft}",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12.sp,
+                  ),
                 ),
               ],
             ),
@@ -120,23 +126,26 @@ class _GamePlayViewState extends State<GamePlayView> {
             Column(
               children: [
                 Text(
-                  "Level ${provider.currentLevel?.id ?? 0}",
-                  style: const TextStyle(
-                    fontSize: 14,
+                  l10n.levelLabel(provider.currentLevel?.id ?? 0),
+                  style: TextStyle(
+                    fontSize: 14.sp,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
-                  "Puzzle ${provider.currentPuzzleIndex + 1}/${provider.totalPuzzles}",
-                  style: const TextStyle(fontSize: 12),
+                  l10n.puzzleProgress(
+                    provider.currentPuzzleIndex + 1,
+                    provider.totalPuzzles,
+                  ),
+                  style: TextStyle(fontSize: 12.sp),
                 ),
               ],
             ),
 
             // Score
             Text(
-              "Score: ${provider.score}",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              l10n.scoreLabel(provider.score),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16.sp),
             ),
           ],
         ),

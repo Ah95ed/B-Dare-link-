@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../providers/story_provider.dart';
 import '../../core/app_colors.dart';
 import '../../l10n/app_localizations.dart';
@@ -22,17 +23,17 @@ class StoryDialogWidget extends StatelessWidget {
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(24),
+        constraints: BoxConstraints(maxWidth: 400.w),
+        padding: EdgeInsets.all(24.r),
         decoration: BoxDecoration(
           color: AppColors.darkSurface,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(24.r),
           border: Border.all(color: AppColors.cyan.withOpacity(0.3)),
           boxShadow: [
             BoxShadow(
               color: AppColors.cyan.withOpacity(0.1),
-              blurRadius: 20,
-              spreadRadius: 5,
+              blurRadius: 20.r,
+              spreadRadius: 5.r,
             ),
           ],
         ),
@@ -41,45 +42,43 @@ class StoryDialogWidget extends StatelessWidget {
           children: [
             // Chapter title
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
               decoration: BoxDecoration(
                 color: AppColors.cyan.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(20.r),
               ),
               child: Text(
-                isArabic
-                    ? 'المرحلة ${story.levelId}'
-                    : 'Level ${story.levelId}',
+                l10n.levelLabel(story.levelId),
                 style: TextStyle(
                   color: AppColors.cyan,
-                  fontSize: 12,
+                  fontSize: 12.sp,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
 
-            const SizedBox(height: 12),
+            SizedBox(height: 12.h),
 
             // Level title
             Text(
               story.getTitle(isArabic),
               style: TextStyle(
                 color: AppColors.textPrimary,
-                fontSize: 22,
+                fontSize: 22.sp,
                 fontWeight: FontWeight.bold,
               ),
               textAlign: TextAlign.center,
             ),
 
-            const SizedBox(height: 24),
+            SizedBox(height: 24.h),
 
             // Character with emoji
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 60,
-                  height: 60,
+                  width: 60.w,
+                  height: 60.w,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(
@@ -92,46 +91,46 @@ class StoryDialogWidget extends StatelessWidget {
                   child: Center(
                     child: Text(
                       story.characterEmoji,
-                      style: const TextStyle(fontSize: 32),
+                      style: TextStyle(fontSize: 32.sp),
                     ),
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
 
             // Character name
             Text(
               story.getCharacter(isArabic),
               style: TextStyle(
                 color: AppColors.cyan,
-                fontSize: 14,
+                fontSize: 14.sp,
                 fontWeight: FontWeight.bold,
               ),
             ),
 
-            const SizedBox(height: 16),
+            SizedBox(height: 16.h),
 
             // Story text
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16.r),
               decoration: BoxDecoration(
                 color: AppColors.darkBackground.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12.r),
               ),
               child: Text(
                 story.getIntro(isArabic),
                 style: TextStyle(
                   color: AppColors.textSecondary,
-                  fontSize: 15,
+                  fontSize: 15.sp,
                   height: 1.5,
                 ),
                 textAlign: TextAlign.center,
               ),
             ),
 
-            const SizedBox(height: 24),
+            SizedBox(height: 24.h),
 
             // Continue button
             ElevatedButton(
@@ -139,12 +138,9 @@ class StoryDialogWidget extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.cyan,
                 foregroundColor: AppColors.darkBackground,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 14,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 40.w, vertical: 14.h),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12.r),
                 ),
               ),
               child: Row(
@@ -152,12 +148,12 @@ class StoryDialogWidget extends StatelessWidget {
                 children: [
                   Text(
                     l10n.continueButton,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 16.sp,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8.w),
                   Icon(
                     isArabic ? Icons.arrow_back : Icons.arrow_forward,
                     size: 18,
@@ -193,17 +189,17 @@ class StoryCompletionDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(24),
+        constraints: BoxConstraints(maxWidth: 400.w),
+        padding: EdgeInsets.all(24.r),
         decoration: BoxDecoration(
           color: AppColors.darkSurface,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(24.r),
           border: Border.all(color: AppColors.success.withOpacity(0.5)),
           boxShadow: [
             BoxShadow(
               color: AppColors.success.withOpacity(0.2),
-              blurRadius: 20,
-              spreadRadius: 5,
+              blurRadius: 20.r,
+              spreadRadius: 5.r,
             ),
           ],
         ),
@@ -212,8 +208,8 @@ class StoryCompletionDialog extends StatelessWidget {
           children: [
             // Success icon
             Container(
-              width: 80,
-              height: 80,
+              width: 80.w,
+              height: 80.w,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.success.withOpacity(0.2),
@@ -225,36 +221,33 @@ class StoryCompletionDialog extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 16),
+            SizedBox(height: 16.h),
 
             // Completed title
             Text(
               l10n.levelComplete,
               style: TextStyle(
                 color: AppColors.textPrimary,
-                fontSize: 22,
+                fontSize: 22.sp,
                 fontWeight: FontWeight.bold,
               ),
             ),
 
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
 
             Text(
               story.getTitle(isArabic),
-              style: TextStyle(color: AppColors.success, fontSize: 16),
+              style: TextStyle(color: AppColors.success, fontSize: 16.sp),
             ),
 
             if (completionText != null) ...[
-              const SizedBox(height: 16),
+              SizedBox(height: 16.h),
 
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    story.characterEmoji,
-                    style: const TextStyle(fontSize: 24),
-                  ),
-                  const SizedBox(width: 8),
+                  Text(story.characterEmoji, style: TextStyle(fontSize: 24.sp)),
+                  SizedBox(width: 8.w),
                   Text(
                     story.getCharacter(isArabic),
                     style: TextStyle(
@@ -265,19 +258,19 @@ class StoryCompletionDialog extends StatelessWidget {
                 ],
               ),
 
-              const SizedBox(height: 12),
+              SizedBox(height: 12.h),
 
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(16.r),
                 decoration: BoxDecoration(
                   color: AppColors.darkBackground.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12.r),
                 ),
                 child: Text(
                   completionText,
                   style: TextStyle(
                     color: AppColors.textSecondary,
-                    fontSize: 14,
+                    fontSize: 14.sp,
                     height: 1.5,
                   ),
                   textAlign: TextAlign.center,
@@ -285,27 +278,21 @@ class StoryCompletionDialog extends StatelessWidget {
               ),
             ],
 
-            const SizedBox(height: 24),
+            SizedBox(height: 24.h),
 
             ElevatedButton(
               onPressed: onContinue,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 14,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 40.w, vertical: 14.h),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12.r),
                 ),
               ),
               child: Text(
                 l10n.continueButton,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16.sp),
               ),
             ),
           ],

@@ -94,6 +94,20 @@ CREATE TABLE room_puzzles (
   FOREIGN KEY (solved_by) REFERENCES users(id)
 );
 
+-- Room Puzzle History (used to prevent repeats across rounds in the same room)
+CREATE TABLE room_puzzle_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id INTEGER NOT NULL,
+  puzzle_id INTEGER,
+  question_hash TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (room_id) REFERENCES rooms(id),
+  FOREIGN KEY (puzzle_id) REFERENCES puzzles(id)
+);
+
+CREATE INDEX idx_room_puzzle_history_room ON room_puzzle_history(room_id);
+CREATE INDEX idx_room_puzzle_history_hash ON room_puzzle_history(room_id, question_hash);
+
 -- Competition Participants (مشاركون في مسابقات)
 CREATE TABLE competition_participants (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

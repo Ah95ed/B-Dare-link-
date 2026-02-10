@@ -77,6 +77,25 @@ export class GroupRoom {
       return new Response('OK');
     }
 
+    if (url.pathname.includes('/reopen')) {
+      this.gameState = {
+        ...this.gameState,
+        status: 'waiting',
+        isStarted: false,
+        currentPuzzleIndex: 0,
+        totalPuzzles: 0,
+        currentPuzzle: null,
+        solvedBy: null,
+        puzzleEndsAt: null,
+        readyUsers: {},
+      };
+      this.lastEvent = { type: 'room_reopened' };
+      await this.state.storage.put('gameState', this.gameState);
+      await this.state.storage.put('lastEvent', this.lastEvent);
+      this.broadcast({ type: 'room_reopened', gameState: this.gameState });
+      return new Response('OK');
+    }
+
     // Handle game start event from competitions.js
     if (url.pathname.includes('/start-game-event')) {
       const data = await request.json();

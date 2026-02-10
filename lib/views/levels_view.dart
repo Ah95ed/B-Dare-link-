@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../models/game_level.dart';
 import '../data/level_data.dart';
 import '../controllers/game_provider.dart';
 import '../controllers/locale_provider.dart';
 import '../core/app_colors.dart';
+import '../core/auth_guard.dart';
 import 'game_play_view.dart';
 import '../l10n/app_localizations.dart';
 
 class LevelsView extends StatelessWidget {
   const LevelsView({super.key});
-// level
+  // level
   @override
   Widget build(BuildContext context) {
     final isArabic =
@@ -25,7 +27,7 @@ class LevelsView extends StatelessWidget {
           style: TextStyle(
             fontWeight: FontWeight.w900,
             letterSpacing: 1,
-            fontSize: 22,
+            fontSize: 22.sp,
           ),
         ),
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -33,10 +35,10 @@ class LevelsView extends StatelessWidget {
         centerTitle: true,
         actions: [
           Container(
-            margin: const EdgeInsets.only(right: 8),
+            margin: EdgeInsets.only(right: 8.w),
             decoration: BoxDecoration(
               color: AppColors.purple.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(12.r),
               border: Border.all(
                 color: AppColors.purple.withOpacity(0.3),
                 width: 1.5,
@@ -44,13 +46,11 @@ class LevelsView extends StatelessWidget {
             ),
             child: IconButton(
               icon: const Icon(Icons.bug_report, color: AppColors.purple),
-              tooltip: "Test API (20 Questions)",
+              tooltip: l10n.levelsDebugTooltip,
               onPressed: () {
                 // Debug functionality removed - use admin panel instead
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Use admin panel to generate puzzles'),
-                  ),
+                  SnackBar(content: Text(l10n.levelsDebugMessage)),
                 );
               },
             ),
@@ -71,11 +71,11 @@ class LevelsView extends StatelessWidget {
               ),
             ),
             child: GridView.builder(
-              padding: const EdgeInsets.all(20),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              padding: EdgeInsets.all(20.r),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+                crossAxisSpacing: 16.w,
+                mainAxisSpacing: 16.h,
                 childAspectRatio: 1.0,
               ),
               itemCount: LevelData.totalLevels,
@@ -103,11 +103,13 @@ class LevelsView extends StatelessWidget {
     int unlockedLevelId,
   ) {
     bool isLocked = level.id > unlockedLevelId;
-
+    final l10n = AppLocalizations.of(context)!;
     return GestureDetector(
       onTap: isLocked
           ? null
-          : () {
+          : () async {
+              final authed = await AuthGuard.requireLogin(context);
+              if (!authed) return;
               Provider.of<GameProvider>(
                 context,
                 listen: false,
@@ -143,7 +145,7 @@ class LevelsView extends StatelessWidget {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(20.r),
           border: Border.all(
             color: isLocked
                 ? Color(0xFF6B7499).withOpacity(0.3)
@@ -154,20 +156,20 @@ class LevelsView extends StatelessWidget {
               ? [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    blurRadius: 10.r,
+                    offset: Offset(0, 4.h),
                   ),
                 ]
               : [
                   BoxShadow(
                     color: Color(0xFF00D9FF).withOpacity(0.15),
-                    blurRadius: 20,
-                    spreadRadius: 3,
+                    blurRadius: 20.r,
+                    spreadRadius: 3.r,
                   ),
                   BoxShadow(
                     color: AppColors.purple.withOpacity(0.08),
-                    blurRadius: 15,
-                    spreadRadius: 1,
+                    blurRadius: 15.r,
+                    spreadRadius: 1.r,
                   ),
                 ],
         ),
@@ -176,8 +178,8 @@ class LevelsView extends StatelessWidget {
           children: [
             if (isLocked)
               Container(
-                width: 70,
-                height: 70,
+                width: 70.w,
+                height: 70.w,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Color(0xFF6B7499).withOpacity(0.2),
@@ -197,8 +199,8 @@ class LevelsView extends StatelessWidget {
                   end: Alignment.bottomRight,
                 ).createShader(bounds),
                 child: Container(
-                  width: 70,
-                  height: 70,
+                  width: 70.w,
+                  height: 70.w,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Color(0xFF00D9FF).withOpacity(0.1),
@@ -211,7 +213,7 @@ class LevelsView extends StatelessWidget {
                     child: Text(
                       "${level.id}",
                       style: TextStyle(
-                        fontSize: 32,
+                        fontSize: 32.sp,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: 1,
@@ -220,17 +222,17 @@ class LevelsView extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12.h),
               Text(
-                isArabic ? "مرحلة ${level.id}" : "Level ${level.id}",
+                l10n.levelLabel(level.id),
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 16.sp,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFFF0F4FF),
                   letterSpacing: 0.5,
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4.h),
               // Star rating or difficulty
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,

@@ -1,13 +1,16 @@
 import 'dart:math';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import '../../controllers/locale_provider.dart';
 import '../../core/app_colors.dart';
+import '../../core/auth_guard.dart';
 import '../../models/spot_diff_puzzle.dart';
 import '../../services/api_service.dart';
+import '../../l10n/app_localizations.dart';
 
 class SpotDiffView extends StatefulWidget {
   const SpotDiffView({super.key});
@@ -35,7 +38,10 @@ class _SpotDiffViewState extends State<SpotDiffView> {
     super.dispose();
   }
 
-  Future<void> _generate(bool isArabic) async {
+  Future<void> _generate() async {
+    final l10n = AppLocalizations.of(context)!;
+    final authed = await AuthGuard.requireLogin(context);
+    if (!authed) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -48,19 +54,19 @@ class _SpotDiffViewState extends State<SpotDiffView> {
 
     try {
       final puzzle = await _api.generateSpotDiffPuzzle(
-        isArabic: isArabic,
+        isArabic: _isArabic(context),
         differencesCount: _differencesCount,
         theme: _themeCtrl.text.trim(),
         width: 512,
         height: 512,
       );
       if (puzzle == null) {
-        throw Exception('Empty response');
+        throw Exception(l10n.spotDiffEmptyResponse);
       }
       setState(() => _puzzle = puzzle);
     } catch (e, stack) {
-      debugPrint('[SpotDiff] Generate error: $e');
-      debugPrint('$stack');
+      debugPrint(l10n.spotDiffGenerateErrorLog(e.toString()));
+      debugPrint(l10n.spotDiffGenerateStackLog(stack.toString()));
       setState(() => _error = e.toString());
     } finally {
       setState(() => _loading = false);
@@ -68,37 +74,35 @@ class _SpotDiffViewState extends State<SpotDiffView> {
   }
 
   void _onTapDiff(SpotDiffDifference diff) {
+    final l10n = AppLocalizations.of(context)!;
     if (_found.contains(diff.id)) return;
     setState(() => _found.add(diff.id));
     if (_puzzle != null && _found.length == _puzzle!.differences.length) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _isArabic(context)
-                ? 'أحسنت! تم العثور على كل الفروق.'
-                : 'Great! You found all differences.',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.spotDiffAllFound)));
     }
   }
 
   void _useHint() {
-    if (_puzzle == null || _hintRemaining <= 0) return;
-    final remaining = _puzzle!.differences
-        .where((d) => !_found.contains(d.id))
-        .toList();
-    if (remaining.isEmpty) return;
-    remaining.shuffle();
-    final hint = remaining.first;
-    setState(() {
-      _hintRemaining -= 1;
-      _hintedId = hint.id;
-    });
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() => _hintedId = null);
-      }
+    AuthGuard.requireLogin(context).then((authed) {
+      if (!authed) return;
+      if (_puzzle == null || _hintRemaining <= 0) return;
+      final remaining = _puzzle!.differences
+          .where((d) => !_found.contains(d.id))
+          .toList();
+      if (remaining.isEmpty) return;
+      remaining.shuffle();
+      final hint = remaining.first;
+      setState(() {
+        _hintRemaining -= 1;
+        _hintedId = hint.id;
+      });
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _hintedId = null);
+        }
+      });
     });
   }
 
@@ -108,23 +112,23 @@ class _SpotDiffViewState extends State<SpotDiffView> {
 
   @override
   Widget build(BuildContext context) {
-    final isArabic = _isArabic(context);
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
       appBar: AppBar(
         backgroundColor: AppColors.darkSurface,
-        title: Text(isArabic ? 'اكتشف الفروق' : 'Spot the Difference'),
+        title: Text(l10n.spotDiffTitle),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16.r),
         child: Column(
           children: [
-            _buildControls(isArabic),
-            const SizedBox(height: 12),
+            _buildControls(),
+            SizedBox(height: 12.h),
             if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(24.0),
+              Padding(
+                padding: EdgeInsets.all(24.r),
                 child: CircularProgressIndicator(color: AppColors.cyan),
               )
             else if (_error != null)
@@ -137,22 +141,21 @@ class _SpotDiffViewState extends State<SpotDiffView> {
               Expanded(
                 child: Center(
                   child: Text(
-                    isArabic
-                        ? 'اضغط توليد لبدء اللعبة.'
-                        : 'Tap Generate to start.',
+                    l10n.spotDiffStartPrompt,
                     style: const TextStyle(color: AppColors.textSecondary),
                   ),
                 ),
               )
             else
-              Expanded(child: _buildPuzzle(isArabic)),
+              Expanded(child: _buildPuzzle()),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildControls(bool isArabic) {
+  Widget _buildControls() {
+    final l10n = AppLocalizations.of(context)!;
     final total = _puzzle?.differences.length ?? 0;
     final progress = total == 0 ? 0.0 : _found.length / total;
 
@@ -164,58 +167,54 @@ class _SpotDiffViewState extends State<SpotDiffView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                isArabic
-                    ? 'التقدم الذهني: ${_found.length}/$total'
-                    : 'Mental progress: ${_found.length}/$total',
+                l10n.spotDiffProgressLabel(_found.length, total),
                 style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: 6.h),
               ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(6.r),
                 child: LinearProgressIndicator(
                   value: progress,
-                  minHeight: 6,
+                  minHeight: 6.h,
                   backgroundColor: AppColors.darkSurfaceLight,
                   valueColor: AlwaysStoppedAnimation(AppColors.cyan),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12.h),
             ],
           ),
         TextField(
           controller: _themeCtrl,
           style: const TextStyle(color: AppColors.textPrimary),
           decoration: InputDecoration(
-            hintText: isArabic ? 'سمة الصورة (اختياري)' : 'Theme (optional)',
+            hintText: l10n.spotDiffThemeHint,
             hintStyle: const TextStyle(color: AppColors.textSecondary),
             filled: true,
             fillColor: AppColors.darkSurfaceLight,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(12.r),
               borderSide: BorderSide.none,
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12.h),
         Row(
           children: [
             Expanded(
               child: Text(
-                isArabic
-                    ? 'عدد الفروق: $_differencesCount'
-                    : 'Differences: $_differencesCount',
+                l10n.spotDiffDifferencesLabel(_differencesCount),
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12.w),
             SizedBox(
-              width: 180,
+              width: 180.w,
               child: Slider(
                 value: _differencesCount.toDouble(),
                 min: 3,
@@ -228,40 +227,37 @@ class _SpotDiffViewState extends State<SpotDiffView> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         Row(
           children: [
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: _loading ? null : () => _generate(isArabic),
+                onPressed: _loading ? null : _generate,
                 icon: const Icon(Icons.auto_awesome),
-                label: Text(isArabic ? 'توليد' : 'Generate'),
+                label: Text(l10n.spotDiffGenerate),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.cyan,
                   foregroundColor: AppColors.darkBackground,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: EdgeInsets.symmetric(vertical: 14.h),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(14.r),
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12.w),
             ElevatedButton.icon(
               onPressed: _loading || _puzzle == null || _hintRemaining <= 0
                   ? null
                   : _useHint,
               icon: const Icon(Icons.lightbulb_outline),
-              label: Text(isArabic ? 'تلميح' : 'Hint'),
+              label: Text(l10n.spotDiffHint),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.magenta,
                 foregroundColor: AppColors.darkBackground,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                  horizontal: 16,
-                ),
+                padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(14.r),
                 ),
               ),
             ),
@@ -269,22 +265,21 @@ class _SpotDiffViewState extends State<SpotDiffView> {
         ),
         if (_puzzle != null)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: EdgeInsets.only(top: 8.h),
             child: Text(
-              isArabic
-                  ? 'التلميحات المتبقية: $_hintRemaining'
-                  : 'Hints left: $_hintRemaining',
+              l10n.spotDiffHintsLeft(_hintRemaining),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.textSecondary),
             ),
           ),
         if (_puzzle != null)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: EdgeInsets.only(top: 8.h),
             child: Text(
-              isArabic
-                  ? 'تم العثور: ${_found.length}/${_puzzle!.differences.length}'
-                  : 'Found: ${_found.length}/${_puzzle!.differences.length}',
+              l10n.spotDiffFoundLabel(
+                _found.length,
+                _puzzle!.differences.length,
+              ),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.textSecondary),
             ),
@@ -293,7 +288,8 @@ class _SpotDiffViewState extends State<SpotDiffView> {
     );
   }
 
-  Widget _buildPuzzle(bool isArabic) {
+  Widget _buildPuzzle() {
+    final l10n = AppLocalizations.of(context)!;
     final puzzle = _puzzle!;
     final bytesA = _decodeBase64Image(puzzle.imageA);
     final bytesB = _decodeBase64Image(puzzle.imageB);
@@ -306,13 +302,13 @@ class _SpotDiffViewState extends State<SpotDiffView> {
       children: [
         if (hasMeta)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.only(bottom: 8.h),
             child: Row(
               children: [
                 if (puzzle.stage?.isNotEmpty ?? false) _buildTag(puzzle.stage!),
                 if ((puzzle.stage?.isNotEmpty ?? false) &&
                     (puzzle.conflict?.isNotEmpty ?? false))
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8.w),
                 if (puzzle.conflict?.isNotEmpty ?? false)
                   _buildTag(puzzle.conflict!),
               ],
@@ -328,10 +324,10 @@ class _SpotDiffViewState extends State<SpotDiffView> {
                   foundIds: _found,
                   highlightedId: _hintedId,
                   onHit: _onTapDiff,
-                  label: isArabic ? 'الصورة A' : 'Image A',
+                  label: l10n.spotDiffImageALabel,
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8.w),
               Expanded(
                 child: SpotDiffImagePanel(
                   imageBytes: bytesB,
@@ -339,16 +335,16 @@ class _SpotDiffViewState extends State<SpotDiffView> {
                   foundIds: _found,
                   highlightedId: _hintedId,
                   onHit: _onTapDiff,
-                  label: isArabic ? 'الصورة B' : 'Image B',
+                  label: l10n.spotDiffImageBLabel,
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        _buildExplanations(isArabic, puzzle),
+        SizedBox(height: 12.h),
+        _buildExplanations(puzzle),
         if (decision != null && _found.length == puzzle.differences.length)
-          _buildDecision(isArabic, decision),
+          _buildDecision(decision),
       ],
     );
   }
@@ -358,7 +354,7 @@ class _SpotDiffViewState extends State<SpotDiffView> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.darkSurfaceLight,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(20.r),
         border: Border.all(color: AppColors.cyan.withOpacity(0.3)),
       ),
       child: Text(
@@ -371,13 +367,14 @@ class _SpotDiffViewState extends State<SpotDiffView> {
     );
   }
 
-  Widget _buildExplanations(bool isArabic, SpotDiffPuzzle puzzle) {
+  Widget _buildExplanations(SpotDiffPuzzle puzzle) {
+    final l10n = AppLocalizations.of(context)!;
     final found = puzzle.differences
         .where((d) => _found.contains(d.id))
         .toList();
     if (found.isEmpty) {
       return Text(
-        isArabic ? 'ابحث عن الاختلافات أولاً.' : 'Find differences first.',
+        l10n.spotDiffFindFirst,
         style: const TextStyle(color: AppColors.textSecondary),
       );
     }
@@ -387,27 +384,27 @@ class _SpotDiffViewState extends State<SpotDiffView> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.darkSurfaceLight,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(12.r),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            isArabic ? 'التفسيرات' : 'Explanations',
+            l10n.spotDiffExplanationsTitle,
             style: const TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           ...found.map(
             (d) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: EdgeInsets.only(bottom: 6.h),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(Icons.circle, size: 8, color: AppColors.cyan),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8.w),
                   Expanded(
                     child: Text(
                       d.reason.isNotEmpty
@@ -428,15 +425,16 @@ class _SpotDiffViewState extends State<SpotDiffView> {
     );
   }
 
-  Widget _buildDecision(bool isArabic, SpotDiffDecision decision) {
+  Widget _buildDecision(SpotDiffDecision decision) {
+    final l10n = AppLocalizations.of(context)!;
     if (decision.options.isEmpty) return const SizedBox.shrink();
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.all(12),
+      margin: EdgeInsets.only(top: 12.h),
+      padding: EdgeInsets.all(12.r),
       decoration: BoxDecoration(
         color: AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(12.r),
         border: Border.all(color: AppColors.cyan.withOpacity(0.3)),
       ),
       child: Column(
@@ -444,18 +442,18 @@ class _SpotDiffViewState extends State<SpotDiffView> {
         children: [
           Text(
             decision.question.isEmpty
-                ? (isArabic ? 'اختر قرارك' : 'Choose your decision')
+                ? l10n.spotDiffChooseDecision
                 : decision.question,
             style: const TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10.h),
           ...decision.options.map((option) {
             final selected = _selectedDecisionId == option.id;
             return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.only(bottom: 8.h),
               child: ElevatedButton(
                 onPressed: () {
                   setState(() => _selectedDecisionId = option.id);
@@ -476,9 +474,9 @@ class _SpotDiffViewState extends State<SpotDiffView> {
                   foregroundColor: selected
                       ? Colors.white
                       : AppColors.textPrimary,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: EdgeInsets.symmetric(vertical: 12.h),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(12.r),
                   ),
                 ),
                 child: Text(
@@ -529,13 +527,13 @@ class SpotDiffImagePanel extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6.h),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
               final size = Size(constraints.maxWidth, constraints.maxHeight);
               return ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(16.r),
                 child: GestureDetector(
                   onTapUp: (details) {
                     final local = details.localPosition;

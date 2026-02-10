@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
@@ -118,12 +119,12 @@ class AppTheme {
         centerTitle: false,
         scrolledUnderElevation: 0,
         titleTextStyle: GoogleFonts.poppins(
-          fontSize: 18,
+          fontSize: 18.sp,
           fontWeight: FontWeight.w800,
           color: text,
           letterSpacing: 0.5,
         ),
-        toolbarHeight: 64,
+        toolbarHeight: 64.h,
         shape: const Border(
           bottom: BorderSide(color: Color.fromARGB(30, 0, 217, 255), width: 1),
         ),
@@ -133,11 +134,13 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         backgroundColor: surface.withOpacity(0.9),
         contentTextStyle: GoogleFonts.poppins(
-          fontSize: 13,
+          fontSize: 13.sp,
           fontWeight: FontWeight.w600,
           color: text,
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16.r),
+        ),
         elevation: 12,
       ),
       // Modern Dialog
@@ -146,13 +149,13 @@ class AppTheme {
         elevation: 24,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         titleTextStyle: GoogleFonts.poppins(
-          fontSize: 18,
+          fontSize: 18.sp,
           fontWeight: FontWeight.w800,
           color: text,
           letterSpacing: 0.5,
         ),
         contentTextStyle: GoogleFonts.poppins(
-          fontSize: 14,
+          fontSize: 14.sp,
           height: 1.5,
           fontWeight: FontWeight.w500,
           color: textSecondary,
@@ -164,13 +167,15 @@ class AppTheme {
         selectedColor: primaryAccent.withOpacity(0.2),
         checkmarkColor: secondary,
         labelStyle: GoogleFonts.poppins(
-          fontSize: 12,
+          fontSize: 12.sp,
           fontWeight: FontWeight.w600,
           color: text,
         ),
         side: BorderSide(color: surfaceLight.withOpacity(0.4), width: 1.5),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20.r),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
       ),
       // Modern Progress Indicators
       progressIndicatorTheme: ProgressIndicatorThemeData(
@@ -188,9 +193,9 @@ class AppTheme {
         valueIndicatorTextStyle: GoogleFonts.poppins(
           color: text,
           fontWeight: FontWeight.w700,
-          fontSize: 12,
+          fontSize: 12.sp,
         ),
-        trackHeight: 6,
+        trackHeight: 6.h,
       ),
       // Modern Switch
       switchTheme: SwitchThemeData(
@@ -211,18 +216,20 @@ class AppTheme {
         iconColor: secondary,
         textColor: text,
         titleTextStyle: GoogleFonts.poppins(
-          fontSize: 15,
+          fontSize: 15.sp,
           fontWeight: FontWeight.w600,
           color: text,
         ),
         subtitleTextStyle: GoogleFonts.poppins(
-          fontSize: 12,
+          fontSize: 12.sp,
           height: 1.4,
           fontWeight: FontWeight.w500,
           color: textSecondary,
         ),
         tileColor: surfaceLight.withOpacity(0.3),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.r),
+        ),
       ),
       // Modern ElevatedButton with gradient effect
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -232,12 +239,12 @@ class AppTheme {
           elevation: 8,
           shadowColor: secondary.withOpacity(0.4),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(20.r),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+          padding: EdgeInsets.symmetric(horizontal: 28.w, vertical: 14.h),
           textStyle: GoogleFonts.poppins(
             fontWeight: FontWeight.w700,
-            fontSize: 15,
+            fontSize: 15.sp,
             letterSpacing: 0.5,
           ),
         ),
@@ -248,12 +255,12 @@ class AppTheme {
           foregroundColor: secondary,
           side: BorderSide(color: secondary.withOpacity(0.5), width: 2),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(18.r),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 12.h),
           textStyle: GoogleFonts.poppins(
             fontWeight: FontWeight.w700,
-            fontSize: 14,
+            fontSize: 14.sp,
           ),
         ),
       ),

@@ -43,10 +43,35 @@
   "resetPasswordInstructions": "أدخل بريدك الإلكتروني المسجل لتلقي رمز التحقق.",
   "sendOTP": "إرسال رمز التحقق",
   "verifyAndReset": "تحقق وأعد التعيين",
+  "otpLabel": "رمز التحقق",
+  "otpSentLog": "تم إرسال رمز التحقق: {status}",
+  "otpVerifyLog": "نتيجة التحقق من الرمز: {status}",
+  "otpSendErrorLog": "خطأ في إرسال الرمز: {error}",
+  "otpVerifyErrorLog": "خطأ في التحقق من الرمز: {error}",
   "otpSent": "تم إرسال رمز التحقق إلى {email}",
   "@otpSent": {
     "placeholders": {
       "email": {"type": "String"}
+    }
+  },
+  "@otpSentLog": {
+    "placeholders": {
+      "status": {"type": "String"}
+    }
+  },
+  "@otpVerifyLog": {
+    "placeholders": {
+      "status": {"type": "String"}
+    }
+  },
+  "@otpSendErrorLog": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "@otpVerifyErrorLog": {
+    "placeholders": {
+      "error": {"type": "String"}
     }
   },
   "failedToSendOTP": "فشل إرسال رمز التحقق",
@@ -156,5 +181,223 @@
   "failedToAnalyzeImage": "فشل تحليل الصورة. حاول مرة أخرى.",
   
   "chooseGameMode": "اختر نمط اللعب",
-  "choices": "خيارات متعددة"
+  "choices": "خيارات متعددة",
+
+  "competitionsTitle": "المسابقات والغرف",
+  "refresh": "تحديث",
+  "searchRoom": "بحث عن غرفة",
+  "roomLabel": "غرفة",
+  "competitionLabel": "مسابقة",
+  "searchByCodeHint": "ابحث بالكود (مثال: ABCD12)",
+  "joinError": "خطأ في الانضمام: {error}",
+  "createRoomCardTitle": "إنشاء غرفة جديدة",
+  "createRoomCardSubtitle": "أنشئ غرفة وادعُ أصدقاءك للعب",
+  "joinRoomCardTitle": "الانضمام إلى غرفة",
+  "joinRoomCardSubtitle": "ادخل كود الغرفة للانضمام",
+  "myRoomsTitle": "الغرف التي انضممت إليها",
+  "roomCodeParticipants": "كود: {code} • {count} لاعب",
+  "activeCompetitionsTitle": "المسابقات النشطة",
+  "noActiveCompetitions": "لا توجد مسابقات نشطة حالياً",
+  "competitionSubtitle": "{participants} مشارك • {puzzles} لغز",
+  "join": "انضم",
+  "statusActive": "جارية",
+  "statusFinished": "منتهية",
+  "joinRoomDialogTitle": "الانضمام إلى غرفة",
+  "roomCodeLabel": "كود الغرفة",
+  "roomCodeHint": "أدخل الكود المكون من 6 أحرف",
+  "roomCodeLengthError": "الكود يجب أن يكون 6 أحرف",
+
+  "roomQuestionCount": "السؤال {current}/{total}",
+  "roomOutOfTotal": "من {total}",
+  "roomWaitingPuzzle": "انتظار اللغز...",
+  "roomLoadingPuzzle": "جاري تحميل اللغز...",
+  "roomHintLabel": "تلميح: {hint}",
+  "roomStartFrom": "ابدأ من: {word}",
+  "roomEndAt": "انتهِ عند: {word}",
+  "roomSettings": "إعدادات الغرفة",
+  "roomManagePlayers": "إدارة اللاعبين",
+  "roomSkipQuestion": "تخطي السؤال الحالي",
+  "roomResetScores": "إعادة تعيين النقاط",
+  "roomChangeDifficulty": "تغيير الصعوبة",
+  "roomDelete": "حذف الغرفة",
+  "roomRefreshStatus": "تحديث الحالة",
+  "roomBackToLobby": "العودة للغرفة",
+  "roomResetScoresTitle": "إعادة تعيين النقاط",
+  "roomResetScoresConfirm": "هل تريد إعادة تعيين نقاط جميع اللاعبين؟",
+  "confirm": "تأكيد",
+  "difficultyTitle": "تغيير الصعوبة",
+  "currentDifficulty": "الصعوبة الحالية: {value}",
+  "save": "حفظ",
+  "managePlayersTitle": "إدارة اللاعبين",
+  "playerLabel": "لاعب",
+  "pointsRole": "النقاط: {points} • الدور: {role}",
+  "roleManager": "مدير",
+  "roleAdmin": "مسؤول",
+  "roleCoManager": "مدير مساعد",
+  "freeze": "تجميد",
+  "unfreeze": "إلغاء التجميد",
+  "promoteCoManager": "ترقية لمدير مساعد",
+  "kick": "طرد",
+  "close": "إغلاق",
+  "deleteRoomTitle": "حذف الغرفة",
+  "deleteRoomConfirm": "هل تريد حذف هذه الغرفة؟ سيتم طرد جميع اللاعبين ولا يمكن التراجع عن هذا الإجراء.",
+
+  "roomNoActiveRoom": "لا توجد غرفة نشطة",
+  "playersCountLabel": "عدد اللاعبين: {count}",
+  "loadingQuestion": "جاري تحميل السؤال...",
+  "chatHint": "اكتب رسالة...",
+  "sendMessageFailed": "فشل إرسال الرسالة، يرجى التأكد من الاتصال",
+  "readyStatusReady": "أنت جاهز ✓",
+  "readyStatusAnnounce": "إعلان الجاهزية",
+  "startingGame": "جاري البدء...",
+  "startGame": "ابدأ اللعبة",
+  "fetchCurrentQuestion": "جلب السؤال الحالي",
+  "nextQuestion": "السؤال التالي ▶️",
+  "reopenRoom": "إعادة فتح الغرفة",
+  "questionUnavailable": "سؤال غير متوفر",
+  "roundFinishedForYou": "انتهت الجولة بالنسبة لك!",
+  "puzzleLabel": "اللغز",
+  "chainLabel": "السلسلة",
+  "hintUseful": "تلميح مفيد",
+  "optionsAvailable": "الخيارات المتاحة:",
+  "timeRemaining": "الوقت المتبقي: {seconds} ثانية",
+  "copyRoomCode": "نسخ كود الغرفة",
+  "roomCodeCopied": "تم نسخ الكود: {code}",
+  "refreshRoom": "تحديث الغرفة",
+  "leaveRoom": "مغادرة",
+  "deleteGroupTitle": "حذف المجموعة",
+  "deleteGroupConfirm": "هل أنت متأكد من رغبتك في حذف المجموعة نهائياً؟ سيتم طرد جميع الأعضاء.",
+  "gameResultsTitle": "نتائج اللعبة 🎉",
+  "gameResultsIntro": "تهانينا للجميع! إليكم النتائج النهائية:",
+  "puzzlesSolvedLabel": "ألغاز محلولة: {count}",
+  "pointsLabel": "{points} نقطة",
+  "playAgain": "لعب مرة أخرى",
+
+  "settingsLoadError": "خطأ في تحميل الإعدادات: {error}",
+  "settingsSaveSuccess": "تم حفظ الإعدادات بنجاح",
+  "settingsSaveError": "خطأ في حفظ الإعدادات: {error}",
+  "roomSettingsHeader": "إعدادات الغرفة",
+  "managerLabel": "مدير",
+  "hintsSystemTitle": "نظام المساعدات",
+  "hintsEnabledTitle": "تفعيل المساعدات",
+  "hintsEnabledSubtitle": "اسمح للاعبين باستخدام المساعدات",
+  "hintsPerPlayerLabel": "عدد المساعدات لكل لاعب: {count}",
+  "hintPenaltyLabel": "خصم النقاط عند استخدام المساعدة: {percent}%",
+  "gameSettingsTitle": "إعدادات اللعبة",
+  "autoAdvanceLabel": "الانتقال التلقائي بعد الإجابة الخاطئة: {seconds} ثانية",
+  "minTimeLabel": "الحد الأدنى للوقت قبل الانتقال: {seconds} ثانية",
+  "otherOptionsTitle": "خيارات أخرى",
+  "shuffleOptionsTitle": "خلط خيارات الإجابة",
+  "shuffleOptionsSubtitle": "تغيير ترتيب الخيارات عشوائياً",
+  "showRankingsTitle": "عرض الترتيب الحي",
+  "showRankingsSubtitle": "إظهار الترتيب أثناء اللعبة",
+  "allowReportTitle": "السماح بالإبلاغ عن الأسئلة السيئة",
+  "allowReportSubtitle": "اسمح للاعبين بالإبلاغ عن مشاكل الأسئلة",
+  "saveChanges": "حفظ التغييرات",
+  "helpersEnabledLabel": "المساعدات مفعلة",
+  "yes": "نعم",
+  "no": "لا",
+  "hintsPerPlayerValue": "{count} مساعدات",
+  "hintPenaltyValue": "{percent}%",
+  "autoAdvanceValue": "{seconds} ثانية",
+  "enabled": "مفعل",
+  "disabled": "معطل",
+
+  "levelLabel": "مرحلة {level}",
+  "levelsDebugTooltip": "اختبار الواجهة (20 سؤال)",
+  "levelsDebugMessage": "استخدم لوحة الإدارة لتوليد الألغاز",
+  "generatingPuzzles": "جاري توليد الألغاز...",
+  "gameOverTitle": "انتهت اللعبة",
+  "outOfLives": "نفدت المحاولات لديك!",
+  "exit": "خروج",
+  "retry": "إعادة المحاولة",
+  "puzzleProgress": "اللغز {current}/{total}",
+  "scoreLabel": "النقاط: {score}",
+  "livesLabel": "المحاولات",
+  "timeLabel": "الوقت",
+  "hintTitle": "تلميح: {hint}",
+
+  "spotDiffTitle": "اكتشف الفروق",
+  "spotDiffEmptyResponse": "استجابة فارغة",
+  "spotDiffGenerateErrorLog": "خطأ توليد اكتشف الفروق: {error}",
+  "spotDiffGenerateStackLog": "تفاصيل الخطأ: {stack}",
+  "spotDiffAllFound": "أحسنت! تم العثور على كل الفروق.",
+  "spotDiffStartPrompt": "اضغط توليد لبدء اللعبة.",
+  "spotDiffProgressLabel": "التقدم الذهني: {found}/{total}",
+  "spotDiffThemeHint": "سمة الصورة (اختياري)",
+  "spotDiffDifferencesLabel": "عدد الفروق: {count}",
+  "spotDiffGenerate": "توليد",
+  "spotDiffHint": "تلميح",
+  "spotDiffHintsLeft": "التلميحات المتبقية: {count}",
+  "spotDiffFoundLabel": "تم العثور: {found}/{total}",
+  "spotDiffFindFirst": "ابحث عن الاختلافات أولاً.",
+  "spotDiffExplanationsTitle": "التفسيرات",
+  "spotDiffChooseDecision": "اختر قرارك",
+  "spotDiffImageALabel": "الصورة A",
+  "spotDiffImageBLabel": "الصورة B",
+
+  "featureDisabledDesktop": "⚠️ الميزة معطلة حالياً على سطح المكتب.\nيرجى المحاولة على الهاتف.",
+  "featureDisabledWeb": "⚠️ فحص الرؤية غير مدعوم على الويب حالياً.",
+
+  "xpRewardLabel": "⚡ +{xp} خبرة",
+  "completedLabel": "مكتملة",
+  "scoreTitle": "النقاط",
+  "secondsShort": "{seconds}ث",
+  "placeholderOptionOne": "خيار واحد",
+  "placeholderOptionTwo": "خيار اثنان",
+  "placeholderOptionThree": "خيار ثلاثة",
+  "placeholderOptionFour": "خيار أربعة",
+
+  "roomLogButtonTapped": "تم الضغط - الخيار: {option} (الفهرس: {index})",
+  "roomLogSubmittingIgnored": "جارٍ الإرسال، تجاهل الضغط",
+  "roomLogSameOptionSubmitting": "تم اختيار نفس الخيار، جارٍ الإرسال...",
+  "roomLogSelectingOption": "جارٍ اختيار الخيار...",
+  "roomLogDelayComplete": "انتهى التأخير، التحضير للإرسال",
+  "roomLogSubmittingAfterDelay": "جارٍ الإرسال بعد التأخير...",
+  "roomLogAlreadySubmitting": "جارٍ الإرسال بالفعل، تجاهل الإرسال المتكرر",
+  "roomLogSubmittingAnswer": "جارٍ إرسال الإجابة عند الفهرس: {index}",
+  "roomLogCallingSubmit": "استدعاء submitQuizAnswer({index})",
+  "roomLogSubmittedSuccess": "تم إرسال الإجابة بنجاح",
+  "roomLogSubmitError": "خطأ في إرسال الإجابة: {error}",
+  "roomLogResettingState": "جارٍ إعادة الضبط...",
+
+  "@joinError": {"placeholders": {"error": {"type": "String"}}},
+  "@roomCodeParticipants": {"placeholders": {"code": {"type": "String"}, "count": {"type": "int"}}},
+  "@roomQuestionCount": {"placeholders": {"current": {"type": "int"}, "total": {"type": "int"}}},
+  "@roomOutOfTotal": {"placeholders": {"total": {"type": "int"}}},
+  "@roomHintLabel": {"placeholders": {"hint": {"type": "String"}}},
+  "@roomStartFrom": {"placeholders": {"word": {"type": "String"}}},
+  "@roomEndAt": {"placeholders": {"word": {"type": "String"}}},
+  "@currentDifficulty": {"placeholders": {"value": {"type": "int"}}},
+  "@pointsRole": {"placeholders": {"points": {"type": "int"}, "role": {"type": "String"}}},
+  "@playersCountLabel": {"placeholders": {"count": {"type": "int"}}},
+  "@roomCodeCopied": {"placeholders": {"code": {"type": "String"}}},
+  "@puzzlesSolvedLabel": {"placeholders": {"count": {"type": "int"}}},
+  "@pointsLabel": {"placeholders": {"points": {"type": "int"}}},
+  "@settingsLoadError": {"placeholders": {"error": {"type": "String"}}},
+  "@settingsSaveError": {"placeholders": {"error": {"type": "String"}}},
+  "@hintsPerPlayerLabel": {"placeholders": {"count": {"type": "int"}}},
+  "@hintPenaltyLabel": {"placeholders": {"percent": {"type": "int"}}},
+  "@autoAdvanceLabel": {"placeholders": {"seconds": {"type": "int"}}},
+  "@minTimeLabel": {"placeholders": {"seconds": {"type": "int"}}},
+  "@hintsPerPlayerValue": {"placeholders": {"count": {"type": "int"}}},
+  "@hintPenaltyValue": {"placeholders": {"percent": {"type": "int"}}},
+  "@autoAdvanceValue": {"placeholders": {"seconds": {"type": "int"}}},
+  "@levelLabel": {"placeholders": {"level": {"type": "int"}}},
+  "@puzzleProgress": {"placeholders": {"current": {"type": "int"}, "total": {"type": "int"}}},
+  "@scoreLabel": {"placeholders": {"score": {"type": "int"}}},
+  "@hintTitle": {"placeholders": {"hint": {"type": "String"}}},
+  "@spotDiffGenerateErrorLog": {"placeholders": {"error": {"type": "String"}}},
+  "@spotDiffGenerateStackLog": {"placeholders": {"stack": {"type": "String"}}},
+  "@spotDiffProgressLabel": {"placeholders": {"found": {"type": "int"}, "total": {"type": "int"}}},
+  "@spotDiffDifferencesLabel": {"placeholders": {"count": {"type": "int"}}},
+  "@spotDiffHintsLeft": {"placeholders": {"count": {"type": "int"}}},
+  "@spotDiffFoundLabel": {"placeholders": {"found": {"type": "int"}, "total": {"type": "int"}}},
+  "@xpRewardLabel": {"placeholders": {"xp": {"type": "int"}}},
+  "@competitionSubtitle": {"placeholders": {"participants": {"type": "int"}, "puzzles": {"type": "int"}}},
+  "@secondsShort": {"placeholders": {"seconds": {"type": "int"}}},
+  "@roomLogButtonTapped": {"placeholders": {"option": {"type": "String"}, "index": {"type": "int"}}},
+  "@roomLogSubmittingAnswer": {"placeholders": {"index": {"type": "int"}}},
+  "@roomLogCallingSubmit": {"placeholders": {"index": {"type": "int"}}},
+  "@roomLogSubmitError": {"placeholders": {"error": {"type": "String"}}}
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
+import '../../core/auth_guard.dart';
 
 class CreateRoomView extends StatefulWidget {
   const CreateRoomView({super.key});
@@ -29,6 +30,9 @@ class _CreateRoomViewState extends State<CreateRoomView> {
   }
 
   Future<void> _createRoom() async {
+    final authed = await AuthGuard.requireLogin(context);
+    if (!authed) return;
+
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);

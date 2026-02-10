@@ -7,6 +7,7 @@ import 'package:wonder_link_game/views/game_play_view.dart';
 import '../../controllers/game_provider.dart';
 import '../../controllers/locale_provider.dart';
 import '../../core/app_colors.dart';
+import '../../core/auth_guard.dart';
 import '../../l10n/app_localizations.dart';
 
 /// Camera/Gallery view for Reality Mode
@@ -27,11 +28,12 @@ class _RealityCameraViewState extends State<RealityCameraView> {
       !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
 
   Future<void> _pickImage(ImageSource source) async {
+    final l10n = AppLocalizations.of(context)!;
+    final authed = await AuthGuard.requireLogin(context);
+    if (!authed) return;
     if (_isDesktop || kIsWeb) {
       setState(() {
-        _error = kIsWeb
-            ? "Vision scanning is not supported on Web yet."
-            : "Scanner not supported on Desktop yet.\nUse Android/iOS.";
+        _error = kIsWeb ? l10n.featureDisabledWeb : l10n.featureDisabledDesktop;
       });
       return;
     }
@@ -49,9 +51,10 @@ class _RealityCameraViewState extends State<RealityCameraView> {
       }
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error picking image: $e'),
+            content: Text(l10n.errorPickingImage( e.toString())),
             backgroundColor: AppColors.error,
           ),
         );
@@ -88,10 +91,9 @@ class _RealityCameraViewState extends State<RealityCameraView> {
           MaterialPageRoute(builder: (_) => const GamePlayView()),
         );
       } else {
+        final l10n = AppLocalizations.of(context)!;
         setState(() {
-          _error = isArabic
-              ? 'فشل في تحليل الصورة. حاول مرة أخرى.'
-              : 'Failed to analyze image. Try again.';
+          _error = l10n.failedToAnalyzeImage;
         });
       }
     } catch (e) {
@@ -182,8 +184,8 @@ class _RealityCameraViewState extends State<RealityCameraView> {
                         padding: const EdgeInsets.all(16.0),
                         child: Text(
                           _isDesktop
-                              ? "⚠️ Feature currently disabled on Desktop.\nPlease try on Mobile."
-                              : "⚠️ Vision scanning is not supported on Web yet.",
+                              ? l10n.featureDisabledDesktop
+                              : l10n.featureDisabledWeb,
                           style: const TextStyle(color: Colors.amberAccent),
                           textAlign: TextAlign.center,
                         ),

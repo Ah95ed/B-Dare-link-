@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../controllers/game_provider.dart';
 import '../l10n/app_localizations.dart';
 
@@ -65,27 +66,33 @@ class _GameViewState extends State<GameView> {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(8),
+        padding: EdgeInsets.all(8.r),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // HUD: lives, score, timer
             Card(
               child: Padding(
-                padding: EdgeInsets.all(8),
+                padding: EdgeInsets.all(8.r),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     Column(
-                      children: [Text('Lives'), Text('${gameProvider.lives}')],
-                    ),
-                    Column(
-                      children: [Text('Score'), Text('${gameProvider.score}')],
+                      children: [
+                        Text(l10n.livesLabel),
+                        Text('${gameProvider.lives}'),
+                      ],
                     ),
                     Column(
                       children: [
-                        Text('Time'),
-                        Text('${gameProvider.timeLeft}s'),
+                        Text(l10n.scoreTitle),
+                        Text('${gameProvider.score}'),
+                      ],
+                    ),
+                    Column(
+                      children: [
+                        Text(l10n.timeLabel),
+                        Text(l10n.secondsShort(gameProvider.timeLeft)),
                       ],
                     ),
                   ],
@@ -93,19 +100,19 @@ class _GameViewState extends State<GameView> {
               ),
             ),
 
-            SizedBox(height: 12),
+            SizedBox(height: 12.h),
 
             // If there's a current puzzle, show MCQ UI
             if (puzzle != null && steps != null) ...[
               Text(
                 '${l10n.linkStart}: ${gameProvider.currentRound?.startWord ?? ''}',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: 8.h),
               ...List.generate(steps.length, (i) {
                 final step = steps[i];
                 return Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6),
+                  padding: EdgeInsets.symmetric(vertical: 6.h),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -113,10 +120,10 @@ class _GameViewState extends State<GameView> {
                         '${l10n.steps} ${i + 1}',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      SizedBox(height: 6),
+                      SizedBox(height: 6.h),
                       Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                        spacing: 8.w,
+                        runSpacing: 8.h,
                         children: List.generate(step.options.length, (
                           optIndex,
                         ) {
@@ -141,22 +148,24 @@ class _GameViewState extends State<GameView> {
                   ),
                 );
               }),
-              SizedBox(height: 12),
+              SizedBox(height: 12.h),
               Text(
                 '${l10n.linkEnd}: ${gameProvider.currentRound?.endWord ?? ''}',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
               ),
               if (puzzle.hintEn.isNotEmpty || puzzle.hintAr.isNotEmpty)
                 Padding(
-                  padding: EdgeInsets.only(top: 8),
+                  padding: EdgeInsets.only(top: 8.h),
                   child: Text(
-                    'Hint: ${puzzle.hintEn.isNotEmpty ? puzzle.hintEn : puzzle.hintAr}',
+                    l10n.hintTitle(
+                      puzzle.hintEn.isNotEmpty ? puzzle.hintEn : puzzle.hintAr,
+                    ),
                   ),
                 ),
-              SizedBox(height: 20),
+              SizedBox(height: 20.h),
               SizedBox(
                 width: double.infinity,
-                height: 55,
+                height: 55.h,
                 child: ElevatedButton(
                   onPressed: gameProvider.isLoading
                       ? null
@@ -186,7 +195,7 @@ class _GameViewState extends State<GameView> {
                       : Text(
                           l10n.submit,
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 18.sp,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -201,19 +210,19 @@ class _GameViewState extends State<GameView> {
                 _startController,
                 Icons.trip_origin,
               ),
-              SizedBox(height: 20),
+              SizedBox(height: 20.h),
 
               // The Chain steps (legacy fixed 3 fields)
               ...List.generate(_stepControllers.length, (index) {
                 return Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
+                  padding: EdgeInsets.symmetric(vertical: 8.h),
                   child: Row(
                     children: [
                       Column(
                         children: [
                           Container(
-                            width: 2,
-                            height: 20,
+                            width: 2.w,
+                            height: 20.h,
                             color: Colors.grey.shade300,
                           ),
                           Icon(
@@ -222,13 +231,13 @@ class _GameViewState extends State<GameView> {
                             size: 24,
                           ),
                           Container(
-                            width: 2,
-                            height: 20,
+                            width: 2.w,
+                            height: 20.h,
                             color: Colors.grey.shade300,
                           ),
                         ],
                       ),
-                      SizedBox(width: 10),
+                      SizedBox(width: 10.w),
                       Expanded(
                         child: TextField(
                           controller: _stepControllers[index],
@@ -243,24 +252,24 @@ class _GameViewState extends State<GameView> {
                 );
               }),
 
-              SizedBox(height: 20),
+              SizedBox(height: 20.h),
               Icon(
                 Icons.arrow_downward,
                 color: Theme.of(context).colorScheme.secondary,
               ),
-              SizedBox(height: 20),
+              SizedBox(height: 20.h),
 
               _buildWordInput(l10n.linkEnd, _endController, Icons.location_on),
 
-              SizedBox(height: 40),
+              SizedBox(height: 40.h),
 
               if (gameProvider.errorMessage != null)
                 Container(
-                  padding: EdgeInsets.all(10),
-                  margin: EdgeInsets.only(bottom: 20),
+                  padding: EdgeInsets.all(10.r),
+                  margin: EdgeInsets.only(bottom: 20.h),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(10.r),
                   ),
                   child: Text(
                     gameProvider.errorMessage!,
@@ -272,7 +281,7 @@ class _GameViewState extends State<GameView> {
 
               SizedBox(
                 width: double.infinity,
-                height: 55,
+                height: 55.h,
                 child: ElevatedButton(
                   onPressed: gameProvider.isLoading
                       ? null
@@ -296,7 +305,7 @@ class _GameViewState extends State<GameView> {
                       : Text(
                           l10n.submit,
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 18.sp,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -337,7 +346,7 @@ class _GameViewState extends State<GameView> {
               Navigator.pop(context);
               // potentially clear fields
             },
-            child: const Text("OK"),
+            child: Text(l10n.gotIt),
           ),
         ],
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
+import '../../l10n/app_localizations.dart';
 
 class RoomSettingsView extends StatefulWidget {
   final int roomId;
@@ -39,9 +40,10 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('خطأ في تحميل الإعدادات: $e')));
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.settingsLoadError( e.toString()))),
+        );
       }
       setState(() => _isLoading = false);
     }
@@ -77,16 +79,18 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
     try {
       await _provider.updateRoomSettings(widget.roomId, _settings);
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم حفظ الإعدادات بنجاح')));
+        ).showSnackBar(SnackBar(content: Text(l10n.settingsSaveSuccess)));
         setState(() => _settingsChanged = false);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('خطأ في حفظ الإعدادات: $e')));
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.settingsSaveError( e.toString()))),
+        );
       }
     }
   }
@@ -100,12 +104,13 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('إعدادات الغرفة')),
+      appBar: AppBar(title: Text(l10n.roomSettingsHeader)),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -123,7 +128,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'إعدادات الغرفة',
+                      l10n.roomSettingsHeader,
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                   ),
@@ -140,7 +145,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        'مدير',
+                        l10n.managerLabel,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
@@ -155,7 +160,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
               if (widget.isCreator) ...[
                 // Settings Section Header
                 Text(
-                  'نظام المساعدات',
+                  l10n.hintsSystemTitle,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -164,8 +169,8 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Hints Enabled
                 SwitchListTile(
-                  title: const Text('تفعيل المساعدات'),
-                  subtitle: const Text('اسمح للاعبين باستخدام المساعدات'),
+                  title: Text(l10n.hintsEnabledTitle),
+                  subtitle: Text(l10n.hintsEnabledSubtitle),
                   value: _settings['hints_enabled'] ?? true,
                   onChanged: (value) => _updateSetting('hints_enabled', value),
                   contentPadding: EdgeInsets.zero,
@@ -174,7 +179,9 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Hints Per Player
                 Text(
-                  'عدد المساعدات لكل لاعب: ${_settings['hints_per_player'] ?? 3}',
+                  l10n.hintsPerPlayerLabel(
+                     _settings['hints_per_player'] ?? 3,
+                  ),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Slider(
@@ -190,7 +197,9 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Hint Penalty
                 Text(
-                  'خصم النقاط عند استخدام المساعدة: ${_settings['hint_penalty_percent'] ?? 10}%',
+                  l10n.hintPenaltyLabel(
+                   _settings['hint_penalty_percent'] ?? 10,
+                  ),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Slider(
@@ -206,7 +215,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Gameplay Settings
                 Text(
-                  'إعدادات اللعبة',
+                  l10n.gameSettingsTitle,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -215,7 +224,9 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Auto Advance
                 Text(
-                  'الانتقال التلقائي بعد الإجابة الخاطئة: ${_settings['auto_advance_seconds'] ?? 2} ثانية',
+                  l10n.autoAdvanceLabel(
+                     _settings['auto_advance_seconds'] ?? 2,
+                  ),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Slider(
@@ -231,7 +242,9 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Min Time Per Puzzle
                 Text(
-                  'الحد الأدنى للوقت قبل الانتقال: ${_settings['min_time_per_puzzle'] ?? 5} ثانية',
+                  l10n.minTimeLabel(
+                    _settings['min_time_per_puzzle'] ?? 5,
+                  ),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Slider(
@@ -247,7 +260,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Other Settings
                 Text(
-                  'خيارات أخرى',
+                  l10n.otherOptionsTitle,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -255,8 +268,8 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                 const SizedBox(height: 12),
 
                 SwitchListTile(
-                  title: const Text('خلط خيارات الإجابة'),
-                  subtitle: const Text('تغيير ترتيب الخيارات عشوائياً'),
+                  title: Text(l10n.shuffleOptionsTitle),
+                  subtitle: Text(l10n.shuffleOptionsSubtitle),
                   value: _settings['shuffle_options'] ?? true,
                   onChanged: (value) =>
                       _updateSetting('shuffle_options', value),
@@ -265,8 +278,8 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                 const SizedBox(height: 12),
 
                 SwitchListTile(
-                  title: const Text('عرض الترتيب الحي'),
-                  subtitle: const Text('إظهار الترتيب أثناء اللعبة'),
+                  title: Text(l10n.showRankingsTitle),
+                  subtitle: Text(l10n.showRankingsSubtitle),
                   value: _settings['show_rankings_live'] ?? true,
                   onChanged: (value) =>
                       _updateSetting('show_rankings_live', value),
@@ -275,10 +288,8 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                 const SizedBox(height: 12),
 
                 SwitchListTile(
-                  title: const Text('السماح بالإبلاغ عن الأسئلة السيئة'),
-                  subtitle: const Text(
-                    'اسمح للاعبين بالإبلاغ عن مشاكل الأسئلة',
-                  ),
+                  title: Text(l10n.allowReportTitle),
+                  subtitle: Text(l10n.allowReportSubtitle),
                   value: _settings['allow_report_bad_puzzle'] ?? true,
                   onChanged: (value) =>
                       _updateSetting('allow_report_bad_puzzle', value),
@@ -291,7 +302,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                   ElevatedButton.icon(
                     onPressed: _saveSettings,
                     icon: const Icon(Icons.save),
-                    label: const Text('حفظ التغييرات'),
+                    label: Text(l10n.saveChanges),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       minimumSize: const Size(double.infinity, 48),
@@ -306,35 +317,47 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildSettingRow(
-                          'المساعدات مفعلة',
-                          _settings['hints_enabled'] ? 'نعم' : 'لا',
+                          l10n.helpersEnabledLabel,
+                          _settings['hints_enabled'] ? l10n.yes : l10n.no,
                         ),
                         const SizedBox(height: 12),
                         _buildSettingRow(
-                          'عدد المساعدات لكل لاعب',
-                          '${_settings['hints_per_player']} مساعدات',
+                          l10n.hintsPerPlayerLabel(
+                             _settings['hints_per_player'] ?? 0,
+                          ),
+                          l10n.hintsPerPlayerValue(
+                             _settings['hints_per_player'] ?? 0,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         _buildSettingRow(
-                          'خصم النقاط للمساعدة',
-                          '${_settings['hint_penalty_percent']}%',
+                          l10n.hintPenaltyLabel(
+                             _settings['hint_penalty_percent'] ?? 0,
+                          ),
+                          l10n.hintPenaltyValue(
+                             _settings['hint_penalty_percent'] ?? 0,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         _buildSettingRow(
-                          'الانتقال التلقائي',
-                          '${_settings['auto_advance_seconds']} ثانية',
+                          l10n.autoAdvanceLabel(
+                            _settings['auto_advance_seconds'] ?? 0,
+                          ),
+                          l10n.autoAdvanceValue(
+                          _settings['auto_advance_seconds'] ?? 0,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         _buildSettingRow(
-                          'خلط الخيارات',
-                          _settings['shuffle_options'] ? 'نعم' : 'لا',
+                          l10n.shuffleOptionsTitle,
+                          _settings['shuffle_options'] ? l10n.yes : l10n.no,
                         ),
                         const SizedBox(height: 12),
                         _buildSettingRow(
-                          'الإبلاغ عن الأسئلة السيئة',
+                          l10n.allowReportTitle,
                           _settings['allow_report_bad_puzzle']
-                              ? 'مفعل'
-                              : 'معطل',
+                              ? l10n.enabled
+                              : l10n.disabled,
                         ),
                       ],
                     ),

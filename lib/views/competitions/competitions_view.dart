@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/competition_provider.dart';
+import '../../core/auth_guard.dart';
 import 'room_lobby_view.dart';
 import 'create_room_view.dart';
+import '../../l10n/app_localizations.dart';
 
 class CompetitionsView extends StatefulWidget {
   const CompetitionsView({super.key});
@@ -25,6 +27,7 @@ class _CompetitionsViewState extends State<CompetitionsView> {
   @override
   Widget build(BuildContext context) {
     final competitionProvider = context.watch<CompetitionProvider>();
+    final l10n = AppLocalizations.of(context)!;
 
     // If in a room, show room lobby (game happens in lobby now)
     if (competitionProvider.currentRoom != null) {
@@ -33,7 +36,7 @@ class _CompetitionsViewState extends State<CompetitionsView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('المسابقات والغرف'),
+        title: Text(l10n.competitionsTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -41,12 +44,12 @@ class _CompetitionsViewState extends State<CompetitionsView> {
               competitionProvider.loadActiveCompetitions();
               competitionProvider.loadMyRooms();
             },
-            tooltip: 'تحديث',
+            tooltip: l10n.refresh,
           ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => _showJoinRoomDialog(context),
-            tooltip: 'بحث عن غرفة',
+            tooltip: l10n.searchRoom,
           ),
         ],
       ),
@@ -58,7 +61,7 @@ class _CompetitionsViewState extends State<CompetitionsView> {
             padding: const EdgeInsets.only(bottom: 20),
             child: TextField(
               decoration: InputDecoration(
-                hintText: 'ابحث بالكود (مثال: ABCD12)',
+                hintText: l10n.searchByCodeHint,
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -68,13 +71,17 @@ class _CompetitionsViewState extends State<CompetitionsView> {
               ),
               textCapitalization: TextCapitalization.characters,
               onSubmitted: (value) async {
+                final authed = await AuthGuard.requireLogin(context);
+                if (!authed) return;
                 if (value.length == 6) {
                   try {
                     await competitionProvider.joinRoom(value.toUpperCase());
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('خطأ في الانضمام: $e')),
+                        SnackBar(
+                          content: Text(l10n.joinError( e.toString())),
+                        ),
                       );
                     }
                   }
@@ -102,12 +109,12 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'إنشاء غرفة جديدة',
+                            l10n.createRoomCardTitle,
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'أنشئ غرفة وادعُ أصدقاءك للعب',
+                            l10n.createRoomCardSubtitle,
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ],
@@ -141,12 +148,12 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'الانضمام إلى غرفة',
+                            l10n.joinRoomCardTitle,
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'ادخل كود الغرفة للانضمام',
+                            l10n.joinRoomCardSubtitle,
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ],
@@ -163,7 +170,7 @@ class _CompetitionsViewState extends State<CompetitionsView> {
           // Joined Rooms (My Rooms) section
           if (competitionProvider.myRooms.isNotEmpty) ...[
             Text(
-              'الغرف التي انضممت إليها',
+              l10n.myRoomsTitle,
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
@@ -180,18 +187,25 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                     ).primaryColor.withOpacity(0.1),
                     child: const Icon(Icons.group),
                   ),
-                  title: Text(room['name'] ?? 'غرفة'),
+                  title: Text(room['name'] ?? l10n.roomLabel),
                   subtitle: Text(
-                    'كود: ${room['code']} • ${room['participant_count'] ?? 0} لاعب',
+                    l10n.roomCodeParticipants(
+                     room['code'],
+                      room['participant_count'] ?? 0,
+                    ),
                   ),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () async {
+                    final authed = await AuthGuard.requireLogin(context);
+                    if (!authed) return;
                     try {
                       await competitionProvider.joinRoom(room['code']);
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('خطأ في الانضمام: $e')),
+                          SnackBar(
+                            content: Text(l10n.joinError( e.toString())),
+                          ),
                         );
                       }
                     }
@@ -204,16 +218,16 @@ class _CompetitionsViewState extends State<CompetitionsView> {
 
           // Active Competitions
           Text(
-            'المسابقات النشطة',
+            l10n.activeCompetitionsTitle,
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           if (competitionProvider.activeCompetitions.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(24),
-              child: Center(child: Text('لا توجد مسابقات نشطة حالياً')),
+              child: Center(child: Text(l10n.noActiveCompetitions)),
             )
           else
             ...competitionProvider.activeCompetitions.map((competition) {
@@ -221,23 +235,29 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                 margin: const EdgeInsets.only(bottom: 12),
                 child: ListTile(
                   leading: const Icon(Icons.emoji_events),
-                  title: Text(competition['name'] ?? 'مسابقة'),
+                  title: Text(competition['name'] ?? l10n.competitionLabel),
                   subtitle: Text(
-                    '${competition['participant_count'] ?? 0} مشارك • ${competition['puzzle_count'] ?? 0} لغز',
+                    l10n.competitionSubtitle(
+                       competition['participant_count'] ?? 0,
+                      competition['puzzle_count'] ?? 0,
+                    ),
                   ),
                   trailing: competition['status'] == 'waiting'
                       ? ElevatedButton(
                           onPressed: () {
-                            competitionProvider.joinCompetition(
-                              competition['id'],
-                            );
+                            AuthGuard.requireLogin(context).then((authed) {
+                              if (!authed) return;
+                              competitionProvider.joinCompetition(
+                                competition['id'],
+                              );
+                            });
                           },
-                          child: const Text('انضم'),
+                          child: Text(l10n.join),
                         )
                       : Text(
                           competition['status'] == 'active'
-                              ? 'جارية'
-                              : 'منتهية',
+                              ? l10n.statusActive
+                              : l10n.statusFinished,
                           style: TextStyle(
                             color: competition['status'] == 'active'
                                 ? Colors.green
@@ -253,61 +273,70 @@ class _CompetitionsViewState extends State<CompetitionsView> {
   }
 
   void _showCreateRoomDialog(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const CreateRoomView()),
-    );
+    AuthGuard.requireLogin(context).then((authed) {
+      if (!authed) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const CreateRoomView()),
+      );
+    });
   }
 
   void _showJoinRoomDialog(BuildContext context) {
-    final codeController = TextEditingController();
-    final competitionProvider = context.read<CompetitionProvider>();
+    final l10n = AppLocalizations.of(context)!;
+    AuthGuard.requireLogin(context).then((authed) {
+      if (!authed) return;
+      final codeController = TextEditingController();
+      final competitionProvider = context.read<CompetitionProvider>();
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('الانضمام إلى غرفة'),
-        content: TextField(
-          controller: codeController,
-          decoration: const InputDecoration(
-            labelText: 'كود الغرفة',
-            hintText: 'أدخل الكود المكون من 6 أحرف',
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.joinRoomDialogTitle),
+          content: TextField(
+            controller: codeController,
+            decoration: InputDecoration(
+              labelText: l10n.roomCodeLabel,
+              hintText: l10n.roomCodeHint,
+            ),
+            textCapitalization: TextCapitalization.characters,
+            maxLength: 6,
           ),
-          textCapitalization: TextCapitalization.characters,
-          maxLength: 6,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.cancel),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (codeController.text.length != 6) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.roomCodeLengthError)),
+                  );
+                  return;
+                }
+                try {
+                  await competitionProvider.joinRoom(
+                    codeController.text.toUpperCase(),
+                  );
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(l10n.joinError( e.toString())),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: Text(l10n.join),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (codeController.text.length != 6) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('الكود يجب أن يكون 6 أحرف')),
-                );
-                return;
-              }
-              try {
-                await competitionProvider.joinRoom(
-                  codeController.text.toUpperCase(),
-                );
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
-                }
-              }
-            },
-            child: const Text('انضم'),
-          ),
-        ],
-      ),
-    );
+      );
+    });
   }
 }
