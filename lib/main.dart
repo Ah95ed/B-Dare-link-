@@ -23,6 +23,7 @@ import 'l10n/app_localizations.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const WonderLinkApp());
+  // by Ahned shaker
 }
 
 /// Deep link handler for handling app navigation from external URLs
