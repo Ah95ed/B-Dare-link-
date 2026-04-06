@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'dart:math';
 import '../../controllers/game_provider.dart';
 import '../../controllers/locale_provider.dart';
+import '../../constants/app_constants.dart';
 import '../../models/game_puzzle.dart';
 import '../auth/login_screen.dart';
 import '../levels_view.dart';
@@ -17,12 +18,13 @@ class MultipleChoiceGameWidget extends StatefulWidget {
 }
 
 class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
-  /// Tracks selected path index (0=A, 1=B, 2=C, 3=D)
   int? _selectedPathIndex;
+  int? _feedbackPathIndex;
+  bool? _isCorrectFeedback;
+  bool _isEvaluating = false;
   late final GameProvider? _provider;
   String? _lastPuzzleKey;
-
-  /// Index of correct answer after shuffling (0-3)
+  List<List<String>> _pathOptions = const [];
   int _correctAnswerIndex = 0;
 
   @override
@@ -66,15 +68,22 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
         '${provider.currentPuzzleIndex}|$start|$end|${steps.length}|${steps.map((s) => s.word).join(',')}';
 
     if (key != _lastPuzzleKey) {
+      final levelPuzzles =
+          provider.currentLevel?.puzzles ?? const <GamePuzzle>[];
       _lastPuzzleKey = key;
       setState(() {
         _selectedPathIndex = null;
+        _feedbackPathIndex = null;
+        _isCorrectFeedback = null;
+        _isEvaluating = false;
+        _pathOptions = _buildPathOptions(puzzle, steps, levelPuzzles, isArabic);
       });
     }
   }
 
-  /// Handles answer selection with proper validation
-  void _handleAnswerSelected(int optionIndex) {
+  Future<void> _onPathTapped(int optionIndex) async {
+    if (_isEvaluating) return;
+
     final provider = Provider.of<GameProvider>(context, listen: false);
     final isArabic =
         Provider.of<LocaleProvider>(
@@ -84,82 +93,51 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
         'ar';
     final puzzle = provider.currentPuzzle;
 
-    if (puzzle == null || _selectedPathIndex != null) return;
+    if (puzzle == null) return;
 
-    setState(() {
-      _selectedPathIndex = optionIndex;
-    });
+    final steps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
+    if (steps.isEmpty) return;
 
-    // Check if selected option matches the correct answer index
+    if (optionIndex < 0 || optionIndex >= _pathOptions.length) {
+      return;
+    }
+
     final isCorrect = optionIndex == _correctAnswerIndex;
 
+    setState(() {
+      _isEvaluating = true;
+      _selectedPathIndex = optionIndex;
+      _feedbackPathIndex = optionIndex;
+      _isCorrectFeedback = isCorrect;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 280));
+    if (!mounted) return;
+
     if (isCorrect) {
-      provider.incrementScore(10);
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) {
-          _showCorrectDialog(context, isArabic);
-        }
-      });
+      provider.incrementScore(AppConstants.stepScore);
     } else {
       provider.decrementLives();
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted) {
-          setState(() {
-            _selectedPathIndex = null;
-          });
-          final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                l10n.tryAgain,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              backgroundColor: Colors.red.shade700,
-              duration: const Duration(milliseconds: 1800),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-        }
+    }
+
+    await provider.advancePuzzle();
+
+    if (!mounted) return;
+
+    if (provider.isLevelComplete) {
+      setState(() {
+        _isEvaluating = false;
+      });
+      _showLevelCompleteDialog(context, isArabic);
+      return;
+    }
+
+    // If the puzzle changed, the provider listener will rebuild the next question.
+    if (mounted) {
+      setState(() {
+        _isEvaluating = false;
       });
     }
-  }
-
-  void _showCorrectDialog(BuildContext context, bool isArabic) {
-    final l10n = AppLocalizations.of(context)!;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: const Text("🎉"),
-        content: Text(l10n.greatJob),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              final provider = Provider.of<GameProvider>(
-                context,
-                listen: false,
-              );
-              provider.advancePuzzle().then((_) {
-                setState(() {
-                  _selectedPathIndex = null;
-                });
-                if (mounted && provider.isLevelComplete) {
-                  _showLevelCompleteDialog(context, isArabic);
-                }
-              });
-            },
-            child: Text(l10n.next),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showLevelCompleteDialog(BuildContext context, bool isArabic) {
@@ -186,10 +164,15 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
             ),
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const LevelsView()),
-              );
+              final navigator = Navigator.of(context);
+              navigator.pop(); // Close dialog
+              if (navigator.canPop()) {
+                navigator.pop(); // Return to existing LevelsView
+              } else {
+                navigator.pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LevelsView()),
+                );
+              }
             },
             child: Text(l10n.backToLevels),
           ),
@@ -266,11 +249,14 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     final l10n = AppLocalizations.of(context)!;
     final questionText = l10n.whatLinks(startWord, endWord);
 
-    final paths = _buildPaths(
-      steps,
-      provider.currentLevel?.puzzles ?? const <GamePuzzle>[],
-      isArabic,
-    );
+    if (_pathOptions.length != 4) {
+      _pathOptions = _buildPathOptions(
+        puzzle,
+        steps,
+        provider.currentLevel?.puzzles ?? const <GamePuzzle>[],
+        isArabic,
+      );
+    }
 
     return SingleChildScrollView(
       child: Padding(
@@ -362,45 +348,46 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
 
             const SizedBox(height: 20),
 
-            // Options Grid - Modern Card Design
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: 4,
               itemBuilder: (context, idx) {
                 final optionLabel = String.fromCharCode(65 + idx);
-                final isSelected = _selectedPathIndex == idx;
-                final isCorrect = idx == _correctAnswerIndex;
-                final showResult = isSelected;
-                final pathSteps = paths[idx];
+                final selected = _selectedPathIndex == idx;
+                final feedbackTarget = _feedbackPathIndex == idx;
+                final successFlash =
+                    feedbackTarget && _isCorrectFeedback == true;
+                final errorFlash =
+                    feedbackTarget && _isCorrectFeedback == false;
+                final words = _pathOptions[idx];
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 14),
                   child: GestureDetector(
-                    onTap: () => _handleAnswerSelected(idx),
+                    onTap: provider.isLoading || _isEvaluating
+                        ? null
+                        : () => _onPathTapped(idx),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeInOut,
+                      duration: const Duration(milliseconds: 250),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: showResult
-                              ? (isCorrect
-                                    ? [
-                                        const Color(
-                                          0xFF10B981,
-                                        ).withOpacity(0.25),
-                                        const Color(
-                                          0xFF059669,
-                                        ).withOpacity(0.15),
-                                      ]
-                                    : [
-                                        const Color(
-                                          0xFFEF4444,
-                                        ).withOpacity(0.25),
-                                        const Color(
-                                          0xFFDC2626,
-                                        ).withOpacity(0.15),
-                                      ])
+                          colors: successFlash
+                              ? [
+                                  Colors.greenAccent.withOpacity(0.36),
+                                  Colors.green.withOpacity(0.20),
+                                ]
+                              : errorFlash
+                              ? [
+                                  Colors.redAccent.withOpacity(0.38),
+                                  Colors.red.withOpacity(0.20),
+                                ]
+                              : selected
+                              ? [
+                                  const Color(0xFF00AEEF).withOpacity(0.32),
+                                  const Color(0xFF22C55E).withOpacity(0.20),
+                                ]
                               : [
                                   Colors.white.withOpacity(0.08),
                                   Colors.white.withOpacity(0.04),
@@ -408,97 +395,55 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: showResult
-                              ? (isCorrect
-                                    ? const Color(0xFF10B981).withOpacity(0.7)
-                                    : const Color(0xFFEF4444).withOpacity(0.7))
+                          color: successFlash
+                              ? Colors.greenAccent
+                              : errorFlash
+                              ? Colors.redAccent
+                              : selected
+                              ? const Color(0xFF00D1FF).withOpacity(0.9)
                               : Colors.white.withOpacity(0.2),
-                          width: showResult ? 3 : 2,
+                          width: selected ? 2.4 : 1.6,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: showResult
-                                ? (isCorrect
-                                      ? const Color(0xFF10B981).withOpacity(0.4)
-                                      : const Color(
-                                          0xFFEF4444,
-                                        ).withOpacity(0.4))
-                                : Colors.black.withOpacity(0.15),
-                            blurRadius: showResult ? 16 : 8,
-                            spreadRadius: showResult ? 2 : 0,
-                            offset: const Offset(0, 4),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(
+                                selected ? 0.28 : 0.12,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                optionLabel,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              words.join(' - '),
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.95),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                height: 1.3,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            // Option Label (A, B, C, D)
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: showResult
-                                    ? (isCorrect
-                                          ? const Color(0xFF10B981)
-                                          : const Color(0xFFEF4444))
-                                    : Colors.white.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: showResult
-                                      ? Colors.white.withOpacity(0.5)
-                                      : Colors.white.withOpacity(0.3),
-                                  width: 2,
-                                ),
-                              ),
-                              child: Center(
-                                child: showResult && isCorrect
-                                    ? const Icon(
-                                        Icons.check_rounded,
-                                        color: Colors.white,
-                                        size: 24,
-                                      )
-                                    : showResult && !isCorrect
-                                    ? const Icon(
-                                        Icons.close_rounded,
-                                        color: Colors.white,
-                                        size: 24,
-                                      )
-                                    : Text(
-                                        optionLabel,
-                                        style: const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                              ),
-                            ),
-
-                            const SizedBox(width: 16),
-
-                            // Option Chain - Simple Horizontal Display
-                            Expanded(
-                              child: Text(
-                                pathSteps.join(' - '),
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: showResult
-                                      ? Colors.white.withOpacity(0.95)
-                                      : Colors.white.withOpacity(0.85),
-                                  height: 1.4,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                   ),
@@ -513,177 +458,209 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     );
   }
 
-  /// Builds 4 different option chains and shuffles them
-  /// The correct answer (optionA) will be placed at a random but consistent position
-  /// Returns the shuffled options and updates _correctAnswerIndex
-  List<List<String>> _buildPaths(
+  static const List<String> _arabicFallbackWords = [
+    'كتاب',
+    'قلم',
+    'نور',
+    'علم',
+    'باب',
+    'صوت',
+    'ورق',
+    'فكر',
+    'بحر',
+    'شمس',
+  ];
+
+  static const List<String> _englishFallbackWords = [
+    'Book',
+    'Pen',
+    'Light',
+    'Mind',
+    'Door',
+    'Sound',
+    'Paper',
+    'Idea',
+    'Sea',
+    'Sun',
+  ];
+
+  List<String> _normalizeToFourWords(
+    List<String> source,
+    bool isArabic,
+    List<String> extraPool,
+  ) {
+    final fallbackWords = isArabic
+        ? _arabicFallbackWords
+        : _englishFallbackWords;
+    final seen = <String>{};
+    final normalized = <String>[];
+
+    void addWord(String word) {
+      final cleaned = word.trim();
+      if (cleaned.isEmpty) return;
+      if (RegExp(r'[0-9_]').hasMatch(cleaned)) return;
+      final key = cleaned.toLowerCase();
+      if (seen.contains(key)) return;
+      seen.add(key);
+      normalized.add(cleaned);
+    }
+
+    for (final word in source) {
+      addWord(word);
+      if (normalized.length >= 4) break;
+    }
+
+    if (normalized.length < 4) {
+      for (final word in extraPool) {
+        addWord(word);
+        if (normalized.length >= 4) break;
+      }
+    }
+
+    for (final word in fallbackWords) {
+      if (normalized.length >= 4) break;
+      addWord(word);
+    }
+
+    while (normalized.length < 4) {
+      for (final word in fallbackWords) {
+        if (normalized.length >= 4) break;
+        addWord(word);
+      }
+      if (normalized.length < 4) break;
+    }
+
+    if (normalized.isEmpty) {
+      return const ['-', '-', '-', '-'];
+    }
+
+    if (normalized.length > 4) {
+      return normalized.take(4).toList();
+    }
+
+    return normalized;
+  }
+
+  List<List<String>> _buildPathOptions(
+    GamePuzzle puzzle,
     List<dynamic> steps,
     List<GamePuzzle> puzzlePool,
     bool isArabic,
   ) {
-    final l10n = AppLocalizations.of(context)!;
-    final baseSteps = steps.map((s) => s.word as String).toList();
-
-    if (baseSteps.isEmpty) {
-      _correctAnswerIndex = 0;
-      return [
-        [l10n.placeholderOptionOne],
-        [l10n.placeholderOptionTwo],
-        [l10n.placeholderOptionThree],
-        [l10n.placeholderOptionFour],
-      ];
-    }
-
-    String buildKey(List<String> option) => option.join(' - ').trim();
-
-    List<String> stepsFromPuzzle(GamePuzzle puzzle) {
-      final puzzleSteps = isArabic ? puzzle.stepsAr : puzzle.stepsEn;
-      return puzzleSteps
-          .map((s) => s.word)
-          .where((w) => w.trim().isNotEmpty)
+    final backendPathOptions = puzzle.pathOptions;
+    if (backendPathOptions != null && backendPathOptions.length == 4) {
+      final parsed = backendPathOptions
+          .map((option) => option.split(RegExp(r'\s+')).toList())
+          .map((words) => _normalizeToFourWords(words, isArabic, const []))
           .toList();
-    }
 
-    void addUniqueOption(
-      List<String> option,
-      List<List<String>> wrongOptions,
-      Set<String> usedOptions,
-    ) {
-      if (option.isEmpty) return;
-      final key = buildKey(option);
-      if (!usedOptions.contains(key)) {
-        wrongOptions.add(option);
-        usedOptions.add(key);
+      if (parsed.length == 4) {
+        final expectedChain = steps.map((step) => step.word.trim()).toList();
+        final correctPath = parsed.firstWhere(
+          (option) =>
+              option.length == expectedChain.length &&
+              option.map((word) => word.trim().toLowerCase()).join('|') ==
+                  expectedChain.map((word) => word.toLowerCase()).join('|'),
+          orElse: () {
+            final idx = puzzle.correctPathIndex;
+            if (idx != null && idx >= 0 && idx < 4) {
+              return parsed[idx];
+            }
+            return parsed.first;
+          },
+        );
+
+        final shuffled = List<List<String>>.from(parsed);
+        shuffled.shuffle(
+          Random(
+            (puzzle.puzzleId ?? steps.map((s) => s.word).join('|')).hashCode,
+          ),
+        );
+
+        _correctAnswerIndex = shuffled.indexWhere(
+          (option) => option.join('|') == correctPath.join('|'),
+        );
+        if (_correctAnswerIndex < 0) {
+          _correctAnswerIndex = 0;
+        }
+
+        return shuffled;
       }
     }
 
-    final optionA = List<String>.from(baseSteps);
+    final baseSteps = steps.map((s) => s.word.toString()).toList();
+    final poolWords = <String>[
+      ...baseSteps,
+      ...puzzlePool.expand(
+        (puzzle) => isArabic
+            ? puzzle.stepsAr.map((s) => s.word)
+            : puzzle.stepsEn.map((s) => s.word),
+      ),
+    ];
+    final optionA = _normalizeToFourWords(baseSteps, isArabic, poolWords);
+
+    String keyOf(List<String> list) => list.join('|');
+
+    final used = <String>{keyOf(optionA)};
     final wrongOptions = <List<String>>[];
-    final usedOptions = <String>{};
-    usedOptions.add(buildKey(optionA));
 
-    final otherPaths = <List<String>>[];
-    for (final puzzle in puzzlePool) {
-      final stepsList = stepsFromPuzzle(puzzle);
-      if (stepsList.isNotEmpty && buildKey(stepsList) != buildKey(baseSteps)) {
-        otherPaths.add(stepsList);
-      }
+    void addOption(List<String> option) {
+      final normalized = _normalizeToFourWords(option, isArabic, poolWords);
+      final key = keyOf(normalized);
+      if (normalized.toSet().length != normalized.length) return;
+      if (used.contains(key)) return;
+      used.add(key);
+      wrongOptions.add(normalized);
     }
-    final otherSeed = baseSteps.join().hashCode ^ 0x6D2B79F5;
-    otherPaths.shuffle(Random(otherSeed));
-    for (final option in otherPaths) {
-      addUniqueOption(option, wrongOptions, usedOptions);
+
+    for (final puzzle in puzzlePool) {
+      final words = (isArabic ? puzzle.stepsAr : puzzle.stepsEn)
+          .map((s) => s.word)
+          .toList();
+      addOption(words);
       if (wrongOptions.length >= 3) break;
     }
 
-    addUniqueOption(baseSteps.reversed.toList(), wrongOptions, usedOptions);
+    addOption(baseSteps.reversed.toList());
     if (baseSteps.length > 1) {
-      addUniqueOption(
-        [...baseSteps.skip(1), baseSteps.first],
-        wrongOptions,
-        usedOptions,
-      );
-    }
-    if (baseSteps.length > 2) {
-      addUniqueOption(
-        [...baseSteps.skip(2), ...baseSteps.take(2)],
-        wrongOptions,
-        usedOptions,
-      );
+      addOption([...baseSteps.skip(1), baseSteps.first]);
     }
 
-    int seed = baseSteps.join().hashCode;
+    int seed = baseSteps.join().hashCode ^ 0x9E3779B9;
     int attempts = 0;
-    while (wrongOptions.length < 3 && attempts < 60) {
-      seed = (seed * 31 + attempts * 7919) ^ (baseSteps.length * 1009);
+    while (wrongOptions.length < 3 && attempts < 50) {
       final shuffled = List<String>.from(baseSteps);
       if (shuffled.length > 1) {
-        final random = Random(seed);
-        for (int pass = 0; pass < 2; pass++) {
-          for (int i = shuffled.length - 1; i > 0; i--) {
-            final j = random.nextInt(i + 1);
-            final temp = shuffled[i];
-            shuffled[i] = shuffled[j];
-            shuffled[j] = temp;
-          }
-        }
+        final random = Random(seed + attempts * 97);
+        shuffled.shuffle(random);
       }
-      addUniqueOption(shuffled, wrongOptions, usedOptions);
+      addOption(shuffled);
       attempts++;
     }
 
-    if (baseSteps.length >= 3) {
-      for (int i = 0; i < baseSteps.length && wrongOptions.length < 3; i++) {
-        final variant = List<String>.from(baseSteps)..removeAt(i);
-        addUniqueOption(variant, wrongOptions, usedOptions);
-      }
-    }
-
-    if (baseSteps.length <= 2) {
-      addUniqueOption(
-        [baseSteps.first, ...baseSteps],
-        wrongOptions,
-        usedOptions,
-      );
-      addUniqueOption(
-        [...baseSteps, baseSteps.last],
-        wrongOptions,
-        usedOptions,
-      );
-      if (baseSteps.length == 2) {
-        addUniqueOption(
-          [baseSteps[1], baseSteps[0], baseSteps[1]],
-          wrongOptions,
-          usedOptions,
-        );
-      }
-    }
-
-    int repeatCount = 1;
-    while (wrongOptions.length < 3 && repeatCount <= 4) {
-      final extended = List<String>.from(baseSteps);
-      for (int i = 0; i < repeatCount; i++) {
-        extended.add(baseSteps[i % baseSteps.length]);
-      }
-      addUniqueOption(extended, wrongOptions, usedOptions);
-      repeatCount++;
-    }
-
-    while (wrongOptions.length > 3) {
-      wrongOptions.removeLast();
-    }
     while (wrongOptions.length < 3) {
-      final extended = [...baseSteps, ...baseSteps];
-      addUniqueOption(extended, wrongOptions, usedOptions);
+      addOption([...baseSteps, ...poolWords]);
       if (wrongOptions.length < 3) {
-        addUniqueOption(
-          [...extended, baseSteps.first],
-          wrongOptions,
-          usedOptions,
-        );
+        addOption([optionA[1], optionA[0], optionA[3], optionA[2]]);
       }
       if (wrongOptions.length < 3) {
-        break;
+        addOption([optionA[2], optionA[3], optionA[0], optionA[1]]);
       }
+      if (wrongOptions.length < 3) break;
     }
 
-    final optionsWithIndex = [
-      {'option': optionA, 'isCorrect': true, 'originalIndex': 0},
-      {'option': wrongOptions[0], 'isCorrect': false, 'originalIndex': 1},
-      {'option': wrongOptions[1], 'isCorrect': false, 'originalIndex': 2},
-      {'option': wrongOptions[2], 'isCorrect': false, 'originalIndex': 3},
+    final options = [
+      {'words': optionA, 'isCorrect': true},
+      {'words': wrongOptions[0], 'isCorrect': false},
+      {'words': wrongOptions[1], 'isCorrect': false},
+      {'words': wrongOptions[2], 'isCorrect': false},
     ];
 
-    final shuffleSeed = baseSteps.join().hashCode ^ 99999;
-    final shuffleRandom = Random(shuffleSeed);
-    optionsWithIndex.shuffle(shuffleRandom);
+    final random = Random(baseSteps.join().hashCode ^ 0x00C0FFEE);
+    options.shuffle(random);
 
-    _correctAnswerIndex = optionsWithIndex.indexWhere(
-      (item) => item['isCorrect'] == true,
-    );
+    _correctAnswerIndex = options.indexWhere((e) => e['isCorrect'] == true);
 
-    return optionsWithIndex
-        .map((item) => item['option'] as List<String>)
-        .toList();
+    return options.map((e) => e['words'] as List<String>).toList();
   }
 }

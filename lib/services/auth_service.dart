@@ -60,9 +60,32 @@ class AuthService {
   Future<void> logout() async {
     try {
       await _storage.delete(key: AppConstants.jwtTokenKey);
+      await _storage.delete(key: 'cached_user');
     } catch (e) {
       throw StorageException.deleteFailed('Failed to delete token: $e');
     }
+  }
+
+  /// Save user to secure storage
+  Future<void> _saveCachedUser(Map<String, dynamic> user) async {
+    try {
+      await _storage.write(key: 'cached_user', value: jsonEncode(user));
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  /// Get cached user from secure storage
+  Future<Map<String, dynamic>?> _getCachedUser() async {
+    try {
+      final userStr = await _storage.read(key: 'cached_user');
+      if (userStr != null) {
+        return jsonDecode(userStr) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
   }
 
   /// Register new user
@@ -81,12 +104,20 @@ class AuthService {
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         await _saveToken(data['token'] as String);
-        return data['user'] as Map<String, dynamic>;
-      } else {
-        throw AuthException.registrationFailed(response.body);
+        final user = data['user'] as Map<String, dynamic>;
+        await _saveCachedUser(user);
+        return user;
       }
+
+      throw AuthException.registrationFailed(
+        'HTTP ${response.statusCode}: ${response.body}',
+      );
+    } on AuthException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
     } catch (e) {
-      throw AuthException.registrationFailed('$e');
+      throw AuthException.registrationFailed('Unexpected error: $e');
     }
   }
 
@@ -102,12 +133,30 @@ class AuthService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         await _saveToken(data['token'] as String);
-        return data['user'] as Map<String, dynamic>;
-      } else {
-        throw AuthException.invalidCredentials(response.body);
+        final user = data['user'] as Map<String, dynamic>;
+        await _saveCachedUser(user);
+        return user;
       }
+
+      if (response.statusCode == 400 || response.statusCode == 401) {
+        // Invalid credentials error
+        throw AuthException.invalidCredentials('Invalid email or password');
+      }
+
+      if (response.statusCode >= 500) {
+        // Server error
+        throw AuthException(
+          message: 'Server error occurred. Please try again later.',
+        );
+      }
+
+      throw AuthException(message: 'Login failed: HTTP ${response.statusCode}');
+    } on AuthException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
     } catch (e) {
-      throw AuthException.invalidCredentials('$e');
+      throw AuthException(message: 'Login failed: Unexpected error: $e');
     }
   }
 
@@ -117,22 +166,31 @@ class AuthService {
       final token = await getToken();
       if (token == null || token.isEmpty) return null;
 
-      final response = await _client.request(
-        'GET',
-        AppStrings.authMeEndpoint,
-        auth: true,
-      );
+      final cachedUser = await _getCachedUser();
 
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      } else {
-        // Token might be invalid or expired
-        await logout();
-        return null;
+      try {
+        final response = await _client.request(
+          'GET',
+          AppStrings.authMeEndpoint,
+          auth: true,
+        );
+
+        if (response.statusCode == 200) {
+          final user = jsonDecode(response.body) as Map<String, dynamic>;
+          await _saveCachedUser(user);
+          return user;
+        } else if (response.statusCode == 401) {
+          // Handled by middleware (logs out)
+          return null;
+        } else {
+          // Return cached if available on other errors (e.g. 500)
+          return cachedUser;
+        }
+      } catch (e) {
+        // Network error etc
+        return cachedUser;
       }
     } catch (e) {
-      // Token might be invalid or expired
-      await logout();
       return null;
     }
   }

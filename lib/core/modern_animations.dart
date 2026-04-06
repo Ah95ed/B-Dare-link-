@@ -25,8 +25,10 @@ class ModernAnimations {
     return PageRouteBuilder(
       pageBuilder: (_, __, ___) => page,
       transitionsBuilder: (_, animation, __, child) => SlideTransition(
-        position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
-            .animate(CurvedAnimation(parent: animation, curve: easeOutQuart)),
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.3),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: easeOutQuart)),
         child: child,
       ),
       transitionDuration: durationNormal,

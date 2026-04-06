@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 import 'package:app_links/app_links.dart';
@@ -22,6 +23,7 @@ import 'l10n/app_localizations.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = true;
   runApp(const WonderLinkApp());
 }
 
@@ -104,7 +106,8 @@ class WonderLinkApp extends StatelessWidget {
           child: Consumer<LocaleProvider>(
             builder: (context, localeProvider, child) {
               return MaterialApp(
-                title: 'Wonder Link',
+                title:
+                    AppLocalizations.of(context)?.appTitle ?? " Wonder Link ",
                 debugShowCheckedModeBanner: false,
                 theme: AppTheme.lightTheme,
                 locale: localeProvider.locale,

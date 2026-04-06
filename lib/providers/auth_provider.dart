@@ -53,6 +53,15 @@ class AuthProvider extends ChangeNotifier {
     } on AuthException catch (e) {
       _lastError = e.message;
       rethrow;
+    } on NetworkException catch (e) {
+      _lastError = e.message;
+      rethrow;
+    } on AppException catch (e) {
+      _lastError = e.message;
+      rethrow;
+    } catch (e) {
+      _lastError = 'Unexpected login error: $e';
+      rethrow;
     } finally {
       _setLoading(false);
     }
@@ -66,6 +75,15 @@ class AuthProvider extends ChangeNotifier {
       _lastError = null;
     } on AuthException catch (e) {
       _lastError = e.message;
+      rethrow;
+    } on NetworkException catch (e) {
+      _lastError = e.message;
+      rethrow;
+    } on AppException catch (e) {
+      _lastError = e.message;
+      rethrow;
+    } catch (e) {
+      _lastError = 'Unexpected registration error: $e';
       rethrow;
     } finally {
       _setLoading(false);

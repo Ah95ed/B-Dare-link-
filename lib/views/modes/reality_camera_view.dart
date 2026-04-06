@@ -3,12 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:wonder_link_game/views/game_play_view.dart';
 import '../../controllers/game_provider.dart';
 import '../../controllers/locale_provider.dart';
 import '../../core/app_colors.dart';
 import '../../core/auth_guard.dart';
 import '../../l10n/app_localizations.dart';
+import '../game_play_view.dart';
 
 /// Camera/Gallery view for Reality Mode
 /// Note: ImagePicker disabled temporarily for Windows build stability
@@ -54,7 +54,7 @@ class _RealityCameraViewState extends State<RealityCameraView> {
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(l10n.errorPickingImage( e.toString())),
+            content: Text(l10n.errorPickingImage(e.toString())),
             backgroundColor: AppColors.error,
           ),
         );

@@ -1172,7 +1172,7 @@ async function generateAIPuzzle(env, language, level) {
   const groqModel = env?.GROQ_MODEL || 'llama-3.1-8b-instant';
   const aiModel = env?.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
   const geminiApiKey = env?.GEMINI_API_KEY;
-  const geminiModel = env?.GEMINI_MODEL || 'gemini-1.5-flash';
+  const geminiModel = env?.GEMINI_MODEL || 'gemini-2.0-flash';
 
   let content = '';
   let aiProvider = 'none';

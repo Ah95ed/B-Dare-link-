@@ -119,7 +119,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               ),
             ),
             Text(
-              l10n.playersCountLabel( participants.length),
+              l10n.playersCountLabel(participants.length),
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
@@ -251,10 +251,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                         await competitionProvider.refreshRoomStatus();
                       },
                       icon: const Icon(Icons.refresh, size: 14),
-                      label:  Text(
-                        l10n.refresh,
-                        style: TextStyle(fontSize: 12),
-                      ),
+                      label: Text(l10n.refresh, style: TextStyle(fontSize: 12)),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -561,7 +558,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          label:  Text(
+                          label: Text(
                             l10n.fetchCurrentQuestion,
                             style: TextStyle(
                               color: Colors.white,
@@ -597,7 +594,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          label:  Text(
+                          label: Text(
                             l10n.nextQuestion,
                             style: TextStyle(
                               color: Colors.white,
@@ -628,7 +625,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          label:  Text(
+                          label: Text(
                             l10n.reopenRoom,
                             style: TextStyle(
                               color: Colors.white,
@@ -657,7 +654,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     CompetitionProvider provider,
     bool isHost,
   ) {
-     final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context)!;
     final puzzle = provider.currentPuzzle;
     if (puzzle == null) {
       return const SizedBox.shrink();
@@ -748,10 +745,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          l10n.roomQuestionCount(
-                            currentNumber,
-                           totalPuzzles,
-                          ),
+                          l10n.roomQuestionCount(currentNumber, totalPuzzles),
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.w800,
@@ -760,7 +754,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
                           ),
                         ),
                         Text(
-                          l10n.roomOutOfTotal( totalPuzzles),
+                          l10n.roomOutOfTotal(totalPuzzles),
                           style: TextStyle(
                             fontSize: 14,
                             color: AppColors.textSecondary,
@@ -1213,7 +1207,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
     BuildContext context,
     CompetitionProvider provider,
   ) {
-     final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context)!;
     return StreamBuilder<int>(
       stream: Stream.periodic(const Duration(seconds: 1), (_) {
         final puzzleEnd = provider.puzzleEndsAt;
@@ -1249,7 +1243,7 @@ class _RoomLobbyViewState extends State<RoomLobbyView> {
               ),
               const SizedBox(width: 8),
               Text(
-                l10n.timeRemaining( remaining),
+                l10n.timeRemaining(remaining),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -1336,7 +1330,7 @@ Drawer _buildLobbyDrawer(
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(l10n.roomCodeCopied( code)),
+                      content: Text(l10n.roomCodeCopied(code)),
                       backgroundColor: AppColors.cyan.withOpacity(0.8),
                     ),
                   );
@@ -1423,7 +1417,7 @@ void _showDifficultyDialog(BuildContext context, CompetitionProvider provider) {
         builder: (context, setState) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(l10n.currentDifficulty( current)),
+            Text(l10n.currentDifficulty(current)),
             const SizedBox(height: 12),
             Slider(
               value: selected.toDouble(),
@@ -1491,7 +1485,7 @@ void _showPlayersDialog(BuildContext context, CompetitionProvider provider) {
                 child: Text(username.isNotEmpty ? username[0] : '?'),
               ),
               title: Text(username),
-              subtitle: Text(l10n.pointsRole(score,  roleLabel)),
+              subtitle: Text(l10n.pointsRole(score, roleLabel)),
               trailing: PopupMenuButton<String>(
                 onSelected: (action) async {
                   final roomId = provider.currentRoomId;
@@ -1674,9 +1668,7 @@ void _showGameResults(BuildContext context, CompetitionProvider provider) {
                         fontSize: index == 0 ? 16 : 14,
                       ),
                     ),
-                    subtitle: Text(
-                      l10n.puzzlesSolvedLabel( puzzlesSolved),
-                    ),
+                    subtitle: Text(l10n.puzzlesSolvedLabel(puzzlesSolved)),
                     trailing: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,

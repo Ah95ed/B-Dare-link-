@@ -1,8 +1,14 @@
 /// Application-wide constants
 abstract class AppConstants {
   // API Configuration
-  static const String defaultBaseUrl =
+  static const String productionBaseUrl =
       'https://wonder-link-backend.amhmeed31.workers.dev';
+  static const String localAndroidBaseUrl = 'http://10.0.2.2:8787';
+  static const String localHostBaseUrl = 'http://127.0.0.1:8787';
+  static const String defaultBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: productionBaseUrl,
+  );
   static const String jwtTokenKey = 'jwt_token';
 
   // Duration Constants
@@ -19,6 +25,7 @@ abstract class AppConstants {
   static const int legendTimeLimit = 30;
 
   // Puzzle Configuration
+  static const int puzzlesPerLevel = 5;
   static const int beginnerPuzzleCount = 3;
   static const int intermediatePuzzleCount = 4;
   static const int advancedPuzzleCount = 5;

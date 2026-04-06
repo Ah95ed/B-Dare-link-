@@ -104,10 +104,26 @@ class _GameViewState extends State<GameView> {
 
             // If there's a current puzzle, show MCQ UI
             if (puzzle != null && steps != null) ...[
-              Text(
-                '${l10n.linkStart}: ${gameProvider.currentRound?.startWord ?? ''}',
-                style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
-              ),
+              if (puzzle.type == 'لغز_شعري' || puzzle.type == 'poetic_riddle')
+                Text(
+                  puzzle.riddleTextAr?.isNotEmpty == true
+                      ? puzzle.riddleTextAr!
+                      : puzzle.riddleTextEn ?? '',
+                  style: TextStyle(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.bold,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                )
+              else
+                Text(
+                  '${l10n.linkStart}: ${gameProvider.currentRound?.startWord ?? ''}',
+                  style: TextStyle(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               SizedBox(height: 8.h),
               ...List.generate(steps.length, (i) {
                 final step = steps[i];
@@ -117,7 +133,9 @@ class _GameViewState extends State<GameView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${l10n.steps} ${i + 1}',
+                        step.stepQuestion?.isNotEmpty == true
+                            ? step.stepQuestion!
+                            : '${l10n.steps} ${i + 1}',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       SizedBox(height: 6.h),
@@ -149,10 +167,14 @@ class _GameViewState extends State<GameView> {
                 );
               }),
               SizedBox(height: 12.h),
-              Text(
-                '${l10n.linkEnd}: ${gameProvider.currentRound?.endWord ?? ''}',
-                style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
-              ),
+              if (puzzle.type != 'لغز_شعري' && puzzle.type != 'poetic_riddle')
+                Text(
+                  '${l10n.linkEnd}: ${gameProvider.currentRound?.endWord ?? ''}',
+                  style: TextStyle(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               if (puzzle.hintEn.isNotEmpty || puzzle.hintAr.isNotEmpty)
                 Padding(
                   padding: EdgeInsets.only(top: 8.h),

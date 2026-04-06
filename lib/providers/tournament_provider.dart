@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/app_constants.dart';
 
 /// Manages tournament data and participation
 class TournamentProvider extends ChangeNotifier {
-  static const String _baseUrl =
-      'https://wonder-link-backend.amhmeed31.workers.dev';
+  static const String _baseUrl = AppConstants.defaultBaseUrl;
 
   // Daily challenge state
   Map<String, dynamic>? _dailyChallenge;

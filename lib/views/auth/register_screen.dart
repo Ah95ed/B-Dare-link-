@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:email_otp/email_otp.dart';
 import 'package:provider/provider.dart';
-import 'package:wonder_link_game/l10n/app_localizations.dart';
-import 'package:wonder_link_game/providers/auth_provider.dart';
+
+import '../../l10n/app_localizations.dart';
+import '../../providers/auth_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -24,6 +25,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final l10n = AppLocalizations.of(context)!;
+
     EmailOTP.setSMTP(
       host: 'smtp.gmail.com',
       emailPort: EmailPort.port587,

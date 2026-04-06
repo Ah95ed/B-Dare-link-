@@ -79,9 +79,7 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(l10n.joinError( e.toString())),
-                        ),
+                        SnackBar(content: Text(l10n.joinError(e.toString()))),
                       );
                     }
                   }
@@ -190,7 +188,7 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                   title: Text(room['name'] ?? l10n.roomLabel),
                   subtitle: Text(
                     l10n.roomCodeParticipants(
-                     room['code'],
+                      room['code'],
                       room['participant_count'] ?? 0,
                     ),
                   ),
@@ -203,9 +201,7 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(l10n.joinError( e.toString())),
-                          ),
+                          SnackBar(content: Text(l10n.joinError(e.toString()))),
                         );
                       }
                     }
@@ -238,7 +234,7 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                   title: Text(competition['name'] ?? l10n.competitionLabel),
                   subtitle: Text(
                     l10n.competitionSubtitle(
-                       competition['participant_count'] ?? 0,
+                      competition['participant_count'] ?? 0,
                       competition['puzzle_count'] ?? 0,
                     ),
                   ),
@@ -325,9 +321,7 @@ class _CompetitionsViewState extends State<CompetitionsView> {
                 } catch (e) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10n.joinError( e.toString())),
-                      ),
+                      SnackBar(content: Text(l10n.joinError(e.toString()))),
                     );
                   }
                 }

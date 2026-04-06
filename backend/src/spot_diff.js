@@ -111,14 +111,14 @@ async function callGeminiText(env, prompt, model) {
     const geminiApiKey = env?.GEMINI_API_KEY;
     if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured');
 
-    const preferredModel = (model || env?.GEMINI_TEXT_MODEL || env?.GEMINI_MODEL || 'gemini-2.5-flash')
+    const preferredModel = (model || env?.GEMINI_TEXT_MODEL || env?.GEMINI_MODEL || 'gemini-2.0-flash')
         .replace(/-\d+$/, '');
     const fallbackModels = [
         preferredModel,
-        'gemini-2.5-flash',
-        'gemini-2.5-pro',
         'gemini-2.0-flash',
-        'gemini-2.0-flash-001',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
         'gemini-flash-latest',
     ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 

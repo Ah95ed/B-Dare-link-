@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:async';
+import 'dart:math';
 import '../models/game_round.dart';
 import '../models/game_level.dart';
 import '../models/game_puzzle.dart';
@@ -56,7 +57,9 @@ class GameProvider extends ChangeNotifier {
 
   // Puzzle Deduplication
   final Set<String> _sessionSeenPuzzleKeys = {};
+  final Set<String> _sessionSeenQuestionKeys = {};
   static const String _seenPuzzleKeysStorageKey = 'seen_puzzle_keys';
+  static const String _seenQuestionKeysStorageKey = 'seen_question_keys';
 
   // Banned words for validation
   static final Set<String> _bannedMetaWordsAr = {
@@ -145,6 +148,13 @@ class GameProvider extends ChangeNotifier {
       if (savedKeys != null) {
         _sessionSeenPuzzleKeys.addAll(savedKeys);
       }
+
+      final savedQuestionKeys = prefs.getStringList(
+        _seenQuestionKeysStorageKey,
+      );
+      if (savedQuestionKeys != null) {
+        _sessionSeenQuestionKeys.addAll(savedQuestionKeys);
+      }
     } catch (e) {
       debugPrint('Error loading progress: $e');
     }
@@ -219,7 +229,12 @@ class GameProvider extends ChangeNotifier {
   Future<void> generateNewLevel(bool isArabic) async {
     _setLoading(true);
     try {
-      final level = await _apiService.generateLevel(isArabic, _unlockedLevelId);
+      final level = await _apiService.generateLevel(
+        isArabic,
+        _unlockedLevelId,
+        fresh: true,
+        excludedQuestionKeys: _buildExcludedQuestionKeys(),
+      );
       if (level != null) {
         await loadLevel(level, isArabic);
       } else {
@@ -239,16 +254,79 @@ class GameProvider extends ChangeNotifier {
     _resetLevelState();
 
     try {
+      final targetPuzzleCount = _desiredPuzzlesForLevel(level.id);
+
       if (level.puzzles.isEmpty) {
         final puzzles = await _generatePuzzles(level.id, isArabic);
         if (puzzles.isEmpty) {
-          _errorMessage = AppStrings.failedToLoadLevelData;
-          return;
+          final emergencyFilled = _padPuzzlesToTarget(
+            const <GamePuzzle>[],
+            targetPuzzleCount,
+            level.id,
+            isArabic,
+          );
+          _currentLevel = GameLevel(id: level.id, puzzles: emergencyFilled);
+          _errorMessage = null;
+        } else {
+          final filled = _padPuzzlesToTarget(
+            puzzles,
+            targetPuzzleCount,
+            level.id,
+            isArabic,
+          );
+          _currentLevel = GameLevel(id: level.id, puzzles: filled);
+          await _saveSeenPuzzleKeys();
         }
-        _currentLevel = GameLevel(id: level.id, puzzles: puzzles);
-        await _saveSeenPuzzleKeys();
       } else {
-        _currentLevel = level;
+        final validExisting = level.puzzles
+            .where(_isValidPuzzle)
+            .where((p) => _tryRegisterPuzzle(p, isArabic))
+            .toList();
+        final existingLimited = validExisting.take(targetPuzzleCount).toList();
+
+        if (existingLimited.length < targetPuzzleCount) {
+          final generated = await _generatePuzzles(level.id, isArabic);
+          final merged = <GamePuzzle>[...existingLimited];
+
+          for (final puzzle in generated) {
+            if (merged.length >= targetPuzzleCount) break;
+            final key = _generatePuzzleKey(puzzle, isArabic);
+            final alreadyExists = merged.any(
+              (p) => _generatePuzzleKey(p, isArabic) == key,
+            );
+            if (!alreadyExists) {
+              merged.add(puzzle);
+            }
+          }
+
+          if (merged.isEmpty) {
+            final emergencyFilled = _padPuzzlesToTarget(
+              const <GamePuzzle>[],
+              targetPuzzleCount,
+              level.id,
+              isArabic,
+            );
+            _currentLevel = GameLevel(id: level.id, puzzles: emergencyFilled);
+            _errorMessage = null;
+          } else {
+            final filled = _padPuzzlesToTarget(
+              merged,
+              targetPuzzleCount,
+              level.id,
+              isArabic,
+            );
+            _currentLevel = GameLevel(id: level.id, puzzles: filled);
+            await _saveSeenPuzzleKeys();
+          }
+        } else {
+          final filled = _padPuzzlesToTarget(
+            existingLimited,
+            targetPuzzleCount,
+            level.id,
+            isArabic,
+          );
+          _currentLevel = GameLevel(id: level.id, puzzles: filled);
+        }
       }
 
       _currentPuzzleIndex = 0;
@@ -294,7 +372,12 @@ class GameProvider extends ChangeNotifier {
       try {
         final futures = List.generate(
           batchSize,
-          (_) => _apiService.generateLevel(isArabic, levelId),
+          (_) => _apiService.generateLevel(
+            isArabic,
+            levelId,
+            fresh: true,
+            excludedQuestionKeys: _buildExcludedQuestionKeys(),
+          ),
         );
 
         final results = await Future.wait(futures);
@@ -304,8 +387,7 @@ class GameProvider extends ChangeNotifier {
           final puzzle = levelData!.puzzles.first;
           if (!_isValidPuzzle(puzzle)) continue;
 
-          final key = _generatePuzzleKey(puzzle, isArabic);
-          if (_sessionSeenPuzzleKeys.add(key)) {
+          if (_tryRegisterPuzzle(puzzle, isArabic)) {
             puzzles.add(puzzle);
           }
 
@@ -321,35 +403,79 @@ class GameProvider extends ChangeNotifier {
 
   /// Generate a puzzle key for deduplication
   String _generatePuzzleKey(GamePuzzle puzzle, bool isArabic) {
-    if (puzzle.puzzleId != null && puzzle.puzzleId!.isNotEmpty) {
-      return puzzle.puzzleId!;
-    }
+    // Never use puzzleId for deduplication because it's often random per request.
+    // Content-based key ensures repeated puzzles are filtered even with different ids.
 
     if (isArabic) {
       final steps = puzzle.stepsAr.map((s) => s.word).join(',');
-      return '${puzzle.startWordAr}|${puzzle.endWordAr}|$steps';
+      final type = puzzle.type;
+      return '$type|${puzzle.startWordAr}|${puzzle.endWordAr}|$steps';
     } else {
       final steps = puzzle.stepsEn.map((s) => s.word).join(',');
-      return '${puzzle.startWordEn}|${puzzle.endWordEn}|$steps';
+      final type = puzzle.type;
+      return '$type|${puzzle.startWordEn}|${puzzle.endWordEn}|$steps';
     }
+  }
+
+  String _generateQuestionKey(GamePuzzle puzzle, bool isArabic) {
+    final type = puzzle.type ?? 'logical_chain';
+    if (isArabic) {
+      return '$type|${puzzle.startWordAr.trim()}|${puzzle.endWordAr.trim()}';
+    }
+    return '$type|${puzzle.startWordEn.trim()}|${puzzle.endWordEn.trim()}';
+  }
+
+  bool _tryRegisterPuzzle(GamePuzzle puzzle, bool isArabic) {
+    final puzzleKey = _generatePuzzleKey(puzzle, isArabic);
+    final questionKey = _generateQuestionKey(puzzle, isArabic);
+
+    if (_sessionSeenPuzzleKeys.contains(puzzleKey)) return false;
+    if (_sessionSeenQuestionKeys.contains(questionKey)) return false;
+
+    _sessionSeenPuzzleKeys.add(puzzleKey);
+    _sessionSeenQuestionKeys.add(questionKey);
+    return true;
+  }
+
+  List<String> _buildExcludedQuestionKeys({int maxKeys = 180}) {
+    final keys = _sessionSeenQuestionKeys.toList();
+    if (keys.length <= maxKeys) return keys;
+    return keys.sublist(keys.length - maxKeys);
   }
 
   // ============ Puzzle Validation ============
 
   /// Check if a puzzle is valid
   bool _isValidPuzzle(GamePuzzle puzzle) {
-    final start = _isArabic ? puzzle.startWordAr : puzzle.startWordEn;
-    final end = _isArabic ? puzzle.endWordAr : puzzle.endWordEn;
+    final isPoetic =
+        puzzle.type == 'لغز_شعري' || puzzle.type == 'poetic_riddle';
 
-    if (_isMetaWord(start) || _isMetaWord(end)) return false;
-    if (start.trim() == end.trim()) return false;
+    if (!isPoetic) {
+      final start = _isArabic ? puzzle.startWordAr : puzzle.startWordEn;
+      final end = _isArabic ? puzzle.endWordAr : puzzle.endWordEn;
+
+      if (_isMetaWord(start) || _isMetaWord(end)) return false;
+      if (start.trim() == end.trim()) return false;
+    }
 
     final steps = _isArabic ? puzzle.stepsAr : puzzle.stepsEn;
     if (steps.isEmpty) return false;
 
+    final chainWords = <String>[
+      (_isArabic ? puzzle.startWordAr : puzzle.startWordEn)
+          .trim()
+          .toLowerCase(),
+      ...steps.map((s) => s.word.trim().toLowerCase()),
+      (_isArabic ? puzzle.endWordAr : puzzle.endWordEn).trim().toLowerCase(),
+    ].where((w) => w.isNotEmpty).toList();
+
+    if (chainWords.toSet().length != chainWords.length) {
+      return false;
+    }
+
     for (final step in steps) {
       if (_isMetaWord(step.word)) return false;
-      if (step.options.length != 3) return false;
+      if (step.options.length != 4) return false;
       if (!step.options.contains(step.word)) return false;
     }
 
@@ -398,9 +524,38 @@ class GameProvider extends ChangeNotifier {
     }
   }
 
+  /// Validate chain instantly for tap-based answers (no loading spinner/debounce)
+  Future<bool> validateChainImmediate(List<String> userSteps) async {
+    _errorMessage = null;
+
+    try {
+      final puzzle = currentPuzzle;
+      if (puzzle == null) return false;
+
+      final steps = _isArabic ? puzzle.stepsAr : puzzle.stepsEn;
+
+      if (!_isChainCorrect(userSteps, steps)) {
+        _errorMessage = _isArabic
+            ? AppStrings.incorrectAnswerAr
+            : AppStrings.incorrectAnswer;
+        decrementLives();
+        await advancePuzzle();
+        return false;
+      }
+
+      incrementScore(AppConstants.stepScore);
+      await advancePuzzle();
+      return true;
+    } catch (e) {
+      _errorMessage = AppStrings.failedToValidateLink;
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Check if user's chain is correct
   bool _isChainCorrect(List<String> userSteps, List<dynamic> steps) {
-    if (userSteps.length != steps.length) return false;
+    if (userSteps.length < steps.length) return false;
 
     for (int i = 0; i < steps.length; i++) {
       if (userSteps[i].trim().toLowerCase() != steps[i].word.toLowerCase()) {
@@ -611,6 +766,7 @@ class GameProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       var keysToSave = _sessionSeenPuzzleKeys.toList();
+      var questionKeysToSave = _sessionSeenQuestionKeys.toList();
 
       if (keysToSave.length > AppConstants.maxSeenPuzzleKeys) {
         keysToSave.removeRange(
@@ -619,7 +775,18 @@ class GameProvider extends ChangeNotifier {
         );
       }
 
+      if (questionKeysToSave.length > AppConstants.maxSeenPuzzleKeys) {
+        questionKeysToSave.removeRange(
+          0,
+          questionKeysToSave.length - AppConstants.maxSeenPuzzleKeys,
+        );
+      }
+
       await prefs.setStringList(_seenPuzzleKeysStorageKey, keysToSave);
+      await prefs.setStringList(
+        _seenQuestionKeysStorageKey,
+        questionKeysToSave,
+      );
     } catch (e) {
       debugPrint('Error saving puzzle keys: $e');
     }
@@ -652,16 +819,278 @@ class GameProvider extends ChangeNotifier {
 
   /// Get desired puzzle count for level
   int _desiredPuzzlesForLevel(int levelId) {
-    if (levelId <= AppConstants.beginnerMaxLevel) {
-      return AppConstants.beginnerPuzzleCount;
+    return AppConstants.puzzlesPerLevel;
+  }
+
+  List<GamePuzzle> _padPuzzlesToTarget(
+    List<GamePuzzle> puzzles,
+    int targetCount,
+    int levelId,
+    bool isArabic,
+  ) {
+    final filled = <GamePuzzle>[...puzzles];
+    final levelQuestionKeys = <String>{
+      ...filled.map((p) => _generateQuestionKey(p, isArabic)),
+    };
+
+    bool tryAdd(GamePuzzle candidate) {
+      final questionKey = _generateQuestionKey(candidate, isArabic);
+      if (levelQuestionKeys.contains(questionKey)) return false;
+      levelQuestionKeys.add(questionKey);
+      _tryRegisterPuzzle(candidate, isArabic);
+      filled.add(candidate);
+      return true;
     }
-    if (levelId <= AppConstants.intermediateMaxLevel) {
-      return AppConstants.intermediatePuzzleCount;
+
+    var seed = levelId * 100;
+    var guard = 0;
+
+    while (filled.length < targetCount && guard < 200) {
+      final emergency = _buildEmergencyPuzzle(
+        isArabic,
+        levelId: levelId,
+        seed: seed++,
+      );
+      if (tryAdd(emergency)) {}
+      guard++;
     }
-    if (levelId <= AppConstants.advancedMaxLevel) {
-      return AppConstants.advancedPuzzleCount;
+
+    var rescueGuard = 0;
+    while (filled.length < targetCount && rescueGuard < 600) {
+      final emergency = _buildEmergencyPuzzle(
+        isArabic,
+        levelId: levelId,
+        seed: seed++,
+      );
+      if (tryAdd(emergency)) {
+        rescueGuard++;
+        continue;
+      }
+
+      // Last-resort: produce a question-variant so the question key is unique.
+      final flavored = _withUniqueQuestionFlavor(
+        emergency,
+        isArabic: isArabic,
+        seed: seed++,
+      );
+      tryAdd(flavored);
+      rescueGuard++;
     }
-    return AppConstants.expertPuzzleCount;
+
+    while (filled.length < targetCount) {
+      final emergency = _buildEmergencyPuzzle(
+        isArabic,
+        levelId: levelId,
+        seed: seed++,
+      );
+      filled.add(emergency);
+    }
+
+    return filled.take(targetCount).toList();
+  }
+
+  GamePuzzle _buildEmergencyPuzzle(
+    bool isArabic, {
+    required int levelId,
+    int seed = 0,
+  }) {
+    final arTemplates = <Map<String, dynamic>>[
+      {
+        'start': 'تعلم',
+        'end': 'معرفة',
+        'steps': [
+          PuzzleStep(word: 'قراءة', options: ['قراءة', 'طبخ', 'ركض', 'نوم']),
+          PuzzleStep(word: 'فهم', options: ['فهم', 'ضوضاء', 'تعب', 'صخب']),
+        ],
+      },
+      {
+        'start': 'شمس',
+        'end': 'ظل',
+        'steps': [
+          PuzzleStep(word: 'ضوء', options: ['ضوء', 'صوت', 'رائحة', 'برد']),
+          PuzzleStep(word: 'جسم', options: ['جسم', 'هواء', 'ماء', 'ثلج']),
+        ],
+      },
+      {
+        'start': 'كتاب',
+        'end': 'مكتبة',
+        'steps': [
+          PuzzleStep(word: 'قراءة', options: ['قراءة', 'طبخ', 'سباحة', 'لعب']),
+          PuzzleStep(word: 'معرفة', options: ['معرفة', 'ضوضاء', 'ملل', 'تعب']),
+        ],
+      },
+      {
+        'start': 'قهوة',
+        'end': 'نشاط',
+        'steps': [
+          PuzzleStep(word: 'كافيين', options: ['كافيين', 'سكر', 'ملح', 'ماء']),
+          PuzzleStep(word: 'تركيز', options: ['تركيز', 'نعاس', 'كسل', 'تشتت']),
+        ],
+      },
+    ];
+
+    final enTemplates = <Map<String, dynamic>>[
+      {
+        'start': 'Learn',
+        'end': 'Knowledge',
+        'steps': [
+          PuzzleStep(
+            word: 'Reading',
+            options: ['Reading', 'Cooking', 'Running', 'Sleeping'],
+          ),
+          PuzzleStep(
+            word: 'Understanding',
+            options: ['Understanding', 'Noise', 'Fatigue', 'Confusion'],
+          ),
+        ],
+      },
+      {
+        'start': 'Sun',
+        'end': 'Shadow',
+        'steps': [
+          PuzzleStep(
+            word: 'Light',
+            options: ['Light', 'Sound', 'Smell', 'Cold'],
+          ),
+          PuzzleStep(
+            word: 'Object',
+            options: ['Object', 'Air', 'Water', 'Ice'],
+          ),
+        ],
+      },
+      {
+        'start': 'Book',
+        'end': 'Library',
+        'steps': [
+          PuzzleStep(
+            word: 'Reading',
+            options: ['Reading', 'Cooking', 'Driving', 'Swimming'],
+          ),
+          PuzzleStep(
+            word: 'Knowledge',
+            options: ['Knowledge', 'Noise', 'Fatigue', 'Confusion'],
+          ),
+        ],
+      },
+      {
+        'start': 'Coffee',
+        'end': 'Energy',
+        'steps': [
+          PuzzleStep(
+            word: 'Caffeine',
+            options: ['Caffeine', 'Salt', 'Sugar', 'Water'],
+          ),
+          PuzzleStep(
+            word: 'Focus',
+            options: ['Focus', 'Sleep', 'Laziness', 'Distraction'],
+          ),
+        ],
+      },
+    ];
+
+    final templates = isArabic ? arTemplates : enTemplates;
+    final index = (seed + levelId * 7) % templates.length;
+    final template = templates[index];
+    final steps = List<PuzzleStep>.from(template['steps'] as List<PuzzleStep>);
+
+    final start = template['start'] as String;
+    final end = template['end'] as String;
+    final chain = [start, ...steps.map((s) => s.word), end];
+    final pathOptions = [
+      chain.take(4).join(' '),
+      [chain[1], chain[0], chain[2], chain[3]].join(' '),
+      [chain[2], chain[1], chain[0], chain[3]].join(' '),
+      [chain[0], chain[2], chain[1], chain[3]].join(' '),
+    ];
+
+    pathOptions.shuffle(Random(seed + levelId * 13));
+    final correctIndex = pathOptions.indexWhere(
+      (option) => option == chain.take(4).join(' '),
+    );
+
+    return GamePuzzle(
+      startWordAr: isArabic ? start : 'مرحلة',
+      endWordAr: isArabic ? end : 'جديدة',
+      stepsAr: isArabic ? steps : [],
+      startWordEn: isArabic ? 'New' : start,
+      endWordEn: isArabic ? 'Stage' : end,
+      stepsEn: isArabic ? [] : steps,
+      hintAr: isArabic ? 'لغز احتياطي مؤقت' : '',
+      hintEn: isArabic ? '' : 'Temporary fallback puzzle',
+      type: 'logical_chain',
+      pathOptions: pathOptions,
+      correctPathIndex: correctIndex >= 0 ? correctIndex : 0,
+      puzzleId: 'emergency_${isArabic ? 'ar' : 'en'}_$seed',
+    );
+  }
+
+  GamePuzzle _withUniqueQuestionFlavor(
+    GamePuzzle puzzle, {
+    required bool isArabic,
+    required int seed,
+  }) {
+    const arFlavors = [
+      'مميز',
+      'متنوع',
+      'حديث',
+      'عميق',
+      'دقيق',
+      'خاص',
+      'مختلف',
+      'فريد',
+    ];
+    const enFlavors = [
+      'Special',
+      'Fresh',
+      'Deep',
+      'Unique',
+      'Focused',
+      'Modern',
+      'Distinct',
+      'Dynamic',
+    ];
+
+    if (isArabic) {
+      final startFlavor = arFlavors[seed % arFlavors.length];
+      final endFlavor = arFlavors[(seed + 3) % arFlavors.length];
+      return GamePuzzle(
+        puzzleId: '${puzzle.puzzleId ?? 'emergency'}_v_$seed',
+        startWordAr: '${puzzle.startWordAr} $startFlavor',
+        endWordAr: '${puzzle.endWordAr} $endFlavor',
+        stepsAr: puzzle.stepsAr,
+        startWordEn: puzzle.startWordEn,
+        endWordEn: puzzle.endWordEn,
+        stepsEn: puzzle.stepsEn,
+        hintAr: puzzle.hintAr,
+        hintEn: puzzle.hintEn,
+        type: puzzle.type,
+        difficulty: puzzle.difficulty,
+        riddleTextAr: puzzle.riddleTextAr,
+        riddleTextEn: puzzle.riddleTextEn,
+        pathOptions: puzzle.pathOptions,
+        correctPathIndex: puzzle.correctPathIndex,
+      );
+    }
+
+    final startFlavor = enFlavors[seed % enFlavors.length];
+    final endFlavor = enFlavors[(seed + 3) % enFlavors.length];
+    return GamePuzzle(
+      puzzleId: '${puzzle.puzzleId ?? 'emergency'}_v_$seed',
+      startWordAr: puzzle.startWordAr,
+      endWordAr: puzzle.endWordAr,
+      stepsAr: puzzle.stepsAr,
+      startWordEn: '${puzzle.startWordEn} $startFlavor',
+      endWordEn: '${puzzle.endWordEn} $endFlavor',
+      stepsEn: puzzle.stepsEn,
+      hintAr: puzzle.hintAr,
+      hintEn: puzzle.hintEn,
+      type: puzzle.type,
+      difficulty: puzzle.difficulty,
+      riddleTextAr: puzzle.riddleTextAr,
+      riddleTextEn: puzzle.riddleTextEn,
+      pathOptions: puzzle.pathOptions,
+      correctPathIndex: puzzle.correctPathIndex,
+    );
   }
 
   // ============ Helpers ============

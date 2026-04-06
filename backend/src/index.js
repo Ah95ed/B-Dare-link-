@@ -10,6 +10,7 @@ import { listPuzzles, deletePuzzle, regeneratePuzzle, generateBulkPuzzles } from
 import { getDailyChallenge, submitDailyScore, getDailyLeaderboard, getWeeklyStandings } from './tournament.js';
 import { generatePuzzleFromImage } from './vision.js';
 import { generateSpotDiffPuzzle } from './spot_diff.js';
+import { cleanupPuzzlesEndpoint, runPuzzleCleanup } from './cleanup.js';
 import {
   createRoom,
   joinRoom,
@@ -167,7 +168,7 @@ export default {
           return errorResponse('GEMINI_API_KEY not configured', 500);
         }
 
-        const model = 'gemini-2.5-flash';
+        const model = 'gemini-2.0-flash';
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const testResponse = await fetch(url, {
           method: 'POST',
@@ -192,6 +193,9 @@ export default {
       if (path.startsWith('/admin/puzzles')) {
         if (request.method === 'GET') return await listPuzzles(request, env);
         if (request.method === 'DELETE') return await deletePuzzle(request, env);
+      }
+      if (path === '/admin/puzzles/cleanup' && request.method === 'POST') {
+        return await cleanupPuzzlesEndpoint(request, env);
       }
       if (path === '/admin/puzzles/regenerate' && request.method === 'POST') {
         return await regeneratePuzzle(request, env, CORS_HEADERS);
@@ -358,6 +362,23 @@ export default {
     } catch (e) {
       console.error(e);
       return errorResponse(e.message, 500);
+    }
+  },
+
+  async scheduled(event, env, ctx) {
+    try {
+      const task = runPuzzleCleanup(env, {
+        maxPerGroup: Number(env?.PUZZLE_RETENTION_PER_GROUP ?? 1200),
+        maxAgeDays: Number(env?.PUZZLE_RETENTION_DAYS ?? 45),
+        recentProtect: Number(env?.PUZZLE_RECENT_PROTECT ?? 250),
+      });
+      if (ctx?.waitUntil) {
+        ctx.waitUntil(task);
+      } else {
+        await task;
+      }
+    } catch (e) {
+      console.error('Scheduled puzzle cleanup failed:', e);
     }
   },
 };

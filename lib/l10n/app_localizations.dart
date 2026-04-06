@@ -320,6 +320,30 @@ abstract class AppLocalizations {
   /// **'Registration Failed'**
   String get registrationFailed;
 
+  /// No description provided for @invalidCredentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid email or password'**
+  String get invalidCredentials;
+
+  /// No description provided for @networkTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Request timeout. Check your connection and try again'**
+  String get networkTimeout;
+
+  /// No description provided for @noConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'No network connection. Check your internet'**
+  String get noConnection;
+
+  /// No description provided for @serverError.
+  ///
+  /// In en, this message translates to:
+  /// **'Server error. Please try later'**
+  String get serverError;
+
   /// No description provided for @resetPasswordInstructions.
   ///
   /// In en, this message translates to:
@@ -491,7 +515,7 @@ abstract class AppLocalizations {
   /// No description provided for @authRequired.
   ///
   /// In en, this message translates to:
-  /// **'To continue after level 3, please register or log in.'**
+  /// **'You need to register first to continue.'**
   String get authRequired;
 
   /// No description provided for @cantAdvanceWithoutLogin.

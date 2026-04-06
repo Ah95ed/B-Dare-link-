@@ -55,7 +55,7 @@ class ProfileScreen extends StatelessWidget {
                   Card(
                     child: ListTile(
                       leading: const Icon(Icons.star, color: Colors.amber),
-                      title: const Text("Total Score"),
+                      title: Text(l10n.totalScore),
                       trailing: Text(
                         "${user['total_score'] ?? 0}",
                         style: const TextStyle(
@@ -75,7 +75,7 @@ class ProfileScreen extends StatelessWidget {
                       }
                     },
                     icon: const Icon(Icons.logout),
-                    label: const Text("Logout"),
+                    label: Text(l10n.logout),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey,
                     ),
@@ -103,7 +103,7 @@ class ProfileScreen extends StatelessWidget {
                               },
                               child: Text(
                                 l10n.delete,
-                                style: TextStyle(color: Colors.red),
+                                style: const TextStyle(color: Colors.red),
                               ),
                             ),
                           ],
@@ -112,7 +112,7 @@ class ProfileScreen extends StatelessWidget {
                     },
                     child: Text(
                       l10n.deleteAccount,
-                      style: TextStyle(color: Colors.red),
+                      style: const TextStyle(color: Colors.red),
                     ),
                   ),
                 ],

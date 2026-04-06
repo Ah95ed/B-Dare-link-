@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../constants/app_constants.dart';
 
 import '../../services/auth_service.dart';
 
@@ -8,7 +9,7 @@ const String _devAdminToken = String.fromEnvironment(
   'DEV_ADMIN_TOKEN',
   defaultValue: '',
 );
-const String _apiBase = 'https://wonder-link-backend.amhmeed31.workers.dev';
+const String _apiBase = AppConstants.defaultBaseUrl;
 
 /// Admin API service for puzzle management
 class AdminService {

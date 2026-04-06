@@ -316,11 +316,13 @@ class CompetitionProvider with ChangeNotifier {
         _hostId = _currentRoom!['created_by'].toString();
         debugPrint('👑 Host ID set from joinRoom: $_hostId');
       }
-
-      _connectRealtime();
-      await refreshRoomStatus();
-      await loadMyRooms();
+      _errorMessage = null;
       notifyListeners();
+      _connectRealtime();
+      Future(() async {
+        await refreshRoomStatus();
+        await loadMyRooms();
+      });
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();

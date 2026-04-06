@@ -109,10 +109,22 @@ function validateLanguage(text, language) {
     return { valid: true };
 }
 
+function countWords(text) {
+    if (!text) return 0;
+    const cleaned = String(text)
+        .replace(/[→]/g, ' ')
+        .replace(/[.,;:!?()\[\]{}"'“”‘’،؛؟]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!cleaned) return 0;
+    return cleaned.split(' ').filter(Boolean).length;
+}
+
 // Validate puzzle JSON structure and content
 export function validatePuzzle(puzzle, language = 'en', options = {}) {
     const errors = [];
     const warnings = [];
+    const minOptionWords = Number(options?.minOptionWords ?? 4);
 
     if (!puzzle || typeof puzzle !== 'object') {
         return { valid: false, errors: ['Puzzle is not a valid object'] };
@@ -170,6 +182,11 @@ export function validatePuzzle(puzzle, language = 'en', options = {}) {
         }
         if (opt.length > 200) {
             errors.push(`Option ${idx} is too long`);
+        }
+
+        const wordCount = countWords(opt);
+        if (wordCount < minOptionWords) {
+            errors.push(`Option ${idx} has fewer than ${minOptionWords} words`);
         }
 
         // Check for duplicates (case-insensitive)

@@ -46,10 +46,7 @@ class _RoomGameViewState extends State<RoomGameView> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              l10n.roomQuestionCount(
-                 currentIndex,
-                 totalPuzzles,
-              ),
+              l10n.roomQuestionCount(currentIndex, totalPuzzles),
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w700,
@@ -232,10 +229,7 @@ class _RoomGameViewState extends State<RoomGameView> {
                         isRevealed: false,
                         onTap: () {
                           debugPrint(
-                            l10n.roomLogButtonTapped(
-                               optionText,
-                              index,
-                            ),
+                            l10n.roomLogButtonTapped(optionText, index),
                           );
 
                           if (_isSubmitting) {
@@ -279,7 +273,7 @@ class _RoomGameViewState extends State<RoomGameView> {
       return;
     }
 
-    debugPrint(l10n.roomLogSubmittingAnswer( answerIndex));
+    debugPrint(l10n.roomLogSubmittingAnswer(answerIndex));
     setState(() => _isSubmitting = true);
 
     try {
@@ -287,7 +281,7 @@ class _RoomGameViewState extends State<RoomGameView> {
       await provider.submitQuizAnswer(answerIndex);
       debugPrint(l10n.roomLogSubmittedSuccess);
     } catch (e) {
-      debugPrint(l10n.roomLogSubmitError( e.toString()));
+      debugPrint(l10n.roomLogSubmitError(e.toString()));
     } finally {
       if (mounted) {
         debugPrint(l10n.roomLogResettingState);
@@ -314,7 +308,7 @@ class _RoomGameViewState extends State<RoomGameView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            l10n.roomStartFrom( startWord),
+            l10n.roomStartFrom(startWord),
             style: TextStyle(
               color: AppColors.cyan,
               fontSize: 18,
@@ -323,7 +317,7 @@ class _RoomGameViewState extends State<RoomGameView> {
           ),
           const SizedBox(height: 12),
           Text(
-            l10n.roomEndAt( endWord),
+            l10n.roomEndAt(endWord),
             style: TextStyle(
               color: AppColors.success,
               fontSize: 18,
@@ -333,7 +327,7 @@ class _RoomGameViewState extends State<RoomGameView> {
           const SizedBox(height: 16),
           if (hint.isNotEmpty)
             Text(
-              l10n.roomHintLabel( hint),
+              l10n.roomHintLabel(hint),
               style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
             ),
         ],
@@ -495,7 +489,7 @@ class _RoomGameViewState extends State<RoomGameView> {
           builder: (context, setState) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(l10n.currentDifficulty( current)),
+              Text(l10n.currentDifficulty(current)),
               const SizedBox(height: 12),
               Slider(
                 value: selected.toDouble(),

@@ -120,6 +120,19 @@ class AppLocalizationsAr extends AppLocalizations {
   String get registrationFailed => 'فشل إنشاء الحساب';
 
   @override
+  String get invalidCredentials => 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+
+  @override
+  String get networkTimeout =>
+      'انتهت المهلة الزمنية. تحقق من اتصالك بالإنترنت وحاول مرة أخرى';
+
+  @override
+  String get noConnection => 'خطأ في الاتصال. تأكد من اتصالك بالإنترنت';
+
+  @override
+  String get serverError => 'خطأ في الخادم. حاول لاحقاً';
+
+  @override
   String get resetPasswordInstructions =>
       'أدخل بريدك الإلكتروني المسجل لتلقي رمز التحقق.';
 
@@ -223,8 +236,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get authRequired =>
-      'للمتابعة بعد المرحلة الثالثة، يرجى التسجيل أو تسجيل الدخول.';
+  String get authRequired => 'عليك التسجيل بالاول لتتمكن من الاستمرار.';
 
   @override
   String get cantAdvanceWithoutLogin => 'لا يمكنك المتابعة دون تسجيل الدخول.';

@@ -1,5 +1,12 @@
 PRAGMA foreign_keys = OFF;
 
+DROP TABLE IF EXISTS manager_actions;
+DROP TABLE IF EXISTS puzzle_reports;
+DROP TABLE IF EXISTS room_settings;
+DROP TABLE IF EXISTS room_puzzle_history;
+DROP TABLE IF EXISTS room_puzzles;
+DROP TABLE IF EXISTS daily_scores;
+DROP TABLE IF EXISTS daily_challenges;
 DROP TABLE IF EXISTS room_results;
 DROP TABLE IF EXISTS competition_results;
 DROP TABLE IF EXISTS room_participants;
@@ -245,8 +252,28 @@ CREATE TABLE manager_actions (
 );
 
 CREATE INDEX idx_manager_actions_room ON manager_actions(room_id);
-CREATE INDEX idx_manager_actions_manager ON manager_actions(manager_user_id);
+-- Daily Challenges (التحديات اليومية)
+CREATE TABLE daily_challenges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT UNIQUE NOT NULL, -- YYYY-MM-DD
+  puzzle_json TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Daily Scores (نتائج التحديات اليومية)
+CREATE TABLE daily_scores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  score INTEGER DEFAULT 0,
+  time_taken INTEGER DEFAULT 0,
+  mistakes INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  UNIQUE(user_id, date)
+);
+
+CREATE INDEX idx_daily_scores_date ON daily_scores(date);
 
 PRAGMA foreign_keys = ON;
-
-

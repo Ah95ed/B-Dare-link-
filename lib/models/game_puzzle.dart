@@ -11,6 +11,13 @@ class GamePuzzle {
   final String hintAr;
   final String hintEn;
 
+  final String? type;
+  final String? difficulty;
+  final String? riddleTextAr;
+  final String? riddleTextEn;
+  final List<String>? pathOptions;
+  final int? correctPathIndex;
+
   GamePuzzle({
     this.puzzleId,
     required this.startWordAr,
@@ -21,6 +28,12 @@ class GamePuzzle {
     required this.stepsEn,
     this.hintAr = "",
     this.hintEn = "",
+    this.type,
+    this.difficulty,
+    this.riddleTextAr,
+    this.riddleTextEn,
+    this.pathOptions,
+    this.correctPathIndex,
   });
 
   factory GamePuzzle.fromJson(Map<String, dynamic> json) {
@@ -45,6 +58,17 @@ class GamePuzzle {
           [],
       hintAr: json['hintAr'] ?? json['hint'] ?? '',
       hintEn: json['hintEn'] ?? json['hint'] ?? '',
+      type: json['type']?.toString(),
+      difficulty: json['difficulty']?.toString(),
+      riddleTextAr: json['riddleTextAr'] ?? json['riddleText']?.toString(),
+      riddleTextEn: json['riddleTextEn'] ?? json['riddleText']?.toString(),
+      pathOptions: (json['pathOptions'] as List?)
+          ?.map((e) => e.toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList(),
+      correctPathIndex: json['correctPathIndex'] is int
+          ? json['correctPathIndex'] as int
+          : int.tryParse(json['correctPathIndex']?.toString() ?? ''),
     );
   }
 }
@@ -52,8 +76,9 @@ class GamePuzzle {
 class PuzzleStep {
   final String word;
   final List<String> options;
+  final String? stepQuestion;
 
-  PuzzleStep({required this.word, required this.options});
+  PuzzleStep({required this.word, required this.options, this.stepQuestion});
 
   // Helper for simple string list compatibility if needed
   static PuzzleStep fromSimple(String word) =>
@@ -63,6 +88,7 @@ class PuzzleStep {
     return PuzzleStep(
       word: json['word'] ?? '',
       options: List<String>.from(json['options'] ?? []),
+      stepQuestion: json['stepQuestion']?.toString(),
     );
   }
 }

@@ -6,19 +6,23 @@ import '../models/game_level.dart';
 import '../models/game_puzzle.dart';
 import '../models/spot_diff_puzzle.dart';
 import '../core/exceptions/app_exceptions.dart';
+import '../constants/app_constants.dart';
 
 class CloudflareApiService {
-  static const String _defaultWorkerUrl =
-      'https://wonder-link-backend.amhmeed31.workers.dev';
+  static const String _defaultWorkerUrl = AppConstants.defaultBaseUrl;
   late final String _workerUrl = const String.fromEnvironment(
-    'WORKER_URL',
-    defaultValue: _defaultWorkerUrl,
+    'API_BASE_URL',
+    defaultValue: String.fromEnvironment(
+      'WORKER_URL',
+      defaultValue: _defaultWorkerUrl,
+    ),
   );
 
   Future<GameLevel?> generateLevel(
     bool isArabic,
     int levelId, {
     bool fresh = false,
+    List<String> excludedQuestionKeys = const [],
   }) async {
     try {
       final response = await http.post(
@@ -27,7 +31,9 @@ class CloudflareApiService {
         body: jsonEncode({
           'language': isArabic ? 'ar' : 'en',
           'level': levelId,
+          'source': 'ai',
           'fresh': fresh,
+          'excludeQuestionKeys': excludedQuestionKeys,
         }),
       );
 
@@ -46,13 +52,31 @@ class CloudflareApiService {
 
         final startWord = data['startWord']?.toString().trim() ?? '';
         final endWord = data['endWord']?.toString().trim() ?? '';
-        if (startWord.isEmpty || endWord.isEmpty || startWord == endWord) {
-          throw GameException.puzzleLoadFailed(
-            'Invalid start/end words from API',
-          );
+        final String? type = data['type']?.toString();
+        final bool isPoetic = type == 'لغز_شعري' || type == 'poetic_riddle';
+
+        if (!isPoetic) {
+          if (startWord.isEmpty || endWord.isEmpty || startWord == endWord) {
+            throw GameException.puzzleLoadFailed(
+              'Invalid start/end words from API',
+            );
+          }
         }
 
-        // Defensive normalization: ensure each step has 3 options and includes the correct word
+        final fallbackWords = isArabic
+            ? ['كتاب', 'قلم', 'نور', 'علم', 'باب', 'صوت', 'ورق', 'فكر']
+            : [
+                'Book',
+                'Pen',
+                'Light',
+                'Mind',
+                'Door',
+                'Sound',
+                'Paper',
+                'Idea',
+              ];
+
+        // Defensive normalization: ensure each step has 4 options and includes the correct word
         List<PuzzleStep> steps = [];
         if (data['steps'] != null && data['steps'] is List) {
           // Prepare a global pool of candidate distractors
@@ -67,7 +91,12 @@ class CloudflareApiService {
 
           for (var s in data['steps']) {
             try {
-              final word = s['word']?.toString() ?? '';
+              final word =
+                  s['word']?.toString() ?? s['correctAnswer']?.toString() ?? '';
+              if (word.trim().isEmpty) {
+                continue;
+              }
+              final stepQuestion = s['stepQuestion']?.toString();
               List<String> options = [];
               if (s['options'] is List) {
                 options = List<String>.from(
@@ -77,7 +106,7 @@ class CloudflareApiService {
 
               // Ensure the correct word is present
               if (!options.contains(word)) {
-                if (options.length >= 3) {
+                if (options.length >= 4) {
                   options[options.length - 1] = word;
                 } else {
                   options.add(word);
@@ -92,23 +121,43 @@ class CloudflareApiService {
                 return true;
               }).toList();
 
-              // Fill up to 3 using globalPool (excluding the correct word)
+              // Fill up to 4 using globalPool (excluding the correct word)
               for (final candidate in globalPool) {
-                if (options.length >= 3) break;
+                if (options.length >= 4) break;
                 if (candidate != word && !options.contains(candidate)) {
                   options.add(candidate);
                 }
               }
 
               // If still short, append placeholder variants
-              while (options.length < 3) {
-                options.add('${word}_opt');
+              while (options.length < 4) {
+                for (final fallback in fallbackWords) {
+                  if (options.length >= 4) break;
+                  if (fallback != word && !options.contains(fallback)) {
+                    options.add(fallback);
+                  }
+                }
+                if (options.length < 4) {
+                  options.add(word);
+                }
+              }
+
+              // Enforce exactly 4 options to satisfy client validation.
+              if (options.length > 4) {
+                final withoutWord = options.where((o) => o != word).toList();
+                options = [word, ...withoutWord.take(3)];
               }
 
               // Shuffle options
               options.shuffle();
 
-              steps.add(PuzzleStep(word: word, options: options));
+              steps.add(
+                PuzzleStep(
+                  word: word,
+                  options: options,
+                  stepQuestion: stepQuestion,
+                ),
+              );
             } catch (e) {
               // skip malformed step
               debugPrint('Malformed step from API: $e');
@@ -128,20 +177,34 @@ class CloudflareApiService {
 
           hintAr: isArabic ? (data['hint'] ?? "") : "",
           hintEn: !isArabic ? (data['hint'] ?? "") : "",
+          type: type,
+          difficulty: data['difficulty']?.toString(),
+          riddleTextAr: isArabic ? (data['riddleText']?.toString()) : null,
+          riddleTextEn: !isArabic ? (data['riddleText']?.toString()) : null,
+          pathOptions: (data['pathOptions'] is List)
+              ? List<String>.from(data['pathOptions'].map((o) => o.toString()))
+              : null,
+          correctPathIndex: data['correctPathIndex'] is int
+              ? data['correctPathIndex'] as int
+              : int.tryParse(data['correctPathIndex']?.toString() ?? ''),
         );
 
         return GameLevel(id: levelId, puzzles: [puzzle]);
       } else {
-        throw NetworkException.badRequest(
-          'Failed to generate level: ${response.statusCode}',
+        debugPrint(
+          'generateLevel non-200 (${response.statusCode}), using local fallback',
         );
+        return _getFallbackLevel(levelId, isArabic);
       }
     } on NetworkException {
-      rethrow;
+      debugPrint('NetworkException in generateLevel, using local fallback');
+      return _getFallbackLevel(levelId, isArabic);
     } on GameException {
-      rethrow;
+      debugPrint('GameException in generateLevel, using local fallback');
+      return _getFallbackLevel(levelId, isArabic);
     } catch (e) {
-      throw NetworkException.badRequest('Error generating level: $e');
+      debugPrint('Unexpected error in generateLevel: $e, using local fallback');
+      return _getFallbackLevel(levelId, isArabic);
     }
   }
 
@@ -179,11 +242,11 @@ class CloudflareApiService {
           ];
 
     final puzzle = GamePuzzle(
-      startWordAr: "بداية",
-      endWordAr: "نهاية",
+      startWordAr: "كتاب",
+      endWordAr: "مكتبة",
       stepsAr: isArabic ? steps : [],
-      startWordEn: "Start",
-      endWordEn: "End",
+      startWordEn: "Book",
+      endWordEn: "Library",
       stepsEn: isArabic ? [] : steps,
       hintAr: "مثال توضيحي",
       hintEn: "Fallback Example",

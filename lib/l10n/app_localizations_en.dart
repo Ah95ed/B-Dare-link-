@@ -120,6 +120,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get registrationFailed => 'Registration Failed';
 
   @override
+  String get invalidCredentials => 'Invalid email or password';
+
+  @override
+  String get networkTimeout =>
+      'Request timeout. Check your connection and try again';
+
+  @override
+  String get noConnection => 'No network connection. Check your internet';
+
+  @override
+  String get serverError => 'Server error. Please try later';
+
+  @override
   String get resetPasswordInstructions =>
       'Enter your registered email to receive a reset code.';
 
@@ -223,8 +236,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get authRequired =>
-      'To continue after level 3, please register or log in.';
+  String get authRequired => 'You need to register first to continue.';
 
   @override
   String get cantAdvanceWithoutLogin =>

@@ -15,8 +15,14 @@ migrations_dir = "migrations"
 [vars]
 AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
 OPENAI_MODEL = "gpt-4o-mini"
-PUZZLE_BANK_MIN = "30"
-GEMINI_MODEL = "gemini-1.5-flash-001"
+PUZZLE_BANK_MIN = "1"
+GEMINI_MODEL = "gemini-2.0-flash"
+PUZZLE_RETENTION_PER_GROUP = "1200"
+PUZZLE_RETENTION_DAYS = "45"
+PUZZLE_RECENT_PROTECT = "250"
+
+[triggers]
+crons = ["15 */6 * * *"]
 
 [durable_objects]
 bindings = [

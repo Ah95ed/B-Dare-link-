@@ -7,7 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wonder_link_game/main.dart';
+import 'package:mystery_joy/main.dart';
 
 void main() {
   testWidgets('Home screen renders', (WidgetTester tester) async {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../l10n/app_localizations.dart';
+import '../../core/exceptions/app_exceptions.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -17,26 +18,75 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  String _mapLoginError(
+    Object error,
+    AuthProvider auth,
+    AppLocalizations l10n,
+  ) {
+    // Check for network-specific errors first
+    if (error is NetworkException) {
+      if (error.message.toLowerCase().contains('timeout')) {
+        return l10n.networkTimeout;
+      }
+      if (error.message.toLowerCase().contains('connection') ||
+          error.message.toLowerCase().contains('socket')) {
+        return l10n.noConnection;
+      }
+      return error.message;
+    }
+
+    // Check for auth-specific errors
+    if (error is AuthException) {
+      if (error.message.toLowerCase().contains('400') ||
+          error.message.toLowerCase().contains('401')) {
+        return l10n.invalidCredentials;
+      }
+      if (error.message.toLowerCase().contains('500')) {
+        return l10n.serverError;
+      }
+      return error.message;
+    }
+
+    // Check provider's last error (set by service layer)
+    final lastError = auth.lastError;
+    if (lastError != null && lastError.isNotEmpty) {
+      if (lastError.toLowerCase().contains('timeout')) {
+        return l10n.networkTimeout;
+      }
+      if (lastError.toLowerCase().contains('connection') ||
+          lastError.toLowerCase().contains('socket')) {
+        return l10n.noConnection;
+      }
+      if (lastError.toLowerCase().contains('invalid') &&
+          lastError.toLowerCase().contains('credential')) {
+        return l10n.invalidCredentials;
+      }
+      return lastError.replaceAll('Exception: ', '');
+    }
+
+    final text = error.toString().replaceAll('Exception: ', '');
+    return text.isEmpty ? l10n.loginFailed : text;
+  }
+
   void _submit() async {
     if (_formKey.currentState!.validate()) {
       try {
-        await Provider.of<AuthProvider>(
-          context,
-          listen: false,
-        ).login(_emailController.text.trim(), _passwordController.text.trim());
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        await auth.login(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
+        );
         if (mounted) {
           Navigator.pop(context); // Go back to Home or previous screen
         }
       } catch (e) {
         if (mounted) {
           final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '${l10n.loginFailed}: ${e.toString().replaceAll("Exception: ", "")}',
-              ),
-            ),
-          );
+          final auth = Provider.of<AuthProvider>(context, listen: false);
+          final message = _mapLoginError(e, auth, l10n);
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         }
       }
     }

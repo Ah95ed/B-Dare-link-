@@ -315,12 +315,14 @@ class CompetitionProvider with ChangeNotifier {
       if (_currentRoom != null && _currentRoom!['created_by'] != null) {
         _hostId = _currentRoom!['created_by'].toString();
       }
-      _connectRealtime();
-      // Fetch current puzzle if game is already active
-      await refreshRoomStatus();
-      // Refresh the list of my rooms after joining
-      await loadMyRooms();
+      _errorMessage = null;
       notifyListeners();
+      _connectRealtime();
+      // Fetch current puzzle if game is already active (background)
+      Future(() async {
+        await refreshRoomStatus();
+        await loadMyRooms();
+      });
     } catch (e) {
       // Capture error message for UI feedback
       _errorMessage = e.toString();

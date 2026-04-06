@@ -7,7 +7,7 @@ export async function generatePathLevel(request, env, headers) {
     const isArabic = language === 'ar';
 
     const geminiApiKey = env?.GEMINI_API_KEY;
-    const geminiModel = env?.GEMINI_MODEL || 'gemini-1.5-flash';
+    const geminiModel = env?.GEMINI_MODEL || 'gemini-2.0-flash';
     const aiModel = env?.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
 
     const prompt = buildPathPuzzlePrompt({ language, level });

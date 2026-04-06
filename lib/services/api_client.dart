@@ -47,53 +47,70 @@ class ApiClient {
     Object? body,
     bool auth = false,
   }) async {
-    try {
-      final uri = Uri.parse('$baseUrl$path');
-      final request = http.Request(method, uri);
+    const int maxAttempts = 2;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final uri = Uri.parse('$baseUrl$path');
+        final request = http.Request(method, uri);
 
-      _setupHeaders(request, headers, auth);
-      _setupBody(request, body);
+        await _setupHeaders(request, headers, auth);
+        _setupBody(request, body);
 
-      http.BaseRequest finalRequest = request;
-      for (final middleware in _requestMiddleware) {
-        finalRequest = await middleware(finalRequest);
-      }
+        http.BaseRequest finalRequest = request;
+        for (final middleware in _requestMiddleware) {
+          finalRequest = await middleware(finalRequest);
+        }
 
-      final streamed = await _client
-          .send(finalRequest)
-          .timeout(
-            AppConstants.networkTimeout,
-            onTimeout: () => throw TimeoutException('Network request timeout'),
+        final streamed = await _client
+            .send(finalRequest)
+            .timeout(
+              AppConstants.networkTimeout,
+              onTimeout: () =>
+                  throw TimeoutException('Network request timeout'),
+            );
+        http.Response response = await http.Response.fromStream(streamed);
+
+        for (final middleware in _responseMiddleware) {
+          response = await middleware(response);
+        }
+
+        return response;
+      } on TimeoutException {
+        if (attempt == maxAttempts) {
+          throw NetworkException.timeout(
+            'Request timeout after $attempt attempts',
           );
-      http.Response response = await http.Response.fromStream(streamed);
-
-      for (final middleware in _responseMiddleware) {
-        response = await middleware(response);
+        }
+        // Continue to next attempt
+      } on http.ClientException catch (e) {
+        if (attempt == maxAttempts) {
+          throw NetworkException.noConnection(e.toString());
+        }
+        // Continue to next attempt
+      } catch (e) {
+        if (attempt == maxAttempts) {
+          throw NetworkException.badRequest('Request failed: $e');
+        }
+        // Continue to next attempt
       }
-
-      return response;
-    } on TimeoutException catch (e) {
-      throw NetworkException.timeout(e.toString());
-    } on http.ClientException catch (e) {
-      throw NetworkException.noConnection(e.toString());
-    } catch (e) {
-      throw NetworkException.badRequest('Request failed: $e');
     }
+
+    throw NetworkException.timeout('Network request timeout');
   }
 
   /// Setup request headers
-  void _setupHeaders(
+  Future<void> _setupHeaders(
     http.Request request,
     Map<String, String>? headers,
     bool auth,
-  ) {
+  ) async {
     request.headers.addAll({
       'Content-Type': 'application/json',
       if (headers != null) ...headers,
     });
 
     if (auth) {
-      _addAuthHeader(request);
+      await _addAuthHeader(request);
     }
   }
 

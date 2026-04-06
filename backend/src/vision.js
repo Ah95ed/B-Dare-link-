@@ -48,7 +48,7 @@ export async function generatePuzzleFromImage(request, env) {
 
     const geminiApiKey = env?.GEMINI_API_KEY;
     // Use vision-capable model - remove version suffixes
-    let geminiModel = env?.GEMINI_MODEL || 'gemini-1.5-flash';
+    let geminiModel = env?.GEMINI_MODEL || 'gemini-2.0-flash';
     // Remove -001, -002 etc suffixes that cause 404
     geminiModel = geminiModel.replace(/-\d+$/, '');
 

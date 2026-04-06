@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
+import '../constants/app_constants.dart';
 
 class CompetitionService {
-  static const String _baseUrl =
-      'https://wonder-link-backend.amhmeed31.workers.dev';
+  static const String _baseUrl = AppConstants.defaultBaseUrl;
   final AuthService _auth = AuthService();
 
   Future<String?> _getToken() async {

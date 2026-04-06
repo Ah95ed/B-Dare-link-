@@ -42,7 +42,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.settingsLoadError( e.toString()))),
+          SnackBar(content: Text(l10n.settingsLoadError(e.toString()))),
         );
       }
       setState(() => _isLoading = false);
@@ -89,7 +89,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.settingsSaveError( e.toString()))),
+          SnackBar(content: Text(l10n.settingsSaveError(e.toString()))),
         );
       }
     }
@@ -179,9 +179,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Hints Per Player
                 Text(
-                  l10n.hintsPerPlayerLabel(
-                     _settings['hints_per_player'] ?? 3,
-                  ),
+                  l10n.hintsPerPlayerLabel(_settings['hints_per_player'] ?? 3),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Slider(
@@ -198,7 +196,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                 // Hint Penalty
                 Text(
                   l10n.hintPenaltyLabel(
-                   _settings['hint_penalty_percent'] ?? 10,
+                    _settings['hint_penalty_percent'] ?? 10,
                   ),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
@@ -224,9 +222,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Auto Advance
                 Text(
-                  l10n.autoAdvanceLabel(
-                     _settings['auto_advance_seconds'] ?? 2,
-                  ),
+                  l10n.autoAdvanceLabel(_settings['auto_advance_seconds'] ?? 2),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Slider(
@@ -242,9 +238,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
 
                 // Min Time Per Puzzle
                 Text(
-                  l10n.minTimeLabel(
-                    _settings['min_time_per_puzzle'] ?? 5,
-                  ),
+                  l10n.minTimeLabel(_settings['min_time_per_puzzle'] ?? 5),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Slider(
@@ -323,19 +317,19 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                         const SizedBox(height: 12),
                         _buildSettingRow(
                           l10n.hintsPerPlayerLabel(
-                             _settings['hints_per_player'] ?? 0,
+                            _settings['hints_per_player'] ?? 0,
                           ),
                           l10n.hintsPerPlayerValue(
-                             _settings['hints_per_player'] ?? 0,
+                            _settings['hints_per_player'] ?? 0,
                           ),
                         ),
                         const SizedBox(height: 12),
                         _buildSettingRow(
                           l10n.hintPenaltyLabel(
-                             _settings['hint_penalty_percent'] ?? 0,
+                            _settings['hint_penalty_percent'] ?? 0,
                           ),
                           l10n.hintPenaltyValue(
-                             _settings['hint_penalty_percent'] ?? 0,
+                            _settings['hint_penalty_percent'] ?? 0,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -344,7 +338,7 @@ class _RoomSettingsViewState extends State<RoomSettingsView> {
                             _settings['auto_advance_seconds'] ?? 0,
                           ),
                           l10n.autoAdvanceValue(
-                          _settings['auto_advance_seconds'] ?? 0,
+                            _settings['auto_advance_seconds'] ?? 0,
                           ),
                         ),
                         const SizedBox(height: 12),
