@@ -129,6 +129,7 @@ class HomeContent {
         ],
       ),
       child: ElevatedButton.icon(
+        key: const ValueKey('home_solo_play'),
         onPressed: () => _navigateTo(context, const LevelsView()),
         icon: const Icon(Icons.play_circle_fill),
         label: Text(

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../constants/app_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/admin_service.dart';
 import 'admin_utils.dart';
@@ -18,10 +19,12 @@ class _AdminPageState extends State<AdminPage> {
   bool _loading = false;
   bool _regenerating = false;
   bool _generatingBulk = false;
+  bool _refillingSoloBank = false;
   bool _devMockMode = false;
   String? _status;
   List<dynamic> _puzzles = [];
   final _levelController = TextEditingController();
+  final _soloBankCountController = TextEditingController(text: '100');
   String _langFilter = 'all';
 
   @override
@@ -34,6 +37,7 @@ class _AdminPageState extends State<AdminPage> {
   @override
   void dispose() {
     _levelController.dispose();
+    _soloBankCountController.dispose();
     super.dispose();
   }
 
@@ -209,6 +213,110 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  /// Fills D1 solo puzzle bank on the Worker (AI on server only). Players never trigger this.
+  Future<void> _refillSoloBank() async {
+    if (_devMockMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('وضع المطور بدون خادم: تعبئة البنك غير متاحة'),
+        ),
+      );
+      return;
+    }
+
+    if (_langFilter == 'all') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اختر لغة (عربي أو English) لتعبئة بنك السولو'),
+        ),
+      );
+      return;
+    }
+
+    final level = int.tryParse(_levelController.text.trim()) ?? 1;
+    final count = int.tryParse(_soloBankCountController.text.trim()) ?? 100;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('تعبئة بنك السولو؟'),
+        content: Text(
+          'سيتولّد الخادم حتى $count لغزًا للمستوى $level (${_langFilter == 'en' ? 'English' : 'العربية'}) '
+          'ويُخزَّن في D1. اللاعبون يجلبون الألغاز من الخادم فقط.\n\n'
+          'قد تستغرق العملية عدة دقائق.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('بدء التعبئة'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    setState(() {
+      _refillingSoloBank = true;
+      _status = 'جارٍ تعبئة بنك السولو على الخادم...';
+    });
+
+    try {
+      final result = await _adminService.refillSoloBank(
+        level: level,
+        language: _langFilter,
+        count: count,
+      );
+
+      if (result == null) {
+        setState(() => _status = 'فشل الاتصال أو انتهت المهلة');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('فشل تعبئة البنك')),
+          );
+        }
+        return;
+      }
+
+      if (result['_statusCode'] != null && result['_statusCode'] != 200) {
+        final err = result['error']?.toString() ?? result['_raw']?.toString() ?? '';
+        setState(() => _status = 'رفض الخادم: ${result['_statusCode']} $err');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('خطأ: ${result['_statusCode']}')),
+          );
+        }
+        return;
+      }
+
+      final inserted = result['inserted'] ?? 0;
+      final skipped = result['skipped'] ?? 0;
+      final errs = result['errors'];
+      setState(() {
+        _status = 'تم إدراج $inserted لغزًا، تخطي مكرر $skipped';
+      });
+      if (errs is List && errs.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('اكتمل مع تحذيرات (${errs.length})'),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+      if (!mounted) return;
+      await _fetchPuzzles();
+    } catch (e) {
+      setState(() => _status = 'خطأ: $e');
+    } finally {
+      if (mounted) setState(() => _refillingSoloBank = false);
+    }
+  }
+
   Future<void> _deletePuzzle(dynamic item) async {
     if (_devMockMode) {
       setState(() {
@@ -223,9 +331,10 @@ class _AdminPageState extends State<AdminPage> {
       if (success) {
         await _fetchPuzzles();
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Delete failed')));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Delete failed')),
+        );
       }
     } catch (e) {
       debugPrint('Delete error: $e');
@@ -244,7 +353,8 @@ class _AdminPageState extends State<AdminPage> {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
-    final isAdmin = auth.user != null && auth.user!['id'] == 1;
+    final isAdmin =
+        auth.user != null && auth.user!['id'] == AppConstants.adminUserId;
     final devBypass = kDebugMode;
     final canAccess = isAdmin || devBypass;
 
@@ -286,6 +396,71 @@ class _AdminPageState extends State<AdminPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
+            Card(
+              elevation: 2,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'بنك ألغاز السولو (D1)',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'اللاعبون لا يولّدون ألغازًا: التطبيق يجلب الحزم من الخادم فقط '
+                      '(`/api/solo/level-pack`). التوليد بالذكاء الاصطناعي يحدث هنا على الـ Worker '
+                      'ويُخزَّن في قاعدة البيانات.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _soloBankCountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'عدد الألغاز (1–200)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: (_refillingSoloBank ||
+                                _loading ||
+                                _generatingBulk)
+                            ? null
+                            : _refillSoloBank,
+                        icon: _refillingSoloBank
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.cloud_upload),
+                        label: Text(
+                          _refillingSoloBank
+                              ? 'جارٍ التعبئة على الخادم...'
+                              : 'تعبئة البنك (توليد + حفظ في D1)',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'يستخدم المستوى واللغة من قسم الفلترة أدناه. اختر لغة محددة (ليس «الكل»).',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             if (devBypass)
               Card(
                 color: Theme.of(
@@ -317,7 +492,7 @@ class _AdminPageState extends State<AdminPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'التخصيص و الفلترة',
+                      'فلترة قائمة الألغاز',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -392,7 +567,11 @@ class _AdminPageState extends State<AdminPage> {
                           label: const Text('إعادة الضبط'),
                         ),
                         ElevatedButton.icon(
-                          onPressed: _regenerating ? null : _regeneratePuzzle,
+                          onPressed: (_regenerating ||
+                                  _refillingSoloBank ||
+                                  _generatingBulk)
+                              ? null
+                              : _regeneratePuzzle,
                           icon: _regenerating
                               ? const SizedBox(
                                   width: 16,
@@ -403,7 +582,9 @@ class _AdminPageState extends State<AdminPage> {
                                 )
                               : const Icon(Icons.auto_fix_high),
                           label: Text(
-                            _regenerating ? 'جارٍ الإنشاء...' : 'توليد لغز',
+                            _regenerating
+                                ? 'جارٍ الإنشاء...'
+                                : 'توليد لغز واحد (خادم)',
                           ),
                         ),
                       ],
@@ -413,7 +594,10 @@ class _AdminPageState extends State<AdminPage> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed:
-                            (_generatingBulk || _regenerating || _loading)
+                            (_generatingBulk ||
+                                _regenerating ||
+                                _loading ||
+                                _refillingSoloBank)
                             ? null
                             : _generateBulkPuzzles,
                         icon: _generatingBulk
@@ -428,7 +612,7 @@ class _AdminPageState extends State<AdminPage> {
                         label: Text(
                           _generatingBulk
                               ? 'جارٍ توليد 100 لغز...'
-                              : 'توليد 100 لغز (5 لغات × 20 لغز)',
+                              : 'توليد جماعي قديم (5 لغات × 20) — اختياري',
                           style: const TextStyle(fontSize: 16),
                         ),
                         style: ElevatedButton.styleFrom(

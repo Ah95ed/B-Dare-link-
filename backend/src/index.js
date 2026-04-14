@@ -5,6 +5,7 @@ import { getProgress, saveProgress } from './progress.js';
 import { requireAuth } from './middleware/auth_middleware.js';
 import { requiresAuth } from './middleware/route_guard.js';
 import { generateLevel, submitSolution } from './game.js';
+import { getSoloLevelPack, refillSoloBank } from './solo_bank.js';
 import { generatePathLevel } from './game_path.js';
 import { listPuzzles, deletePuzzle, regeneratePuzzle, generateBulkPuzzles } from './admin.js';
 import { getDailyChallenge, submitDailyScore, getDailyLeaderboard, getWeeklyStandings } from './tournament.js';
@@ -113,6 +114,12 @@ export default {
       if ((path === '/submit-solution' || path === '/api/submit') && request.method === 'POST') {
         return await submitSolution(request, env, CORS_HEADERS);
       }
+      if (
+        (path === '/api/solo/level-pack' || path === '/solo/level-pack') &&
+        request.method === 'POST'
+      ) {
+        return await getSoloLevelPack(request, env, CORS_HEADERS);
+      }
 
       // ---------- Vision (Reality Mode) ----------
       if (path === '/api/generate-from-image' && request.method === 'POST') {
@@ -202,6 +209,9 @@ export default {
       }
       if (path === '/admin/puzzles/generate-bulk' && request.method === 'POST') {
         return await generateBulkPuzzles(request, env, CORS_HEADERS);
+      }
+      if (path === '/admin/solo-bank/refill' && request.method === 'POST') {
+        return await refillSoloBank(request, env, CORS_HEADERS);
       }
 
       // ---------- Tournaments ----------

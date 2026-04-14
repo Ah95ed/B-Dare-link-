@@ -116,6 +116,10 @@ export async function updateProfile(request, env, userId) {
 
 /** Delete account and its progress */
 export async function deleteAccount(request, env, userId) {
+  const userKey = `u:${Number(userId)}`;
+  await env.DB.prepare('DELETE FROM solo_player_puzzles WHERE user_key = ?')
+    .bind(userKey)
+    .run();
   await env.DB.prepare('DELETE FROM progress WHERE user_id = ?')
     .bind(userId)
     .run();

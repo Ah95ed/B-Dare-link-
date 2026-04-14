@@ -1484,6 +1484,12 @@ abstract class AppLocalizations {
   /// **'Generating puzzles...'**
   String get generatingPuzzles;
 
+  /// Shown while AI puzzles for the level are being fetched
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total} ready'**
+  String generatingLevelProgress(int current, int total);
+
   /// No description provided for @gameOverTitle.
   ///
   /// In en, this message translates to:

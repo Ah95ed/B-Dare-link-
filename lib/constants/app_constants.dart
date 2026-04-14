@@ -43,8 +43,11 @@ abstract class AppConstants {
   static const int initialLives = 3;
   static const int levelBaseScore = 500;
   static const int stepScore = 1;
-  static const int maxSeenPuzzleKeys = 500;
-  static const int maxGenerationAttempts = 8;
+  /// Persisted + in-memory cap for dedupe (solo can exceed 500 puzzles over many levels).
+  static const int maxSeenPuzzleKeys = 2500;
+  /// Legacy admin / internal paths that still call `/generate-level`.
+  static const int maxExcludedQuestionKeysForApi = 2400;
+  static const int maxGenerationAttempts = 24;
   static const int maxBatchSize = 3;
 
   // Star Requirements
@@ -59,5 +62,9 @@ abstract class AppConstants {
   // Timeouts
   static const Duration timeoutMessageDuration = Duration(milliseconds: 900);
   static const Duration networkTimeout = Duration(seconds: 30);
+  /// Solo fetch from D1 (`/api/solo/level-pack`) and admin bank refill can be slow.
+  static const Duration soloBatchTimeout = Duration(seconds: 180);
+  /// Admin solo-bank refill runs many Worker AI calls; allow a long HTTP timeout.
+  static const Duration adminSoloBankRefillTimeout = Duration(minutes: 25);
   static const Duration debounceTimeout = Duration(milliseconds: 500);
 }

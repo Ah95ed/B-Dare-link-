@@ -18,6 +18,264 @@ class CloudflareApiService {
     ),
   );
 
+  GamePuzzle? _parseGeneratedPuzzleMap(
+    Map<String, dynamic> data,
+    bool isArabic,
+  ) {
+    if (data['error'] != null) return null;
+
+    final startWord = data['startWord']?.toString().trim() ?? '';
+    final endWord = data['endWord']?.toString().trim() ?? '';
+    final String? type = data['type']?.toString();
+    final bool isPoetic = type == 'لغز_شعري' || type == 'poetic_riddle';
+
+    if (!isPoetic) {
+      if (startWord.isEmpty || endWord.isEmpty || startWord == endWord) {
+        return null;
+      }
+    }
+
+    final fallbackWords = isArabic
+        ? ['كتاب', 'قلم', 'نور', 'علم', 'باب', 'صوت', 'ورق', 'فكر']
+        : [
+            'Book',
+            'Pen',
+            'Light',
+            'Mind',
+            'Door',
+            'Sound',
+            'Paper',
+            'Idea',
+          ];
+
+    final steps = <PuzzleStep>[];
+    if (data['steps'] != null && data['steps'] is List) {
+      final globalPool = <String>[];
+      if (data['startWord'] is String) globalPool.add(data['startWord'] as String);
+      if (data['endWord'] is String) globalPool.add(data['endWord'] as String);
+      for (final s in data['steps'] as List) {
+        try {
+          if (s != null && s is Map && s['word'] is String) {
+            globalPool.add(s['word'] as String);
+          }
+        } catch (_) {}
+      }
+
+      for (final s in data['steps'] as List) {
+        try {
+          if (s == null || s is! Map) continue;
+          final sm = Map<String, dynamic>.from(s);
+          final word =
+              sm['word']?.toString() ?? sm['correctAnswer']?.toString() ?? '';
+          if (word.trim().isEmpty) {
+            continue;
+          }
+          final stepQuestion = sm['stepQuestion']?.toString();
+          List<String> options = [];
+          if (sm['options'] is List) {
+            options = List<String>.from(
+              (sm['options'] as List).map((o) => o.toString()),
+            );
+          }
+
+          if (!options.contains(word)) {
+            if (options.length >= 4) {
+              options[options.length - 1] = word;
+            } else {
+              options.add(word);
+            }
+          }
+
+          final seen = <String>{};
+          options = options.where((o) {
+            if (seen.contains(o)) return false;
+            seen.add(o);
+            return true;
+          }).toList();
+
+          for (final candidate in globalPool) {
+            if (options.length >= 4) break;
+            if (candidate != word && !options.contains(candidate)) {
+              options.add(candidate);
+            }
+          }
+
+          while (options.length < 4) {
+            for (final fallback in fallbackWords) {
+              if (options.length >= 4) break;
+              if (fallback != word && !options.contains(fallback)) {
+                options.add(fallback);
+              }
+            }
+            if (options.length < 4) {
+              options.add(word);
+            }
+          }
+
+          if (options.length > 4) {
+            final withoutWord = options.where((o) => o != word).toList();
+            options = [word, ...withoutWord.take(3)];
+          }
+
+          options.shuffle();
+
+          steps.add(
+            PuzzleStep(
+              word: word,
+              options: options,
+              stepQuestion: stepQuestion,
+            ),
+          );
+        } catch (e) {
+          debugPrint('Malformed step from API: $e');
+        }
+      }
+    }
+
+    return GamePuzzle(
+      puzzleId: data['puzzleId']?.toString(),
+      startWordAr: isArabic ? (data['startWord'] ?? '') : "مرحلة",
+      endWordAr: isArabic ? (data['endWord'] ?? '') : "جديدة",
+      stepsAr: isArabic ? steps : [],
+      startWordEn: !isArabic ? (data['startWord'] ?? '') : "New",
+      endWordEn: !isArabic ? (data['endWord'] ?? '') : "Stage",
+      stepsEn: !isArabic ? steps : [],
+      hintAr: isArabic ? (data['hint'] ?? "") : "",
+      hintEn: !isArabic ? (data['hint'] ?? "") : "",
+      type: type,
+      difficulty: data['difficulty']?.toString(),
+      riddleTextAr: isArabic ? (data['riddleText']?.toString()) : null,
+      riddleTextEn: !isArabic ? (data['riddleText']?.toString()) : null,
+      pathOptions: (data['pathOptions'] is List)
+          ? List<String>.from(data['pathOptions']!.map((o) => o.toString()))
+          : null,
+      correctPathIndex: data['correctPathIndex'] is int
+          ? data['correctPathIndex'] as int
+          : int.tryParse(data['correctPathIndex']?.toString() ?? ''),
+    );
+  }
+
+  /// One HTTP call asks the Worker for [count] puzzles (solo fast-path).
+  Future<GameLevel?> generateLevelBatch(
+    bool isArabic,
+    int levelId, {
+    required int count,
+    bool fresh = true,
+    List<String> excludedQuestionKeys = const [],
+  }) async {
+    final n = count.clamp(1, 8);
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_workerUrl/generate-level'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'language': isArabic ? 'ar' : 'en',
+              'level': levelId,
+              'source': 'ai',
+              'fresh': fresh,
+              'excludeQuestionKeys': excludedQuestionKeys,
+              'count': n,
+            }),
+          )
+          .timeout(AppConstants.soloBatchTimeout);
+
+      if (response.statusCode != 200) {
+        debugPrint(
+          'generateLevelBatch non-200 (${response.statusCode})',
+        );
+        return null;
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return null;
+      final data = Map<String, dynamic>.from(decoded);
+      if (data['error'] != null) return null;
+      final rawList = data['puzzles'];
+      if (rawList is! List) return null;
+
+      final puzzles = <GamePuzzle>[];
+      for (final item in rawList) {
+        if (item is! Map) continue;
+        final p = _parseGeneratedPuzzleMap(
+          Map<String, dynamic>.from(item),
+          isArabic,
+        );
+        if (p != null) puzzles.add(p);
+      }
+      if (puzzles.isEmpty) return null;
+      return GameLevel(id: levelId, puzzles: puzzles);
+    } catch (e) {
+      debugPrint('generateLevelBatch failed: $e');
+      return null;
+    }
+  }
+
+  /// Solo: fetch puzzles from D1 bank (Worker); no client-side AI.
+  Future<GameLevel?> fetchSoloLevelPack({
+    required bool isArabic,
+    required int levelId,
+    required int count,
+    required String guestId,
+    String? authToken,
+  }) async {
+    final n = count.clamp(1, 100);
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (authToken != null && authToken.isNotEmpty)
+        'Authorization': 'Bearer $authToken',
+    };
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_workerUrl/api/solo/level-pack'),
+            headers: headers,
+            body: jsonEncode({
+              'language': isArabic ? 'ar' : 'en',
+              'level': levelId,
+              'count': n,
+              'guestId': guestId,
+            }),
+          )
+          .timeout(AppConstants.soloBatchTimeout);
+
+      if (response.statusCode != 200) {
+        debugPrint(
+          'fetchSoloLevelPack non-200 (${response.statusCode})',
+        );
+        return null;
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return null;
+      final data = Map<String, dynamic>.from(decoded);
+      final err = data['error']?.toString();
+      final rawList = data['puzzles'];
+      if (rawList is! List) {
+        if (err == 'EMPTY_BANK') {
+          return GameLevel(id: levelId, puzzles: const []);
+        }
+        return null;
+      }
+
+      final puzzles = <GamePuzzle>[];
+      for (final item in rawList) {
+        if (item is! Map) continue;
+        final p = _parseGeneratedPuzzleMap(
+          Map<String, dynamic>.from(item),
+          isArabic,
+        );
+        if (p != null) puzzles.add(p);
+      }
+      if (puzzles.isEmpty && err == 'EMPTY_BANK') {
+        return GameLevel(id: levelId, puzzles: const []);
+      }
+      if (puzzles.isEmpty) return null;
+      return GameLevel(id: levelId, puzzles: puzzles);
+    } catch (e) {
+      debugPrint('fetchSoloLevelPack failed: $e');
+      return null;
+    }
+  }
+
   Future<GameLevel?> generateLevel(
     bool isArabic,
     int levelId, {
@@ -50,144 +308,15 @@ class CloudflareApiService {
           );
         }
 
-        final startWord = data['startWord']?.toString().trim() ?? '';
-        final endWord = data['endWord']?.toString().trim() ?? '';
-        final String? type = data['type']?.toString();
-        final bool isPoetic = type == 'لغز_شعري' || type == 'poetic_riddle';
-
-        if (!isPoetic) {
-          if (startWord.isEmpty || endWord.isEmpty || startWord == endWord) {
-            throw GameException.puzzleLoadFailed(
-              'Invalid start/end words from API',
-            );
-          }
-        }
-
-        final fallbackWords = isArabic
-            ? ['كتاب', 'قلم', 'نور', 'علم', 'باب', 'صوت', 'ورق', 'فكر']
-            : [
-                'Book',
-                'Pen',
-                'Light',
-                'Mind',
-                'Door',
-                'Sound',
-                'Paper',
-                'Idea',
-              ];
-
-        // Defensive normalization: ensure each step has 4 options and includes the correct word
-        List<PuzzleStep> steps = [];
-        if (data['steps'] != null && data['steps'] is List) {
-          // Prepare a global pool of candidate distractors
-          final globalPool = <String>[];
-          if (data['startWord'] is String) globalPool.add(data['startWord']);
-          if (data['endWord'] is String) globalPool.add(data['endWord']);
-          for (final s in data['steps']) {
-            try {
-              if (s != null && s['word'] is String) globalPool.add(s['word']);
-            } catch (_) {}
-          }
-
-          for (var s in data['steps']) {
-            try {
-              final word =
-                  s['word']?.toString() ?? s['correctAnswer']?.toString() ?? '';
-              if (word.trim().isEmpty) {
-                continue;
-              }
-              final stepQuestion = s['stepQuestion']?.toString();
-              List<String> options = [];
-              if (s['options'] is List) {
-                options = List<String>.from(
-                  s['options'].map((o) => o.toString()),
-                );
-              }
-
-              // Ensure the correct word is present
-              if (!options.contains(word)) {
-                if (options.length >= 4) {
-                  options[options.length - 1] = word;
-                } else {
-                  options.add(word);
-                }
-              }
-
-              // Remove duplicates while preserving order
-              final seen = <String>{};
-              options = options.where((o) {
-                if (seen.contains(o)) return false;
-                seen.add(o);
-                return true;
-              }).toList();
-
-              // Fill up to 4 using globalPool (excluding the correct word)
-              for (final candidate in globalPool) {
-                if (options.length >= 4) break;
-                if (candidate != word && !options.contains(candidate)) {
-                  options.add(candidate);
-                }
-              }
-
-              // If still short, append placeholder variants
-              while (options.length < 4) {
-                for (final fallback in fallbackWords) {
-                  if (options.length >= 4) break;
-                  if (fallback != word && !options.contains(fallback)) {
-                    options.add(fallback);
-                  }
-                }
-                if (options.length < 4) {
-                  options.add(word);
-                }
-              }
-
-              // Enforce exactly 4 options to satisfy client validation.
-              if (options.length > 4) {
-                final withoutWord = options.where((o) => o != word).toList();
-                options = [word, ...withoutWord.take(3)];
-              }
-
-              // Shuffle options
-              options.shuffle();
-
-              steps.add(
-                PuzzleStep(
-                  word: word,
-                  options: options,
-                  stepQuestion: stepQuestion,
-                ),
-              );
-            } catch (e) {
-              // skip malformed step
-              debugPrint('Malformed step from API: $e');
-            }
-          }
-        }
-
-        final puzzle = GamePuzzle(
-          puzzleId: data['puzzleId']?.toString(),
-          startWordAr: isArabic ? (data['startWord'] ?? '') : "مرحلة",
-          endWordAr: isArabic ? (data['endWord'] ?? '') : "جديدة",
-          stepsAr: isArabic ? steps : [],
-
-          startWordEn: !isArabic ? (data['startWord'] ?? '') : "New",
-          endWordEn: !isArabic ? (data['endWord'] ?? '') : "Stage",
-          stepsEn: !isArabic ? steps : [],
-
-          hintAr: isArabic ? (data['hint'] ?? "") : "",
-          hintEn: !isArabic ? (data['hint'] ?? "") : "",
-          type: type,
-          difficulty: data['difficulty']?.toString(),
-          riddleTextAr: isArabic ? (data['riddleText']?.toString()) : null,
-          riddleTextEn: !isArabic ? (data['riddleText']?.toString()) : null,
-          pathOptions: (data['pathOptions'] is List)
-              ? List<String>.from(data['pathOptions'].map((o) => o.toString()))
-              : null,
-          correctPathIndex: data['correctPathIndex'] is int
-              ? data['correctPathIndex'] as int
-              : int.tryParse(data['correctPathIndex']?.toString() ?? ''),
+        final puzzle = _parseGeneratedPuzzleMap(
+          Map<String, dynamic>.from(data),
+          isArabic,
         );
+        if (puzzle == null) {
+          throw GameException.puzzleLoadFailed(
+            'Invalid puzzle payload from API',
+          );
+        }
 
         return GameLevel(id: levelId, puzzles: [puzzle]);
       } else {

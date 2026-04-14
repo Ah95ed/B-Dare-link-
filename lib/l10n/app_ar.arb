@@ -311,6 +311,14 @@
   "levelsDebugTooltip": "اختبار الواجهة (20 سؤال)",
   "levelsDebugMessage": "استخدم لوحة الإدارة لتوليد الألغاز",
   "generatingPuzzles": "جاري توليد الألغاز...",
+  "generatingLevelProgress": "جاهز {current} من {total}",
+  "@generatingLevelProgress": {
+    "description": "تقدم جلب ألغاز المرحلة من الخادم",
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
   "gameOverTitle": "انتهت اللعبة",
   "outOfLives": "نفدت المحاولات لديك!",
   "exit": "خروج",

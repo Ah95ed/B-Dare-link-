@@ -311,6 +311,14 @@
   "levelsDebugTooltip": "Test API (20 Questions)",
   "levelsDebugMessage": "Use admin panel to generate puzzles",
   "generatingPuzzles": "Generating puzzles...",
+  "generatingLevelProgress": "{current} of {total} ready",
+  "@generatingLevelProgress": {
+    "description": "Shown while AI puzzles for the level are being fetched",
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
   "gameOverTitle": "Game over",
   "outOfLives": "You ran out of lives!",
   "exit": "Exit",

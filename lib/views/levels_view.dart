@@ -7,6 +7,7 @@ import '../controllers/game_provider.dart';
 import '../controllers/locale_provider.dart';
 import '../core/app_colors.dart';
 import '../core/auth_guard.dart';
+import '../constants/app_constants.dart';
 import 'game_play_view.dart';
 import '../l10n/app_localizations.dart';
 
@@ -105,11 +106,15 @@ class LevelsView extends StatelessWidget {
     bool isLocked = level.id > unlockedLevelId;
     final l10n = AppLocalizations.of(context)!;
     return GestureDetector(
+      key: ValueKey('level_tile_${level.id}'),
       onTap: isLocked
           ? null
           : () async {
-              final authed = await AuthGuard.requireLogin(context);
-              if (!authed) return;
+              if (level.id >= AppConstants.authRequiredLevel) {
+                final authed = await AuthGuard.requireLogin(context);
+                if (!authed) return;
+              }
+              if (!context.mounted) return;
               Provider.of<GameProvider>(
                 context,
                 listen: false,
@@ -118,6 +123,7 @@ class LevelsView extends StatelessWidget {
                 context,
                 listen: false,
               ).setGameMode(GameMode.multipleChoice);
+              if (!context.mounted) return;
               Navigator.push(
                 context,
                 PageRouteBuilder(

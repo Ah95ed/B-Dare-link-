@@ -784,6 +784,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get generatingPuzzles => 'جاري توليد الألغاز...';
 
   @override
+  String generatingLevelProgress(int current, int total) {
+    return 'جاهز $current من $total';
+  }
+
+  @override
   String get gameOverTitle => 'انتهت اللعبة';
 
   @override

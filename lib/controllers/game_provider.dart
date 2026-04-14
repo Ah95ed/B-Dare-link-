@@ -58,8 +58,11 @@ class GameProvider extends ChangeNotifier {
   // Puzzle Deduplication
   final Set<String> _sessionSeenPuzzleKeys = {};
   final Set<String> _sessionSeenQuestionKeys = {};
+  int _levelLoadPrepared = 0;
+  int _levelLoadTarget = 0;
   static const String _seenPuzzleKeysStorageKey = 'seen_puzzle_keys';
   static const String _seenQuestionKeysStorageKey = 'seen_question_keys';
+  static const String _soloGuestIdPrefsKey = 'solo_guest_id';
 
   // Banned words for validation
   static final Set<String> _bannedMetaWordsAr = {
@@ -109,6 +112,10 @@ class GameProvider extends ChangeNotifier {
   int get currentPuzzleIndex => _currentPuzzleIndex;
   int get totalPuzzles => _currentLevel?.puzzles.length ?? 0;
   int get unlockedLevelId => _unlockedLevelId;
+
+  /// Remote puzzle generation progress (0 = hidden / not loading puzzles).
+  int get levelLoadPrepared => _levelLoadPrepared;
+  int get levelLoadTarget => _levelLoadTarget;
 
   GamePuzzle? get currentPuzzle {
     if (_currentLevel == null ||
@@ -229,13 +236,16 @@ class GameProvider extends ChangeNotifier {
   Future<void> generateNewLevel(bool isArabic) async {
     _setLoading(true);
     try {
-      final level = await _apiService.generateLevel(
-        isArabic,
-        _unlockedLevelId,
-        fresh: true,
-        excludedQuestionKeys: _buildExcludedQuestionKeys(),
+      final guestId = await _ensureSoloGuestId();
+      final token = await _authProvider?.getToken();
+      final level = await _apiService.fetchSoloLevelPack(
+        isArabic: isArabic,
+        levelId: _unlockedLevelId,
+        count: 1,
+        guestId: guestId,
+        authToken: token,
       );
-      if (level != null) {
+      if (level != null && level.puzzles.isNotEmpty) {
         await loadLevel(level, isArabic);
       } else {
         _errorMessage = AppStrings.failedToGenerateLevel;
@@ -275,7 +285,6 @@ class GameProvider extends ChangeNotifier {
             isArabic,
           );
           _currentLevel = GameLevel(id: level.id, puzzles: filled);
-          await _saveSeenPuzzleKeys();
         }
       } else {
         final validExisting = level.puzzles
@@ -285,16 +294,25 @@ class GameProvider extends ChangeNotifier {
         final existingLimited = validExisting.take(targetPuzzleCount).toList();
 
         if (existingLimited.length < targetPuzzleCount) {
-          final generated = await _generatePuzzles(level.id, isArabic);
+          final generated = await _generatePuzzles(
+            level.id,
+            isArabic,
+            requiredSlots: targetPuzzleCount - existingLimited.length,
+          );
           final merged = <GamePuzzle>[...existingLimited];
 
           for (final puzzle in generated) {
             if (merged.length >= targetPuzzleCount) break;
-            final key = _generatePuzzleKey(puzzle, isArabic);
+            if (!_isValidPuzzle(puzzle)) continue;
+            final puzzleKey = _generatePuzzleKey(puzzle, isArabic);
+            final questionKey = _generateQuestionKey(puzzle, isArabic);
             final alreadyExists = merged.any(
-              (p) => _generatePuzzleKey(p, isArabic) == key,
+              (p) =>
+                  _generatePuzzleKey(p, isArabic) == puzzleKey ||
+                  _generateQuestionKey(p, isArabic) == questionKey,
             );
-            if (!alreadyExists) {
+            if (alreadyExists) continue;
+            if (_tryRegisterPuzzle(puzzle, isArabic)) {
               merged.add(puzzle);
             }
           }
@@ -316,7 +334,6 @@ class GameProvider extends ChangeNotifier {
               isArabic,
             );
             _currentLevel = GameLevel(id: level.id, puzzles: filled);
-            await _saveSeenPuzzleKeys();
           }
         } else {
           final filled = _padPuzzlesToTarget(
@@ -329,12 +346,18 @@ class GameProvider extends ChangeNotifier {
         }
       }
 
+      if (_currentLevel != null && _currentLevel!.puzzles.isNotEmpty) {
+        await _saveSeenPuzzleKeys();
+      }
+
       _currentPuzzleIndex = 0;
       _loadPuzzle();
       _resetGameState();
     } catch (e) {
       _errorMessage = 'Error loading level: $e';
     } finally {
+      _levelLoadPrepared = 0;
+      _levelLoadTarget = 0;
       _setLoading(false);
     }
   }
@@ -356,49 +379,63 @@ class GameProvider extends ChangeNotifier {
   }
 
   /// Generate puzzles for a level
-  Future<List<GamePuzzle>> _generatePuzzles(int levelId, bool isArabic) async {
+  Future<List<GamePuzzle>> _generatePuzzles(
+    int levelId,
+    bool isArabic, {
+    int? requiredSlots,
+  }) async {
     final puzzles = <GamePuzzle>[];
-    final desiredCount = _desiredPuzzlesForLevel(levelId);
-    int attempts = 0;
+    final desiredCount =
+        (requiredSlots != null && requiredSlots > 0)
+            ? requiredSlots
+            : _desiredPuzzlesForLevel(levelId);
+    if (desiredCount <= 0) return puzzles;
 
-    while (puzzles.length < desiredCount &&
-        attempts < AppConstants.maxGenerationAttempts) {
-      attempts++;
-      final remaining = desiredCount - puzzles.length;
-      final batchSize = remaining >= AppConstants.maxBatchSize
-          ? AppConstants.maxBatchSize
-          : remaining;
+    _levelLoadTarget = desiredCount;
+    _levelLoadPrepared = 0;
+    notifyListeners();
 
-      try {
-        final futures = List.generate(
-          batchSize,
-          (_) => _apiService.generateLevel(
-            isArabic,
-            levelId,
-            fresh: true,
-            excludedQuestionKeys: _buildExcludedQuestionKeys(),
-          ),
-        );
+    final guestId = await _ensureSoloGuestId();
+    final token = await _authProvider?.getToken();
 
-        final results = await Future.wait(futures);
-        for (final levelData in results) {
-          if (levelData?.puzzles.isEmpty ?? true) continue;
+    for (var pass = 0; pass < 3 && puzzles.length < desiredCount; pass++) {
+      final need = desiredCount - puzzles.length;
+      final pack = await _apiService.fetchSoloLevelPack(
+        isArabic: isArabic,
+        levelId: levelId,
+        count: need,
+        guestId: guestId,
+        authToken: token,
+      );
+      if (pack == null || pack.puzzles.isEmpty) break;
 
-          final puzzle = levelData!.puzzles.first;
-          if (!_isValidPuzzle(puzzle)) continue;
-
-          if (_tryRegisterPuzzle(puzzle, isArabic)) {
-            puzzles.add(puzzle);
-          }
-
-          if (puzzles.length >= desiredCount) break;
+      var accepted = 0;
+      for (final puzzle in pack.puzzles) {
+        if (puzzles.length >= desiredCount) break;
+        if (!_isValidPuzzle(puzzle)) continue;
+        if (_tryRegisterPuzzle(puzzle, isArabic)) {
+          puzzles.add(puzzle);
+          accepted++;
+          _levelLoadPrepared = puzzles.length;
+          notifyListeners();
         }
-      } catch (e) {
-        debugPrint('Error generating puzzle batch: $e');
       }
+      if (accepted == 0) break;
     }
 
     return puzzles;
+  }
+
+  Future<String> _ensureSoloGuestId() async {
+    final prefs = await SharedPreferences.getInstance();
+    var id = prefs.getString(_soloGuestIdPrefsKey);
+    if (id == null || id.length < 8) {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      final rnd = Random.secure();
+      id = List.generate(24, (_) => chars[rnd.nextInt(chars.length)]).join();
+      await prefs.setString(_soloGuestIdPrefsKey, id);
+    }
+    return id;
   }
 
   /// Generate a puzzle key for deduplication
@@ -408,21 +445,21 @@ class GameProvider extends ChangeNotifier {
 
     if (isArabic) {
       final steps = puzzle.stepsAr.map((s) => s.word).join(',');
-      final type = puzzle.type;
+      final type = (puzzle.type ?? 'logical_chain').trim().toLowerCase();
       return '$type|${puzzle.startWordAr}|${puzzle.endWordAr}|$steps';
     } else {
       final steps = puzzle.stepsEn.map((s) => s.word).join(',');
-      final type = puzzle.type;
+      final type = (puzzle.type ?? 'logical_chain').trim().toLowerCase();
       return '$type|${puzzle.startWordEn}|${puzzle.endWordEn}|$steps';
     }
   }
 
   String _generateQuestionKey(GamePuzzle puzzle, bool isArabic) {
-    final type = puzzle.type ?? 'logical_chain';
+    final type = (puzzle.type ?? 'logical_chain').trim().toLowerCase();
     if (isArabic) {
-      return '$type|${puzzle.startWordAr.trim()}|${puzzle.endWordAr.trim()}';
+      return '$type|${puzzle.startWordAr.trim().toLowerCase()}|${puzzle.endWordAr.trim().toLowerCase()}';
     }
-    return '$type|${puzzle.startWordEn.trim()}|${puzzle.endWordEn.trim()}';
+    return '$type|${puzzle.startWordEn.trim().toLowerCase()}|${puzzle.endWordEn.trim().toLowerCase()}';
   }
 
   bool _tryRegisterPuzzle(GamePuzzle puzzle, bool isArabic) {
@@ -435,12 +472,6 @@ class GameProvider extends ChangeNotifier {
     _sessionSeenPuzzleKeys.add(puzzleKey);
     _sessionSeenQuestionKeys.add(questionKey);
     return true;
-  }
-
-  List<String> _buildExcludedQuestionKeys({int maxKeys = 180}) {
-    final keys = _sessionSeenQuestionKeys.toList();
-    if (keys.length <= maxKeys) return keys;
-    return keys.sublist(keys.length - maxKeys);
   }
 
   // ============ Puzzle Validation ============
@@ -836,8 +867,8 @@ class GameProvider extends ChangeNotifier {
     bool tryAdd(GamePuzzle candidate) {
       final questionKey = _generateQuestionKey(candidate, isArabic);
       if (levelQuestionKeys.contains(questionKey)) return false;
+      if (!_tryRegisterPuzzle(candidate, isArabic)) return false;
       levelQuestionKeys.add(questionKey);
-      _tryRegisterPuzzle(candidate, isArabic);
       filled.add(candidate);
       return true;
     }
@@ -877,16 +908,97 @@ class GameProvider extends ChangeNotifier {
       rescueGuard++;
     }
 
-    while (filled.length < targetCount) {
+    // Never append without _tryRegisterPuzzle — those slots were invisible to
+    // session dedupe and caused the same emergency templates on the next level.
+    var fillGuard = 0;
+    while (filled.length < targetCount && fillGuard < 100000) {
+      fillGuard++;
       final emergency = _buildEmergencyPuzzle(
         isArabic,
         levelId: levelId,
-        seed: seed++,
+        seed: seed++ ^ (fillGuard * 1103515245),
       );
-      filled.add(emergency);
+      if (tryAdd(emergency)) continue;
+      if (tryAdd(
+            _withUniqueQuestionFlavor(
+              emergency,
+              isArabic: isArabic,
+              seed: seed++ ^ fillGuard,
+            ),
+          )) {
+        continue;
+      }
+      if (tryAdd(
+            _withNumericQuestionTag(
+              emergency,
+              isArabic,
+              salt: fillGuard + levelId * 9973 + filled.length * 131071,
+            ),
+          )) {
+        continue;
+      }
+    }
+
+    // Extremely unlikely: guarantee target length with time-based unique tags.
+    var urgent = 0;
+    while (filled.length < targetCount && urgent < 500) {
+      urgent++;
+      final salt =
+          DateTime.now().microsecondsSinceEpoch ^ (urgent * 1000003) ^ levelId;
+      final emergency = _buildEmergencyPuzzle(
+        isArabic,
+        levelId: levelId,
+        seed: seed++ ^ salt,
+      );
+      tryAdd(_withNumericQuestionTag(emergency, isArabic, salt: salt));
     }
 
     return filled.take(targetCount).toList();
+  }
+
+  /// Distinct start/end tags so question keys never collide across long play.
+  GamePuzzle _withNumericQuestionTag(
+    GamePuzzle puzzle,
+    bool isArabic, {
+    required int salt,
+  }) {
+    final tag = '\u200E·$salt';
+    if (isArabic) {
+      return GamePuzzle(
+        puzzleId: '${puzzle.puzzleId ?? 'emergency'}_u$salt',
+        startWordAr: '${puzzle.startWordAr}$tag',
+        endWordAr: '${puzzle.endWordAr}$tag',
+        stepsAr: puzzle.stepsAr,
+        startWordEn: puzzle.startWordEn,
+        endWordEn: puzzle.endWordEn,
+        stepsEn: puzzle.stepsEn,
+        hintAr: puzzle.hintAr,
+        hintEn: puzzle.hintEn,
+        type: puzzle.type,
+        difficulty: puzzle.difficulty,
+        riddleTextAr: puzzle.riddleTextAr,
+        riddleTextEn: puzzle.riddleTextEn,
+        pathOptions: puzzle.pathOptions,
+        correctPathIndex: puzzle.correctPathIndex,
+      );
+    }
+    return GamePuzzle(
+      puzzleId: '${puzzle.puzzleId ?? 'emergency'}_u$salt',
+      startWordAr: puzzle.startWordAr,
+      endWordAr: puzzle.endWordAr,
+      stepsAr: puzzle.stepsAr,
+      startWordEn: '${puzzle.startWordEn}$tag',
+      endWordEn: '${puzzle.endWordEn}$tag',
+      stepsEn: puzzle.stepsEn,
+      hintAr: puzzle.hintAr,
+      hintEn: puzzle.hintEn,
+      type: puzzle.type,
+      difficulty: puzzle.difficulty,
+      riddleTextAr: puzzle.riddleTextAr,
+      riddleTextEn: puzzle.riddleTextEn,
+      pathOptions: puzzle.pathOptions,
+      correctPathIndex: puzzle.correctPathIndex,
+    );
   }
 
   GamePuzzle _buildEmergencyPuzzle(

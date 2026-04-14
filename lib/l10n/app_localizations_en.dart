@@ -788,6 +788,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get generatingPuzzles => 'Generating puzzles...';
 
   @override
+  String generatingLevelProgress(int current, int total) {
+    return '$current of $total ready';
+  }
+
+  @override
   String get gameOverTitle => 'Game over';
 
   @override

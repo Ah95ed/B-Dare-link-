@@ -2,15 +2,89 @@
 import { jsonResponse, errorResponse } from './utils.js';
 import { buildSystemPrompt, buildUserPrompt, expectedStepsMinMax } from './prompt.js';
 
+/** Aligns with client excludeQuestionKeys / buildQuestionSignature (type|start|end). */
+export function puzzleJsonToQuestionKey(puzzle) {
+  const norm = (s) => String(s ?? '').trim().toLowerCase();
+  const type = norm(puzzle?.type || 'logical_chain');
+  const start = norm(puzzle?.startWord);
+  const end = norm(puzzle?.endWord);
+  if (!start || !end) return null;
+  return `${type}|${start}|${end}`;
+}
+
+/**
+ * Solo fast-path: one HTTP round-trip from the app while generating N puzzles
+ * sequentially on the Worker (avoids N mobile↔edge RTTs).
+ */
+async function generateLevelBatch(request, env, headers, requestBody, batchCount) {
+  const puzzles = [];
+  const normKey = (k) => String(k ?? '').trim().toLowerCase();
+  const excludes = Array.isArray(requestBody.excludeQuestionKeys)
+    ? requestBody.excludeQuestionKeys.map(normKey).filter(Boolean)
+    : [];
+  const url =
+    typeof request.url === 'string'
+      ? request.url
+      : request.url?.toString?.() ?? 'https://internal/generate-level';
+
+  for (let i = 0; i < batchCount; i++) {
+    const innerBody = {
+      ...requestBody,
+      excludeQuestionKeys: [...new Set(excludes)],
+      count: 1,
+      // Inner solo-batch: skip repeated D1 scans + fewer AI retries (same RTT budget).
+      skipRecentSignatureDb: i > 0,
+      soloBatchInner: true,
+    };
+    const innerReq = new Request(url, {
+      method: 'POST',
+      headers: request.headers,
+      body: JSON.stringify(innerBody),
+    });
+    const res = await generateLevel(innerReq, env, headers);
+    let puzzle;
+    try {
+      puzzle = await res.json();
+    } catch {
+      break;
+    }
+    if (!puzzle || typeof puzzle !== 'object' || puzzle.error) {
+      break;
+    }
+    puzzles.push(puzzle);
+    const qk = puzzleJsonToQuestionKey(puzzle);
+    if (qk) excludes.push(qk);
+  }
+
+  return new Response(JSON.stringify({ puzzles, count: puzzles.length }), {
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+      'X-Gen-Batch': String(puzzles.length),
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      Pragma: 'no-cache',
+      Expires: '0',
+    },
+    status: 200,
+  });
+}
+
 /** Generate a new puzzle level with strict logic and option quality checks */
 export async function generateLevel(request, env, headers) {
-  const requestBody = await request.json();
+  const requestBody = (await request.json()) || {};
+  const batchCount = Math.min(8, Math.max(1, Number(requestBody.count ?? 1)));
+  if (batchCount > 1) {
+    return await generateLevelBatch(request, env, headers, requestBody, batchCount);
+  }
+
   const {
     language = 'ar',
     level = 1,
     fresh = false,
     source = 'ai',
     excludeQuestionKeys = [],
+    skipRecentSignatureDb = false,
+    soloBatchInner = false,
   } = requestBody || {};
   const isArabic = language === 'ar';
 
@@ -451,11 +525,17 @@ export async function generateLevel(request, env, headers) {
       if (systemMsg) parts.push({ text: systemMsg });
       if (userMsg) parts.push({ text: userMsg });
 
+      // Short JSON chains rarely need >~900 tokens; lower caps reduce latency and cost.
+      const maxOut =
+        purpose === 'critic'
+          ? Math.max(64, Math.min(512, Number(env?.GEMINI_MAX_OUTPUT_CRITIC_TOKENS ?? 256)))
+          : Math.max(400, Math.min(2048, Number(env?.GEMINI_MAX_OUTPUT_TOKENS ?? 900)));
+
       const bodyPayload = {
         contents: [{ parts }],
         generationConfig: {
           temperature,
-          maxOutputTokens: 2000,
+          maxOutputTokens: maxOut,
         }
       };
 
@@ -819,15 +899,23 @@ Return ONLY {"ok":true,"reason":"..."} or {"ok":false,"reason":"..."} with a sho
   };
 
   const enableCritic = String(env?.ENABLE_CRITIC ?? '') === '1';
-  const maxAttempts = Math.max(1, Math.min(12, Number(env?.MAX_GEN_ATTEMPTS ?? 6)));
+  const maxAttempts = soloBatchInner
+    ? Math.max(1, Math.min(8, Number(env?.MAX_GEN_ATTEMPTS_INNER ?? 4)))
+    : Math.max(1, Math.min(12, Number(env?.MAX_GEN_ATTEMPTS ?? 6)));
 
   // Prevent repeats by loading recent signatures for this level/language.
   const recentSignatures = new Set();
-  if (env.DB) {
+  const recentLimit = Math.max(
+    40,
+    Math.min(400, Number(env?.PUZZLE_RECENT_SIGNATURE_LIMIT ?? 120)),
+  );
+  if (env.DB && !skipRecentSignatureDb) {
     try {
       const recentRows = await env.DB
-        .prepare('SELECT json FROM puzzles WHERE level = ? AND lang = ? ORDER BY created_at DESC LIMIT 400')
-        .bind(Number(level), language)
+        .prepare(
+          'SELECT json FROM puzzles WHERE level = ? AND lang = ? ORDER BY created_at DESC LIMIT ?',
+        )
+        .bind(Number(level), language, recentLimit)
         .all();
       for (const row of recentRows?.results || []) {
         try {

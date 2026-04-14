@@ -9,7 +9,16 @@ const String _devAdminToken = String.fromEnvironment(
   'DEV_ADMIN_TOKEN',
   defaultValue: '',
 );
-const String _apiBase = AppConstants.defaultBaseUrl;
+
+/// Same base resolution as [CloudflareApiService] (dart-define API_BASE_URL / WORKER_URL).
+const String _defaultWorkerUrl = AppConstants.defaultBaseUrl;
+const String _apiBase = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: String.fromEnvironment(
+    'WORKER_URL',
+    defaultValue: _defaultWorkerUrl,
+  ),
+);
 
 /// Admin API service for puzzle management
 class AdminService {
@@ -56,6 +65,52 @@ class AdminService {
       return resp.statusCode == 200;
     } catch (e) {
       return false;
+    }
+  }
+
+  /// Solo D1 bank: server-side AI generation + insert (admin only). Players use `/api/solo/level-pack` only.
+  Future<Map<String, dynamic>?> refillSoloBank({
+    required int level,
+    required String language,
+    required int count,
+  }) async {
+    try {
+      final uri = Uri.parse('$_apiBase/admin/solo-bank/refill');
+      final token = await _getEffectiveToken();
+      final resp = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'level': level.clamp(1, 100),
+              'language': language == 'en' ? 'en' : 'ar',
+              'count': count.clamp(1, 200),
+            }),
+          )
+          .timeout(AppConstants.adminSoloBankRefillTimeout);
+
+      dynamic decoded;
+      try {
+        decoded = jsonDecode(resp.body);
+      } catch (_) {
+        return {'_statusCode': resp.statusCode, '_raw': resp.body};
+      }
+      if (resp.statusCode == 200 && decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      if (decoded is Map) {
+        return {
+          ...Map<String, dynamic>.from(decoded),
+          '_statusCode': resp.statusCode,
+        };
+      }
+      return {'_statusCode': resp.statusCode, '_raw': resp.body};
+    } catch (e) {
+      debugPrint('refillSoloBank: $e');
+      return null;
     }
   }
 
