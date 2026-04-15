@@ -44,7 +44,7 @@ android {
         jvmTarget = "17"
     }
 
-    defaultConfig {
+   defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.mystery_joy.game"
         // You can update the following values to match your application needs.
@@ -55,19 +55,19 @@ android {
         versionName = "1.0.2"
     }
  
-    signingConfigs {
-getByName("release") {
+//    signingConfigs {
+//getByName("release") {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("release" )
-        } 
+    //        signingConfig = signingConfigs.getByName("release" )
+//        } 
        // create("release") {
       //      keyAlias = keystoreProperties["keyAlias"]?.toString()
            // keyPassword = keystoreProperties["keyPassword"]?.toString()
         //    storeFile = file(keystoreProperties["storeFile"]?.toString() ?: "")
         //    storePassword = keystoreProperties["storePassword"]?.toString()
       //  }
-    }
+//    }
     buildTypes {
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
