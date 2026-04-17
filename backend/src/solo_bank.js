@@ -1,13 +1,9 @@
-// solo_bank.js — D1-backed solo puzzles (AI only on Worker for refill/admin).
-import { jsonResponse, errorResponse } from './utils.js';
+// solo_bank.js — ألغاز السولو من D1؛ تعبئة البنك عبر توليد خادم مُعطّلة.
+import { jsonResponse, errorResponse, CORS_HEADERS } from './utils.js';
 import { getUserFromRequest } from './auth.js';
-import { generateLevel, puzzleJsonToQuestionKey } from './game.js';
+import { difficultyBandForLevel, insertPuzzleIntoD1 } from './puzzle_db.js';
 
-/** Difficulty band 1..5 from game level (coarse ramp). */
-export function difficultyBandForLevel(lv) {
-  const L = Math.max(1, Number(lv) || 1);
-  return Math.min(5, Math.max(1, Math.ceil(L / 10)));
-}
+export { difficultyBandForLevel } from './puzzle_db.js';
 
 function buildUserKey(user, guestId) {
   if (user?.id) return `u:${Number(user.id)}`;
@@ -16,7 +12,11 @@ function buildUserKey(user, guestId) {
   return `g:${g}`;
 }
 
-async function selectPuzzleRows(env, { language, level, band, userKey, count, useDifficulty, excludePlayed }) {
+/**
+ * Fetch random puzzles for solo. No `difficulty` filter so D1 works before/without migration 0004.
+ * If `solo_player_puzzles` is missing, retries without exclude-played subquery.
+ */
+async function selectPuzzleRows(env, { language, level, userKey, count, excludePlayed }) {
   let sql = `
     SELECT p.id, p.json
     FROM puzzles p
@@ -24,10 +24,6 @@ async function selectPuzzleRows(env, { language, level, band, userKey, count, us
       AND p.level = ?
   `;
   const binds = [language, level];
-  if (useDifficulty) {
-    sql += ` AND p.difficulty = ?`;
-    binds.push(band);
-  }
   if (excludePlayed) {
     sql += ` AND p.id NOT IN (
       SELECT puzzle_id FROM solo_player_puzzles
@@ -37,8 +33,17 @@ async function selectPuzzleRows(env, { language, level, band, userKey, count, us
   }
   sql += ` ORDER BY RANDOM() LIMIT ?`;
   binds.push(count);
-  const out = await env.DB.prepare(sql).bind(...binds).all();
-  return out?.results || [];
+  try {
+    const out = await env.DB.prepare(sql).bind(...binds).all();
+    return out?.results || [];
+  } catch (e) {
+    if (excludePlayed) {
+      console.warn('selectPuzzleRows: excludePlayed query failed, retrying without history:', e?.message || e);
+      return selectPuzzleRows(env, { language, level, userKey, count, excludePlayed: false });
+    }
+    console.error('selectPuzzleRows failed:', e);
+    return [];
+  }
 }
 
 /**
@@ -75,10 +80,8 @@ export async function getSoloLevelPack(request, env, headers) {
     (await selectPuzzleRows(env, {
       language,
       level,
-      band,
       userKey,
       count,
-      useDifficulty: true,
       excludePlayed: true,
     })) || [];
 
@@ -86,35 +89,8 @@ export async function getSoloLevelPack(request, env, headers) {
     rows = await selectPuzzleRows(env, {
       language,
       level,
-      band,
       userKey,
       count,
-      useDifficulty: false,
-      excludePlayed: true,
-    });
-  }
-
-  if (rows.length < count) {
-    rows = await selectPuzzleRows(env, {
-      language,
-      level,
-      band,
-      userKey,
-      count,
-      useDifficulty: true,
-      excludePlayed: false,
-    });
-    reusedHistory = rows.length > 0;
-  }
-
-  if (rows.length < count) {
-    rows = await selectPuzzleRows(env, {
-      language,
-      level,
-      band,
-      userKey,
-      count,
-      useDifficulty: false,
       excludePlayed: false,
     });
     reusedHistory = rows.length > 0;
@@ -135,11 +111,13 @@ export async function getSoloLevelPack(request, env, headers) {
     return jsonResponse(
       {
         error: 'EMPTY_BANK',
-        reason: 'No puzzles in D1. Admin: POST /admin/solo-bank/refill',
+        reason:
+          'No puzzles in D1. Import rows into the puzzles table or use admin tools to add JSON.',
         puzzles: [],
         count: 0,
       },
       200,
+      { 'X-Solo-Bank': 'empty' },
     );
   }
 
@@ -153,13 +131,17 @@ export async function getSoloLevelPack(request, env, headers) {
     })
     .filter(Boolean);
 
-  const ins = env.DB.prepare(
-    `INSERT OR IGNORE INTO solo_player_puzzles (user_key, puzzle_id, level) VALUES (?, ?, ?)`,
-  );
-  for (const r of rows) {
-    if (r?.id != null) {
-      await ins.bind(userKey, r.id, level).run();
+  try {
+    const ins = env.DB.prepare(
+      `INSERT OR IGNORE INTO solo_player_puzzles (user_key, puzzle_id, level) VALUES (?, ?, ?)`,
+    );
+    for (const r of rows) {
+      if (r?.id != null) {
+        await ins.bind(userKey, r.id, level).run();
+      }
     }
+  } catch (e) {
+    console.warn('solo_player_puzzles insert skipped (table missing or error):', e?.message || e);
   }
 
   return new Response(
@@ -183,10 +165,64 @@ export async function getSoloLevelPack(request, env, headers) {
   );
 }
 
+/** تعبئة البنك عبر Gemini مُعطّلة — أضف الألغاز إلى D1 يدوياً. */
+export async function insertBankPuzzlesFromAi(env, headers, { level, language, count, source }) {
+  const L = Math.max(1, Math.min(100, Number(level) || 1));
+  const lang = language === 'en' ? 'en' : 'ar';
+  const n = Math.min(200, Math.max(1, Number(count) || 1));
+  const band = difficultyBandForLevel(L);
+  return {
+    inserted: 0,
+    skipped: 0,
+    level: L,
+    language: lang,
+    difficultyBand: band,
+    requested: n,
+    errors: [
+      'AI_BANK_INSERT_DISABLED: add puzzle JSON rows to D1 (import / SQL / admin insert).',
+    ],
+  };
+}
+
+/**
+ * Cron: كان يعبّئ البنك عبر Gemini — مُعطّل؛ عبّئ جدول puzzles في D1 يدوياً.
+ */
+export async function runAutoSoloBankTopUp(_env) {
+  return {
+    skipped: true,
+    reason:
+      'SOLO_BANK_AUTO: server-side AI bank refill is disabled. Populate D1 puzzles table directly.',
+  };
+}
+
+/**
+ * POST /solo-bank/generate — كان يولّد عبر Gemini؛ مُعطّل (503). عبّئ D1 يدوياً.
+ */
+export async function soloBankPublicGenerate(request, env, _headers, _ctx) {
+  if (!env?.DB) {
+    return errorResponse('Database not configured', 500);
+  }
+
+  const webKey = String(env.SOLO_BANK_WEB_KEY || '').trim();
+  if (webKey.length < 16) {
+    return errorResponse('SOLO_BANK_WEB_KEY not set (min 16 chars)', 503);
+  }
+
+  const hdr = String(request.headers.get('X-Wonder-Solo-Key') || '').trim();
+  if (hdr !== webKey) {
+    return errorResponse('Forbidden', 403);
+  }
+
+  return errorResponse(
+    'Web solo-bank AI generation is disabled. Add puzzles to D1 (puzzles table) via SQL or import.',
+    503,
+  );
+}
+
 /**
  * POST /admin/solo-bank/refill — user id 1 only.
  */
-export async function refillSoloBank(request, env, headers) {
+export async function refillSoloBank(request, env, _headers, _ctx) {
   const user = await getUserFromRequest(request, env);
   if (!user || Number(user.id) !== 1) {
     return errorResponse('Unauthorized', 401);
@@ -195,82 +231,43 @@ export async function refillSoloBank(request, env, headers) {
     return errorResponse('Database not configured', 500);
   }
 
-  let body = {};
-  try {
-    body = (await request.json()) || {};
-  } catch {
-    body = {};
+  return errorResponse(
+    'Solo bank AI refill is disabled. Populate D1 (puzzles table) manually or via import.',
+    503,
+  );
+}
+
+/**
+ * GET /solo-bank/status?level=1&lang=ar — نفس حماية المفتاح للتحقق من عدد الصفوف في D1
+ */
+export async function soloBankPublicStatus(request, env) {
+  if (!env?.DB) {
+    return errorResponse('Database not configured', 500);
+  }
+  const webKey = String(env.SOLO_BANK_WEB_KEY || '').trim();
+  if (webKey.length < 16) {
+    return errorResponse('SOLO_BANK_WEB_KEY not set (min 16 chars)', 503);
+  }
+  const hdr = String(request.headers.get('X-Wonder-Solo-Key') || '').trim();
+  if (hdr !== webKey) {
+    return errorResponse('Forbidden', 403);
   }
 
-  const level = Math.max(1, Math.min(100, Number(body.level) || 1));
-  const language = body.language === 'en' ? 'en' : 'ar';
-  const count = Math.min(200, Math.max(1, Number(body.count) || 100));
-  const band = difficultyBandForLevel(level);
+  const u = new URL(request.url);
+  const level = Math.max(1, Math.min(100, Number(u.searchParams.get('level')) || 1));
+  const language = u.searchParams.get('lang') === 'en' ? 'en' : 'ar';
 
-  const url =
-    typeof request.url === 'string'
-      ? request.url
-      : request.url?.toString?.() ?? 'https://internal/refill';
-
-  let inserted = 0;
-  let skipped = 0;
-  const errors = [];
-
-  for (let i = 0; i < count; i++) {
-    const innerReq = new Request(url, {
-      method: 'POST',
-      headers: request.headers,
-      body: JSON.stringify({
-        language,
-        level,
-        count: 1,
-        source: 'ai',
-        skipRecentSignatureDb: i > 0,
-        soloBatchInner: true,
-      }),
-    });
-
-    try {
-      const res = await generateLevel(innerReq, env, headers);
-      const puzzle = await res.json();
-      if (!puzzle || puzzle.error) {
-        errors.push(String(puzzle?.error || puzzle?.reason || 'gen_failed'));
-        continue;
-      }
-
-      const qh = puzzleJsonToQuestionKey(puzzle);
-      const jsonStr = JSON.stringify(puzzle);
-
-      try {
-        await env.DB
-          .prepare(
-            `INSERT INTO puzzles (level, lang, difficulty, question_hash, json, source)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(level, language, band, qh || null, jsonStr, 'bank_refill')
-          .run();
-        inserted += 1;
-      } catch (e) {
-        const msg = String(e?.message || e);
-        if (msg.includes('UNIQUE') || msg.includes('unique')) {
-          skipped += 1;
-        } else {
-          errors.push(msg);
-        }
-      }
-    } catch (e) {
-      errors.push(String(e?.message || e));
-    }
-  }
+  const row = await env.DB
+    .prepare(`SELECT COUNT(*) as c FROM puzzles WHERE level = ? AND lang = ?`)
+    .bind(level, language)
+    .first();
+  const total = await env.DB.prepare(`SELECT COUNT(*) as c FROM puzzles`).first();
 
   return jsonResponse({
-    success: true,
-    requested: count,
-    inserted,
-    skipped,
+    ok: true,
     level,
     language,
-    difficultyBand: band,
-    errors: errors.length ? errors.slice(0, 30) : undefined,
+    puzzlesAtLevelLang: Number(row?.c ?? 0),
+    puzzlesTotal: Number(total?.c ?? 0),
   });
 }

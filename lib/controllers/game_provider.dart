@@ -238,17 +238,23 @@ class GameProvider extends ChangeNotifier {
     try {
       final guestId = await _ensureSoloGuestId();
       final token = await _authProvider?.getToken();
-      final level = await _apiService.fetchSoloLevelPack(
+      final packResult = await _apiService.fetchSoloLevelPackFromD1(
         isArabic: isArabic,
         levelId: _unlockedLevelId,
         count: 1,
         guestId: guestId,
         authToken: token,
       );
-      if (level != null && level.puzzles.isNotEmpty) {
-        await loadLevel(level, isArabic);
+      if (packResult.emptyBank) {
+        _errorMessage =
+            isArabic ? AppStrings.soloBankEmptyAr : AppStrings.soloBankEmpty;
       } else {
-        _errorMessage = AppStrings.failedToGenerateLevel;
+        final level = packResult.level;
+        if (level != null && level.puzzles.isNotEmpty) {
+          await loadLevel(level, isArabic);
+        } else {
+          _errorMessage = AppStrings.failedToGenerateLevel;
+        }
       }
     } catch (e) {
       _errorMessage = 'Error: $e';
@@ -267,8 +273,12 @@ class GameProvider extends ChangeNotifier {
       final targetPuzzleCount = _desiredPuzzlesForLevel(level.id);
 
       if (level.puzzles.isEmpty) {
-        final puzzles = await _generatePuzzles(level.id, isArabic);
-        if (puzzles.isEmpty) {
+        final out = await _generatePuzzles(level.id, isArabic);
+        if (out.emptyBank) {
+          _errorMessage =
+              isArabic ? AppStrings.soloBankEmptyAr : AppStrings.soloBankEmpty;
+          _currentLevel = GameLevel(id: level.id, puzzles: const []);
+        } else if (out.puzzles.isEmpty) {
           final emergencyFilled = _padPuzzlesToTarget(
             const <GamePuzzle>[],
             targetPuzzleCount,
@@ -279,7 +289,7 @@ class GameProvider extends ChangeNotifier {
           _errorMessage = null;
         } else {
           final filled = _padPuzzlesToTarget(
-            puzzles,
+            out.puzzles,
             targetPuzzleCount,
             level.id,
             isArabic,
@@ -294,46 +304,61 @@ class GameProvider extends ChangeNotifier {
         final existingLimited = validExisting.take(targetPuzzleCount).toList();
 
         if (existingLimited.length < targetPuzzleCount) {
-          final generated = await _generatePuzzles(
+          final genOut = await _generatePuzzles(
             level.id,
             isArabic,
             requiredSlots: targetPuzzleCount - existingLimited.length,
           );
-          final merged = <GamePuzzle>[...existingLimited];
-
-          for (final puzzle in generated) {
-            if (merged.length >= targetPuzzleCount) break;
-            if (!_isValidPuzzle(puzzle)) continue;
-            final puzzleKey = _generatePuzzleKey(puzzle, isArabic);
-            final questionKey = _generateQuestionKey(puzzle, isArabic);
-            final alreadyExists = merged.any(
-              (p) =>
-                  _generatePuzzleKey(p, isArabic) == puzzleKey ||
-                  _generateQuestionKey(p, isArabic) == questionKey,
-            );
-            if (alreadyExists) continue;
-            if (_tryRegisterPuzzle(puzzle, isArabic)) {
-              merged.add(puzzle);
-            }
-          }
-
-          if (merged.isEmpty) {
-            final emergencyFilled = _padPuzzlesToTarget(
-              const <GamePuzzle>[],
-              targetPuzzleCount,
-              level.id,
-              isArabic,
-            );
-            _currentLevel = GameLevel(id: level.id, puzzles: emergencyFilled);
-            _errorMessage = null;
-          } else {
+          if (genOut.emptyBank && existingLimited.isEmpty) {
+            _errorMessage =
+                isArabic ? AppStrings.soloBankEmptyAr : AppStrings.soloBankEmpty;
+            _currentLevel = GameLevel(id: level.id, puzzles: const []);
+          } else if (genOut.emptyBank) {
             final filled = _padPuzzlesToTarget(
-              merged,
+              existingLimited,
               targetPuzzleCount,
               level.id,
               isArabic,
             );
             _currentLevel = GameLevel(id: level.id, puzzles: filled);
+            _errorMessage = null;
+          } else {
+            final merged = <GamePuzzle>[...existingLimited];
+
+            for (final puzzle in genOut.puzzles) {
+              if (merged.length >= targetPuzzleCount) break;
+              if (!_isValidPuzzle(puzzle)) continue;
+              final puzzleKey = _generatePuzzleKey(puzzle, isArabic);
+              final questionKey = _generateQuestionKey(puzzle, isArabic);
+              final alreadyExists = merged.any(
+                (p) =>
+                    _generatePuzzleKey(p, isArabic) == puzzleKey ||
+                    _generateQuestionKey(p, isArabic) == questionKey,
+              );
+              if (alreadyExists) continue;
+              if (_tryRegisterPuzzle(puzzle, isArabic)) {
+                merged.add(puzzle);
+              }
+            }
+
+            if (merged.isEmpty) {
+              final emergencyFilled = _padPuzzlesToTarget(
+                const <GamePuzzle>[],
+                targetPuzzleCount,
+                level.id,
+                isArabic,
+              );
+              _currentLevel = GameLevel(id: level.id, puzzles: emergencyFilled);
+              _errorMessage = null;
+            } else {
+              final filled = _padPuzzlesToTarget(
+                merged,
+                targetPuzzleCount,
+                level.id,
+                isArabic,
+              );
+              _currentLevel = GameLevel(id: level.id, puzzles: filled);
+            }
           }
         } else {
           final filled = _padPuzzlesToTarget(
@@ -378,8 +403,8 @@ class GameProvider extends ChangeNotifier {
     }
   }
 
-  /// Generate puzzles for a level
-  Future<List<GamePuzzle>> _generatePuzzles(
+  /// جلب ألغاز السولو من D1 عبر Worker (`/api/solo/level-pack`).
+  Future<({List<GamePuzzle> puzzles, bool emptyBank})> _generatePuzzles(
     int levelId,
     bool isArabic, {
     int? requiredSlots,
@@ -389,7 +414,9 @@ class GameProvider extends ChangeNotifier {
         (requiredSlots != null && requiredSlots > 0)
             ? requiredSlots
             : _desiredPuzzlesForLevel(levelId);
-    if (desiredCount <= 0) return puzzles;
+    if (desiredCount <= 0) {
+      return (puzzles: puzzles, emptyBank: false);
+    }
 
     _levelLoadTarget = desiredCount;
     _levelLoadPrepared = 0;
@@ -400,13 +427,17 @@ class GameProvider extends ChangeNotifier {
 
     for (var pass = 0; pass < 3 && puzzles.length < desiredCount; pass++) {
       final need = desiredCount - puzzles.length;
-      final pack = await _apiService.fetchSoloLevelPack(
+      final packResult = await _apiService.fetchSoloLevelPackFromD1(
         isArabic: isArabic,
         levelId: levelId,
         count: need,
         guestId: guestId,
         authToken: token,
       );
+      if (packResult.emptyBank) {
+        return (puzzles: puzzles, emptyBank: true);
+      }
+      final pack = packResult.level;
       if (pack == null || pack.puzzles.isEmpty) break;
 
       var accepted = 0;
@@ -423,7 +454,7 @@ class GameProvider extends ChangeNotifier {
       if (accepted == 0) break;
     }
 
-    return puzzles;
+    return (puzzles: puzzles, emptyBank: false);
   }
 
   Future<String> _ensureSoloGuestId() async {

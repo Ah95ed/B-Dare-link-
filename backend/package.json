@@ -8,6 +8,8 @@
     "start": "wrangler dev",
     "dev:local": "wrangler dev --local --persist-to .wrangler/state --config ./wrangler.toml",
     "db:init:local": "wrangler d1 execute wonder-link-db --local --file=schema.sql --config ./wrangler.toml",
+    "db:migrate:remote": "wrangler d1 migrations apply wonder-link-db --remote --config ./wrangler.toml",
+    "db:migrate:local": "wrangler d1 migrations apply wonder-link-db --local --config ./wrangler.toml",
     "predeploy": "npm run test:run",
     "deploy": "wrangler deploy",
     "test": "vitest",

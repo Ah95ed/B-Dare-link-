@@ -9,6 +9,10 @@ abstract class AppStrings {
   static const String failedToSyncProgress = 'Failed to sync progress';
   static const String failedToGenerateLevel =
       'Failed to generate level. Check backend connection.';
+  static const String soloBankEmpty =
+      'No puzzles in the server database (D1). Fill the bank (admin or /solo-bank-tools), then retry.';
+  static const String soloBankEmptyAr =
+      'لا توجد ألغاز في قاعدة الخادم (D1). عبّئ البنك من لوحة الأدمن أو أداة الويب ثم أعد المحاولة.';
   static const String failedToLoadLevelData = 'Failed to load level data.';
   static const String failedToValidateLink = 'Error validating link';
   static const String failedToGeneratePuzzleFromImage =

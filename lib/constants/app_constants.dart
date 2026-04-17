@@ -11,6 +11,9 @@ abstract class AppConstants {
   );
   static const String jwtTokenKey = 'jwt_token';
 
+  /// Solo: ألغاز من جدول `puzzles` في D1 عبر Worker (ليس توليداً من التطبيق).
+  static const String soloLevelPackPath = '/api/solo/level-pack';
+
   // Duration Constants
   static const Duration animationDuration = Duration(milliseconds: 300);
   static const Duration debounceDelay = Duration(milliseconds: 500);

@@ -8,6 +8,14 @@ import '../models/spot_diff_puzzle.dart';
 import '../core/exceptions/app_exceptions.dart';
 import '../constants/app_constants.dart';
 
+/// نتيجة جلب حزمة السولو من D1 عبر Worker.
+class SoloLevelPackResult {
+  final GameLevel? level;
+  final bool emptyBank;
+
+  const SoloLevelPackResult({this.level, this.emptyBank = false});
+}
+
 class CloudflareApiService {
   static const String _defaultWorkerUrl = AppConstants.defaultBaseUrl;
   late final String _workerUrl = const String.fromEnvironment(
@@ -210,8 +218,8 @@ class CloudflareApiService {
     }
   }
 
-  /// Solo: fetch puzzles from D1 bank (Worker); no client-side AI.
-  Future<GameLevel?> fetchSoloLevelPack({
+  /// Solo: جلب ألغاز من D1 عبر Worker — `AppConstants.soloLevelPackPath`.
+  Future<SoloLevelPackResult> fetchSoloLevelPackFromD1({
     required bool isArabic,
     required int levelId,
     required int count,
@@ -227,7 +235,7 @@ class CloudflareApiService {
     try {
       final response = await http
           .post(
-            Uri.parse('$_workerUrl/api/solo/level-pack'),
+            Uri.parse('$_workerUrl${AppConstants.soloLevelPackPath}'),
             headers: headers,
             body: jsonEncode({
               'language': isArabic ? 'ar' : 'en',
@@ -240,20 +248,28 @@ class CloudflareApiService {
 
       if (response.statusCode != 200) {
         debugPrint(
-          'fetchSoloLevelPack non-200 (${response.statusCode})',
+          'fetchSoloLevelPackFromD1 non-200 (${response.statusCode})',
         );
-        return null;
+        return const SoloLevelPackResult();
       }
+      final emptyBankHeader =
+          (response.headers['x-solo-bank'] ?? '').toLowerCase() == 'empty';
       final decoded = jsonDecode(response.body);
-      if (decoded is! Map) return null;
+      if (decoded is! Map) return const SoloLevelPackResult();
       final data = Map<String, dynamic>.from(decoded);
       final err = data['error']?.toString();
       final rawList = data['puzzles'];
+      final emptyBank =
+          emptyBankHeader || err == 'EMPTY_BANK';
+
       if (rawList is! List) {
-        if (err == 'EMPTY_BANK') {
-          return GameLevel(id: levelId, puzzles: const []);
+        if (emptyBank) {
+          return SoloLevelPackResult(
+            level: GameLevel(id: levelId, puzzles: const []),
+            emptyBank: true,
+          );
         }
-        return null;
+        return const SoloLevelPackResult();
       }
 
       final puzzles = <GamePuzzle>[];
@@ -265,14 +281,19 @@ class CloudflareApiService {
         );
         if (p != null) puzzles.add(p);
       }
-      if (puzzles.isEmpty && err == 'EMPTY_BANK') {
-        return GameLevel(id: levelId, puzzles: const []);
+      if (puzzles.isEmpty && emptyBank) {
+        return SoloLevelPackResult(
+          level: GameLevel(id: levelId, puzzles: const []),
+          emptyBank: true,
+        );
       }
-      if (puzzles.isEmpty) return null;
-      return GameLevel(id: levelId, puzzles: puzzles);
+      if (puzzles.isEmpty) return const SoloLevelPackResult();
+      return SoloLevelPackResult(
+        level: GameLevel(id: levelId, puzzles: puzzles),
+      );
     } catch (e) {
-      debugPrint('fetchSoloLevelPack failed: $e');
-      return null;
+      debugPrint('fetchSoloLevelPackFromD1 failed: $e');
+      return const SoloLevelPackResult();
     }
   }
 

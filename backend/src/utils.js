@@ -2,7 +2,8 @@
 export const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Wonder-Solo-Key',
+  'Access-Control-Expose-Headers': 'X-Solo-Bank',
 };
 
 export const JWT_SECRET = "CHANGE_ME_IN_PROD_TO_A_REAL_SECRET_KEY"; // In prod use env.JWT_SECRET

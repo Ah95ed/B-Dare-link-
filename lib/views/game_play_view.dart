@@ -67,6 +67,39 @@ class _GamePlayViewState extends State<GamePlayView> {
       );
     }
 
+    final err = provider.errorMessage;
+    if (err != null && provider.totalPuzzles == 0 && !provider.isGameOver) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: BackButton(onPressed: () => Navigator.pop(context)),
+          title: Text(l10n.soloPlay),
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          elevation: 0,
+        ),
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 28.w),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.cloud_off_outlined, size: 56.sp, color: Colors.orange),
+                SizedBox(height: 20.h),
+                Text(
+                  err,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final mode = provider.selectedMode;
     final isGameOver = provider.isGameOver;
 

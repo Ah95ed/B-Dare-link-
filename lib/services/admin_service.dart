@@ -98,7 +98,8 @@ class AdminService {
       } catch (_) {
         return {'_statusCode': resp.statusCode, '_raw': resp.body};
       }
-      if (resp.statusCode == 200 && decoded is Map) {
+      if ((resp.statusCode == 200 || resp.statusCode == 202) &&
+          decoded is Map) {
         return Map<String, dynamic>.from(decoded);
       }
       if (decoded is Map) {

@@ -283,14 +283,35 @@ class _AdminPageState extends State<AdminPage> {
         return;
       }
 
-      if (result['_statusCode'] != null && result['_statusCode'] != 200) {
+      final code = result['_statusCode'];
+      if (code != null && code != 200 && code != 202) {
         final err = result['error']?.toString() ?? result['_raw']?.toString() ?? '';
-        setState(() => _status = 'رفض الخادم: ${result['_statusCode']} $err');
+        setState(() => _status = 'رفض الخادم: $code $err');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('خطأ: ${result['_statusCode']}')),
+            SnackBar(content: Text('خطأ: $code')),
           );
         }
+        return;
+      }
+
+      if (result['accepted'] == true || code == 202) {
+        final req = result['requested'] ?? count;
+        setState(() {
+          _status =
+              'بدأ الخادم تعبئة $req لغزًا في الخلفية (Gemini → D1). انتظر عدة دقائق ثم اضغط تحديث.';
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'معالجة $req لغزًا في الخلفية. راقب لوحة Worker أو حدّث القائمة لاحقًا.',
+              ),
+              duration: const Duration(seconds: 8),
+            ),
+          );
+        }
+        await _fetchPuzzles();
         return;
       }
 

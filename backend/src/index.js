@@ -5,7 +5,13 @@ import { getProgress, saveProgress } from './progress.js';
 import { requireAuth } from './middleware/auth_middleware.js';
 import { requiresAuth } from './middleware/route_guard.js';
 import { generateLevel, submitSolution } from './game.js';
-import { getSoloLevelPack, refillSoloBank } from './solo_bank.js';
+import {
+  getSoloLevelPack,
+  refillSoloBank,
+  runAutoSoloBankTopUp,
+  soloBankPublicGenerate,
+  soloBankPublicStatus,
+} from './solo_bank.js';
 import { generatePathLevel } from './game_path.js';
 import { listPuzzles, deletePuzzle, regeneratePuzzle, generateBulkPuzzles } from './admin.js';
 import { getDailyChallenge, submitDailyScore, getDailyLeaderboard, getWeeklyStandings } from './tournament.js';
@@ -50,6 +56,14 @@ import {
   getDetailedStats,
 } from './manager_permissions.js';
 import { GroupRoom } from './room_do.js';
+import { SOLO_BANK_GENERATOR_PAGE_HTML } from './solo_bank_generator_html.js';
+
+function escapeHtmlAttr(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
+}
 
 export { GroupRoom };
 
@@ -62,6 +76,29 @@ export default {
 
     const url = new URL(request.url);
     const path = url.pathname;
+
+    if (path === '/solo-bank-tools' && request.method === 'GET') {
+      const key = env.SOLO_BANK_WEB_KEY ?? '';
+      const html = SOLO_BANK_GENERATOR_PAGE_HTML.replace(
+        '__INJECT_KEY__',
+        escapeHtmlAttr(key),
+      );
+      return new Response(html, {
+        headers: {
+          ...CORS_HEADERS,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      });
+    }
+
+    if (path === '/solo-bank/generate' && request.method === 'POST') {
+      return await soloBankPublicGenerate(request, env, CORS_HEADERS, ctx);
+    }
+
+    if (path === '/solo-bank/status' && request.method === 'GET') {
+      return await soloBankPublicStatus(request, env);
+    }
 
     try {
       const shouldAuth = requiresAuth(path, request.method);
@@ -211,7 +248,7 @@ export default {
         return await generateBulkPuzzles(request, env, CORS_HEADERS);
       }
       if (path === '/admin/solo-bank/refill' && request.method === 'POST') {
-        return await refillSoloBank(request, env, CORS_HEADERS);
+        return await refillSoloBank(request, env, CORS_HEADERS, ctx);
       }
 
       // ---------- Tournaments ----------
@@ -376,19 +413,26 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    try {
-      const task = runPuzzleCleanup(env, {
-        maxPerGroup: Number(env?.PUZZLE_RETENTION_PER_GROUP ?? 1200),
-        maxAgeDays: Number(env?.PUZZLE_RETENTION_DAYS ?? 45),
-        recentProtect: Number(env?.PUZZLE_RECENT_PROTECT ?? 250),
-      });
-      if (ctx?.waitUntil) {
-        ctx.waitUntil(task);
-      } else {
-        await task;
+    const task = (async () => {
+      try {
+        await runPuzzleCleanup(env, {
+          maxPerGroup: Number(env?.PUZZLE_RETENTION_PER_GROUP ?? 1200),
+          maxAgeDays: Number(env?.PUZZLE_RETENTION_DAYS ?? 45),
+          recentProtect: Number(env?.PUZZLE_RECENT_PROTECT ?? 250),
+        });
+      } catch (e) {
+        console.error('Scheduled puzzle cleanup failed:', e);
       }
-    } catch (e) {
-      console.error('Scheduled puzzle cleanup failed:', e);
+      try {
+        await runAutoSoloBankTopUp(env);
+      } catch (e) {
+        console.error('Scheduled solo bank top-up failed:', e);
+      }
+    })();
+    if (ctx?.waitUntil) {
+      ctx.waitUntil(task);
+    } else {
+      await task;
     }
   },
 };

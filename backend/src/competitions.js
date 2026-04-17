@@ -2,6 +2,7 @@
 import { jsonResponse, errorResponse, CORS_HEADERS } from './utils.js';
 import { getUserFromRequest } from './auth.js';
 import { linkChainMinMax } from './prompt.js';
+import { insertPuzzleIntoD1 } from './puzzle_db.js';
 
 // Generate unique room code
 function generateRoomCode() {
@@ -584,11 +585,17 @@ async function startRoomGame(env, roomId, ctx) {
     if (normalized.puzzleId) return normalized;
     const lang = room.language || 'ar';
     const level = room.difficulty || 1;
-    const jsonStr = JSON.stringify(normalized);
-    const inserted = await env.DB.prepare(
-      'INSERT INTO puzzles (level, lang, json) VALUES (?, ?, ?)'
-    ).bind(level, lang, jsonStr).run();
-    normalized.puzzleId = inserted.meta.last_row_id;
+    const ins = await insertPuzzleIntoD1(env, {
+      level,
+      lang,
+      puzzle: normalized,
+      source: 'room_quiz',
+    });
+    if (!ins.ok) {
+      console.warn('ensurePuzzleId insert failed:', ins.err || ins);
+      return null;
+    }
+    normalized.puzzleId = ins.lastRowId;
     return normalized;
   };
 
@@ -1690,13 +1697,16 @@ export async function submitAnswer(request, env, ctx) {
     if (!puzzleId) {
       const lang = room.language || 'ar';
       const difficulty = room.difficulty || 1;
-      const jsonStr = JSON.stringify(puzzle);
-      const inserted = await env.DB.prepare(
-        'INSERT INTO puzzles (level, lang, json) VALUES (?, ?, ?)' // returns last_row_id
-      )
-        .bind(difficulty, lang, jsonStr)
-        .run();
-      puzzleId = inserted.meta.last_row_id;
+      const ins = await insertPuzzleIntoD1(env, {
+        level: difficulty,
+        lang,
+        puzzle,
+        source: 'room_submit',
+      });
+      if (!ins.ok) {
+        return errorResponse(ins.err || 'Failed to persist puzzle', 500);
+      }
+      puzzleId = ins.lastRowId;
     }
 
     await env.DB.prepare(

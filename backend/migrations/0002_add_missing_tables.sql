@@ -1,11 +1,4 @@
--- Add missing tables and columns for manager permissions system
-
--- Add new columns to room_participants if they don't exist
--- Note: SQLite doesn't support ALTER TABLE ADD COLUMN IF NOT EXISTS
--- So we need to handle this carefully
-
--- First, check the structure
-PRAGMA table_info(room_participants);
+-- Add missing tables (CREATE IF NOT EXISTS only — no ALTER, avoids duplicate-column on prod).
 
 -- Create room_settings table
 CREATE TABLE IF NOT EXISTS room_settings (

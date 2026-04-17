@@ -16,7 +16,14 @@ migrations_dir = "migrations"
 AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
 OPENAI_MODEL = "gpt-4o-mini"
 PUZZLE_BANK_MIN = "1"
-GEMINI_MODEL = "gemini-2.0-flash"
+# الطبقة المجانية: flash-lite حصّة أعلى من flash — راجع https://ai.google.dev/gemini-api/docs/rate-limits
+GEMINI_MODEL = "gemini-2.5-flash-lite"
+# إعادة محاولة عند 429 من Google قبل الفشل النهائي.
+GEMINI_429_MAX_RETRIES = "10"
+# اختياري: فجوة يدوية بين كل لغز (ms) لكل المصادر؛ إن لم تُضبط: 13000 لصفحة الويب فقط، 2500 للكرون/الأدمن.
+# GEMINI_MIN_GAP_MS = "15000"
+# Solo bank + cron: puzzles are generated only via Gemini REST API, then saved to D1.
+# Set the key on the Worker:  npx wrangler secret put GEMINI_API_KEY
 # Faster Gemini responses for puzzle JSON (override in dashboard if needed)
 GEMINI_MAX_OUTPUT_TOKENS = "900"
 GEMINI_MAX_OUTPUT_CRITIC_TOKENS = "256"
@@ -27,8 +34,23 @@ MAX_GEN_ATTEMPTS_INNER = "4"
 PUZZLE_RETENTION_PER_GROUP = "1200"
 PUZZLE_RETENTION_DAYS = "45"
 PUZZLE_RECENT_PROTECT = "250"
+# Automatic D1 solo bank: each cron run adds up to SOLO_BANK_CRON_MAX_INSERT AI puzzles total,
+# split across (SOLO_BANK_AUTO_LEVELS × SOLO_BANK_AUTO_LANGS) until each bucket has SOLO_BANK_AUTO_TARGET.
+SOLO_BANK_AUTO = "1"
+SOLO_BANK_AUTO_TARGET = "100"
+SOLO_BANK_AUTO_LEVELS = "1"
+SOLO_BANK_AUTO_LANGS = "ar,en"
+SOLO_BANK_CRON_MAX_INSERT = "35"
+# Admin refill: upper bound puzzles per hop (actual per-invocation = min(REFILL_CHUNK, SAFE_AI_CHUNK)).
+SOLO_BANK_REFILL_CHUNK = "12"
+# لغز واحد لكل طلب من صفحة الويب + فجوة GEMINI_MIN_GAP_MS = أقل ضغط على الحصّة المجانية.
+SOLO_BANK_SAFE_AI_CHUNK = "1"
+# Public page /solo-bank-tools + POST /solo-bank/generate: header X-Wonder-Solo-Key (min 16 chars).
+# Prefer secret: npx wrangler secret put SOLO_BANK_WEB_KEY
+# SOLO_BANK_WEB_KEY = "change-me-32-chars-minimum"
 
 [triggers]
+# Every 6 hours; increase frequency (e.g. 15 */2 * * *) to reach 100 puzzles faster after deploy.
 crons = ["15 */6 * * *"]
 
 [durable_objects]
