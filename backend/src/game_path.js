@@ -1,135 +1,134 @@
-// game_path.js - New full-path puzzle system
+// game_path.js — ألغاز المسارات (paths) من D1 فقط؛ لا Gemini / Workers AI.
 import { jsonResponse, errorResponse } from './utils.js';
-import { buildPathPuzzlePrompt } from './path_prompt.js';
 
+function isPathPuzzlePayload(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  if (!obj.startWord || !obj.endWord) return false;
+  if (!Array.isArray(obj.paths) || obj.paths.length !== 4) return false;
+  for (let i = 0; i < 4; i++) {
+    const p = obj.paths[i];
+    if (!p || !Array.isArray(p.steps) || p.steps.length !== 4) return false;
+  }
+  return true;
+}
+
+async function selectPathJsonRows(env, level, language, limit) {
+  const L = Math.max(1, Math.min(100, Number(level) || 1));
+  const lang = language === 'en' ? 'en' : 'ar';
+  const lim = Math.max(1, Math.min(120, Number(limit) || 80));
+  const out = await env.DB.prepare(
+    `SELECT json FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT ?`,
+  )
+    .bind(L, lang, lim)
+    .all();
+  return out?.results || [];
+}
+
+async function selectPathJsonRowsByLang(env, language, limit) {
+  const lang = language === 'en' ? 'en' : 'ar';
+  const lim = Math.max(1, Math.min(120, Number(limit) || 80));
+  const out = await env.DB.prepare(
+    `SELECT json FROM puzzles WHERE lang = ? ORDER BY RANDOM() LIMIT ?`,
+  )
+    .bind(lang, lim)
+    .all();
+  return out?.results || [];
+}
+
+function normalizePathPuzzle(raw, level, isArabic) {
+  const puzzle = { ...raw, paths: raw.paths.map((p) => ({ ...p, steps: [...p.steps] })) };
+  puzzle.paths = puzzle.paths.map((path, idx) => ({
+    label: path.label || ['A', 'B', 'C', 'D'][idx],
+    steps: path.steps,
+    isCorrect: !!path.isCorrect,
+    explanation: path.explanation || '',
+  }));
+  const correctCount = puzzle.paths.filter((p) => p.isCorrect).length;
+  if (correctCount !== 1) {
+    puzzle.paths.forEach((p, i) => {
+      p.isCorrect = i === 0;
+    });
+  }
+  return {
+    startWord: puzzle.startWord,
+    endWord: puzzle.endWord,
+    paths: puzzle.paths,
+    hint:
+      puzzle.hint ||
+      (isArabic ? 'فكر بشكل منطقي' : 'Think logically'),
+    puzzleId: puzzle.puzzleId || `path_${level}_${Date.now()}`,
+    level,
+    source: 'd1',
+  };
+}
+
+async function pickPathPuzzleFromD1(env, language, level) {
+  const tryRows = async (rows) => {
+    for (const row of rows) {
+      try {
+        const obj = JSON.parse(row.json);
+        if (!isPathPuzzlePayload(obj)) continue;
+        return normalizePathPuzzle(obj, level, language === 'ar');
+      } catch {
+        /* skip */
+      }
+    }
+    return null;
+  };
+
+  let rows = await selectPathJsonRows(env, level, language, 80);
+  let picked = await tryRows(rows);
+  if (picked) return picked;
+
+  rows = await selectPathJsonRowsByLang(env, language, 80);
+  picked = await tryRows(rows);
+  return picked;
+}
+
+/**
+ * POST /api/generate-path — لغز مسارات من صف يحتوي `paths` (4 مسارات × 4 خطوات) في جدول puzzles.
+ */
 export async function generatePathLevel(request, env, headers) {
-    const { language = 'ar', level = 1 } = await request.json();
-    const isArabic = language === 'ar';
+  let body = {};
+  try {
+    body = (await request.json()) || {};
+  } catch {
+    return errorResponse('Invalid JSON body', 400);
+  }
 
-    const geminiApiKey = env?.GEMINI_API_KEY;
-    const geminiModel = env?.GEMINI_MODEL || 'gemini-2.0-flash';
-    const aiModel = env?.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
+  const language = body.language === 'en' ? 'en' : 'ar';
+  const level = Math.max(1, Math.min(100, Number(body.level) || 1));
+  const isArabic = language === 'ar';
 
-    const prompt = buildPathPuzzlePrompt({ language, level });
-    let content = '';
-    let aiProvider = 'none';
+  if (!env?.DB) {
+    return errorResponse('Database not configured', 500);
+  }
 
-    // Try Gemini first
-    if (geminiApiKey) {
-        try {
-            const modelPath = String(geminiModel).startsWith('models/')
-                ? String(geminiModel)
-                : `models/${geminiModel}`;
-            const url = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${geminiApiKey}`;
+  const puzzle = await pickPathPuzzleFromD1(env, language, level);
+  if (!puzzle) {
+    return jsonResponse(
+      {
+        error: 'EMPTY_BANK',
+        reason:
+          'No path puzzles in D1. Store JSON with startWord, endWord, paths[4].steps[4] in puzzles.',
+      },
+      404,
+    );
+  }
 
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: prompt }]
-                    }],
-                    generationConfig: {
-                        response_mime_type: "application/json",
-                        temperature: 0.8,
-                    }
-                })
-            });
+  if (!puzzle.puzzleId || String(puzzle.puzzleId).startsWith('path_')) {
+    puzzle.puzzleId = `d1-path-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  }
 
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`Gemini API Error: ${response.status} ${errText}`);
-            }
-
-            const data = await response.json();
-            content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-            aiProvider = 'gemini';
-        } catch (e) {
-            console.warn('[PATH PUZZLE] Gemini failed, falling back', String(e?.message || e));
-            content = '';
-        }
-    }
-
-    // Fallback to Workers AI
-    if (!content && env?.AI) {
-        try {
-            const out = await env.AI.run(aiModel, {
-                messages: [
-                    { role: 'system', content: 'You are a puzzle generator. Return JSON only.' },
-                    { role: 'user', content: prompt },
-                ],
-                temperature: 0.8,
-                max_tokens: 1200,
-            });
-
-            const text = out?.response || out?.result || out?.text || JSON.stringify(out);
-            content = String(text).replace(/```json/g, '').replace(/```/g, '').trim();
-            aiProvider = 'workers_ai';
-        } catch (e) {
-            console.error('[PATH PUZZLE] Workers AI failed:', e);
-            return errorResponse('Failed to generate puzzle', 500);
-        }
-    }
-
-    if (!content) {
-        return errorResponse('No AI provider available', 500);
-    }
-
-    // Parse and validate
-    try {
-        let jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            jsonStr = jsonMatch[0];
-        }
-
-        const puzzle = JSON.parse(jsonStr);
-
-        // Validate structure
-        if (!puzzle.startWord || !puzzle.endWord || !Array.isArray(puzzle.paths)) {
-            throw new Error('Invalid puzzle structure');
-        }
-
-        if (puzzle.paths.length !== 4) {
-            throw new Error('Must have exactly 4 paths');
-        }
-
-        // Ensure each path has 4 steps
-        puzzle.paths = puzzle.paths.map((path, idx) => {
-            if (!Array.isArray(path.steps) || path.steps.length !== 4) {
-                throw new Error(`Path ${path.label || idx} must have exactly 4 steps`);
-            }
-            return {
-                label: path.label || ['A', 'B', 'C', 'D'][idx],
-                steps: path.steps,
-                isCorrect: path.isCorrect || false,
-                explanation: path.explanation || ''
-            };
-        });
-
-        // Ensure exactly one correct path
-        const correctCount = puzzle.paths.filter(p => p.isCorrect).length;
-        if (correctCount !== 1) {
-            // Fix: mark first as correct if none or multiple
-            puzzle.paths.forEach((p, i) => { p.isCorrect = i === 0; });
-        }
-
-        const result = {
-            startWord: puzzle.startWord,
-            endWord: puzzle.endWord,
-            paths: puzzle.paths,
-            hint: puzzle.hint || (isArabic ? 'فكر بشكل منطقي' : 'Think logically'),
-            puzzleId: `path_${level}_${Date.now()}`,
-            level,
-            aiProvider,
-        };
-
-        console.log(`✅ Path puzzle generated: ${result.startWord} → ${result.endWord}`);
-        return jsonResponse(result);
-
-    } catch (parseError) {
-        console.error('[PATH PUZZLE] Parse error:', parseError.message);
-        console.error('Content:', content.substring(0, 500));
-        return errorResponse(`Failed to parse puzzle: ${parseError.message}`, 500);
-    }
+  return new Response(JSON.stringify(puzzle), {
+    status: 200,
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+      'X-Puzzle-Source': 'd1',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      Pragma: 'no-cache',
+      Expires: '0',
+    },
+  });
 }

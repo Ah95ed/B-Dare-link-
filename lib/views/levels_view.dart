@@ -115,14 +115,9 @@ class LevelsView extends StatelessWidget {
                 if (!authed) return;
               }
               if (!context.mounted) return;
-              Provider.of<GameProvider>(
-                context,
-                listen: false,
-              ).loadLevel(level, isArabic);
-              Provider.of<GameProvider>(
-                context,
-                listen: false,
-              ).setGameMode(GameMode.multipleChoice);
+              final game = Provider.of<GameProvider>(context, listen: false);
+              await game.loadLevel(level, isArabic, showLoadingUi: false);
+              game.setGameMode(GameMode.multipleChoice);
               if (!context.mounted) return;
               Navigator.push(
                 context,

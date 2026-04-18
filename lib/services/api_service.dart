@@ -32,8 +32,30 @@ class CloudflareApiService {
   ) {
     if (data['error'] != null) return null;
 
-    final startWord = data['startWord']?.toString().trim() ?? '';
-    final endWord = data['endWord']?.toString().trim() ?? '';
+    String pickStart(Map<String, dynamic> m) {
+      for (final k in [
+        'startWord',
+        'start',
+        'from',
+        'sourceWord',
+        'wordStart',
+      ]) {
+        final v = m[k]?.toString().trim();
+        if (v != null && v.isNotEmpty) return v;
+      }
+      return '';
+    }
+
+    String pickEnd(Map<String, dynamic> m) {
+      for (final k in ['endWord', 'end', 'to', 'targetWord', 'wordEnd']) {
+        final v = m[k]?.toString().trim();
+        if (v != null && v.isNotEmpty) return v;
+      }
+      return '';
+    }
+
+    final startWord = pickStart(data);
+    final endWord = pickEnd(data);
     final String? type = data['type']?.toString();
     final bool isPoetic = type == 'لغز_شعري' || type == 'poetic_riddle';
 
@@ -57,24 +79,35 @@ class CloudflareApiService {
           ];
 
     final steps = <PuzzleStep>[];
-    if (data['steps'] != null && data['steps'] is List) {
+    dynamic stepsRaw = data['steps'];
+    if (stepsRaw is! List && data['chain'] is List) {
+      stepsRaw = data['chain'];
+    }
+    if (stepsRaw != null && stepsRaw is List) {
       final globalPool = <String>[];
-      if (data['startWord'] is String) globalPool.add(data['startWord'] as String);
-      if (data['endWord'] is String) globalPool.add(data['endWord'] as String);
-      for (final s in data['steps'] as List) {
+      if (startWord.isNotEmpty) globalPool.add(startWord);
+      if (endWord.isNotEmpty) globalPool.add(endWord);
+      for (final s in stepsRaw) {
         try {
-          if (s != null && s is Map && s['word'] is String) {
-            globalPool.add(s['word'] as String);
+          if (s != null && s is Map) {
+            final w =
+                s['word']?.toString().trim() ??
+                s['correctAnswer']?.toString().trim() ??
+                s['answer']?.toString().trim() ??
+                '';
+            if (w.isNotEmpty) globalPool.add(w);
           }
         } catch (_) {}
       }
 
-      for (final s in data['steps'] as List) {
+      for (final s in stepsRaw) {
         try {
           if (s == null || s is! Map) continue;
           final sm = Map<String, dynamic>.from(s);
-          final word =
-              sm['word']?.toString() ?? sm['correctAnswer']?.toString() ?? '';
+          final word = sm['word']?.toString() ??
+              sm['correctAnswer']?.toString() ??
+              sm['answer']?.toString() ??
+              '';
           if (word.trim().isEmpty) {
             continue;
           }
@@ -140,13 +173,20 @@ class CloudflareApiService {
       }
     }
 
+    if (!isPoetic && steps.isEmpty) {
+      debugPrint(
+        '_parseGeneratedPuzzleMap: no steps after parse (type=${data['type']})',
+      );
+      return null;
+    }
+
     return GamePuzzle(
       puzzleId: data['puzzleId']?.toString(),
-      startWordAr: isArabic ? (data['startWord'] ?? '') : "مرحلة",
-      endWordAr: isArabic ? (data['endWord'] ?? '') : "جديدة",
+      startWordAr: isArabic ? startWord : "مرحلة",
+      endWordAr: isArabic ? endWord : "جديدة",
       stepsAr: isArabic ? steps : [],
-      startWordEn: !isArabic ? (data['startWord'] ?? '') : "New",
-      endWordEn: !isArabic ? (data['endWord'] ?? '') : "Stage",
+      startWordEn: !isArabic ? startWord : "New",
+      endWordEn: !isArabic ? endWord : "Stage",
       stepsEn: !isArabic ? steps : [],
       hintAr: isArabic ? (data['hint'] ?? "") : "",
       hintEn: !isArabic ? (data['hint'] ?? "") : "",
@@ -180,7 +220,7 @@ class CloudflareApiService {
             body: jsonEncode({
               'language': isArabic ? 'ar' : 'en',
               'level': levelId,
-              'source': 'ai',
+              'source': 'd1',
               'fresh': fresh,
               'excludeQuestionKeys': excludedQuestionKeys,
               'count': n,
@@ -233,24 +273,39 @@ class CloudflareApiService {
         'Authorization': 'Bearer $authToken',
     };
     try {
+      final uri = Uri.parse('$_workerUrl${AppConstants.soloLevelPackPath}');
+      final payload = {
+        'language': isArabic ? 'ar' : 'en',
+        'level': levelId,
+        'count': n,
+        'guestId': guestId,
+      };
+      if (kDebugMode) {
+        debugPrint('[SoloD1] POST $uri');
+        debugPrint('[SoloD1] request body: ${jsonEncode(payload)}');
+      }
       final response = await http
           .post(
-            Uri.parse('$_workerUrl${AppConstants.soloLevelPackPath}'),
+            uri,
             headers: headers,
-            body: jsonEncode({
-              'language': isArabic ? 'ar' : 'en',
-              'level': levelId,
-              'count': n,
-              'guestId': guestId,
-            }),
+            body: jsonEncode(payload),
           )
           .timeout(AppConstants.soloBatchTimeout);
 
       if (response.statusCode != 200) {
         debugPrint(
-          'fetchSoloLevelPackFromD1 non-200 (${response.statusCode})',
+          '[SoloD1] HTTP ${response.statusCode} body=${response.body.length > 600 ? "${response.body.substring(0, 600)}…" : response.body}',
         );
         return const SoloLevelPackResult();
+      }
+      if (kDebugMode) {
+        final h = response.headers['x-solo-bank'];
+        debugPrint('[SoloD1] OK headers x-solo-bank=$h bytes=${response.body.length}');
+        if (response.body.length <= 2000) {
+          debugPrint('[SoloD1] response body: ${response.body}');
+        } else {
+          debugPrint('[SoloD1] response body (head): ${response.body.substring(0, 1500)}…');
+        }
       }
       final emptyBankHeader =
           (response.headers['x-solo-bank'] ?? '').toLowerCase() == 'empty';
@@ -279,15 +334,48 @@ class CloudflareApiService {
           Map<String, dynamic>.from(item),
           isArabic,
         );
-        if (p != null) puzzles.add(p);
+        if (p != null) {
+          puzzles.add(p);
+        } else {
+          if (kDebugMode) {
+            final keys = Map<String, dynamic>.from(item).keys.join(',');
+            debugPrint(
+              '[SoloD1] skip parse keys=[$keys] type=${item['type']} stepsLen=${item['steps'] is List ? (item['steps'] as List).length : "n/a"}',
+            );
+          }
+        }
+      }
+      if (puzzles.isEmpty && rawList.isNotEmpty && !emptyBank) {
+        debugPrint(
+          'fetchSoloLevelPackFromD1: server returned ${rawList.length} rows but none parsed — check JSON shape (startWord, endWord, steps).',
+        );
       }
       if (puzzles.isEmpty && emptyBank) {
+        if (kDebugMode) {
+          debugPrint('[SoloD1] empty bank (EMPTY_BANK or X-Solo-Bank header)');
+        }
         return SoloLevelPackResult(
           level: GameLevel(id: levelId, puzzles: const []),
           emptyBank: true,
         );
       }
-      if (puzzles.isEmpty) return const SoloLevelPackResult();
+      if (puzzles.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('[SoloD1] parsed 0 puzzles (see skip messages above)');
+        }
+        return const SoloLevelPackResult();
+      }
+      if (kDebugMode) {
+        for (var i = 0; i < puzzles.length; i++) {
+          final p = puzzles[i];
+          final s = isArabic ? p.startWordAr : p.startWordEn;
+          final e = isArabic ? p.endWordAr : p.endWordEn;
+          final st = isArabic ? p.stepsAr.length : p.stepsEn.length;
+          debugPrint(
+            '[SoloD1] puzzle[$i] id=${p.puzzleId} chain="$s"→"$e" steps=$st',
+          );
+        }
+      }
       return SoloLevelPackResult(
         level: GameLevel(id: levelId, puzzles: puzzles),
       );
@@ -310,7 +398,7 @@ class CloudflareApiService {
         body: jsonEncode({
           'language': isArabic ? 'ar' : 'en',
           'level': levelId,
-          'source': 'ai',
+          'source': 'd1',
           'fresh': fresh,
           'excludeQuestionKeys': excludedQuestionKeys,
         }),
@@ -342,67 +430,20 @@ class CloudflareApiService {
         return GameLevel(id: levelId, puzzles: [puzzle]);
       } else {
         debugPrint(
-          'generateLevel non-200 (${response.statusCode}), using local fallback',
+          'generateLevel non-200 (${response.statusCode}); no local fallback (D1 only).',
         );
-        return _getFallbackLevel(levelId, isArabic);
+        return null;
       }
     } on NetworkException {
-      debugPrint('NetworkException in generateLevel, using local fallback');
-      return _getFallbackLevel(levelId, isArabic);
+      debugPrint('NetworkException in generateLevel; no local fallback (D1 only).');
+      return null;
     } on GameException {
-      debugPrint('GameException in generateLevel, using local fallback');
-      return _getFallbackLevel(levelId, isArabic);
+      debugPrint('GameException in generateLevel; no local fallback (D1 only).');
+      return null;
     } catch (e) {
-      debugPrint('Unexpected error in generateLevel: $e, using local fallback');
-      return _getFallbackLevel(levelId, isArabic);
+      debugPrint('Unexpected error in generateLevel: $e; no local fallback (D1 only).');
+      return null;
     }
-  }
-
-  // ignore: unused_element
-  GameLevel _getFallbackLevel(int levelId, bool isArabic) {
-    // Basic fallback puzzle to ensure playable state
-    final steps = isArabic
-        ? [
-            PuzzleStep(
-              word: "تفاحة",
-              options: ["تفاحة", "موز", "عنب", "برتقال"]..shuffle(),
-            ),
-            PuzzleStep(
-              word: "أحمر",
-              options: ["أحمر", "أزرق", "أخضر", "أصفر"]..shuffle(),
-            ),
-            PuzzleStep(
-              word: "لون",
-              options: ["لون", "شكل", "حجم", "وزن"]..shuffle(),
-            ),
-          ]
-        : [
-            PuzzleStep(
-              word: "Apple",
-              options: ["Apple", "Banana", "Grape", "Orange"]..shuffle(),
-            ),
-            PuzzleStep(
-              word: "Red",
-              options: ["Red", "Blue", "Green", "Yellow"]..shuffle(),
-            ),
-            PuzzleStep(
-              word: "Color",
-              options: ["Color", "Shape", "Size", "Weight"]..shuffle(),
-            ),
-          ];
-
-    final puzzle = GamePuzzle(
-      startWordAr: "كتاب",
-      endWordAr: "مكتبة",
-      stepsAr: isArabic ? steps : [],
-      startWordEn: "Book",
-      endWordEn: "Library",
-      stepsEn: isArabic ? [] : steps,
-      hintAr: "مثال توضيحي",
-      hintEn: "Fallback Example",
-    );
-
-    return GameLevel(id: levelId, puzzles: [puzzle]);
   }
 
   Future<bool> validateConnection(

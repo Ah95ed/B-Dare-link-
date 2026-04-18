@@ -1,5 +1,6 @@
 // game.js — ألغاز السلسلة من D1 فقط (لا توليد Gemini/OpenAI على الخادم لهذا المسار).
 import { jsonResponse, errorResponse } from './utils.js';
+import { normalizeChainPuzzleForClient } from './puzzle_normalize.js';
 
 export function puzzleJsonToQuestionKey(puzzle) {
   const norm = (s) => String(s ?? '').trim().toLowerCase();
@@ -71,11 +72,11 @@ export async function fetchOneChainPuzzleFromD1(env, requestBody) {
 
   let rows = await selectPuzzleJsonRows(env, level, language, 80);
   let picked = await pickPuzzleObjectFromRows(rows, excl);
-  if (picked) return picked;
+  if (picked) return normalizeChainPuzzleForClient(picked);
 
   rows = await selectPuzzleJsonRowsByLang(env, language, 80);
   picked = await pickPuzzleObjectFromRows(rows, excl);
-  return picked;
+  return picked ? normalizeChainPuzzleForClient(picked) : null;
 }
 
 /**
@@ -158,7 +159,7 @@ export async function generateLevel(request, env, headers) {
     return errorResponse('Database not configured', 500);
   }
 
-  const puzzle = await fetchOneChainPuzzleFromD1(env, requestBody);
+  let puzzle = await fetchOneChainPuzzleFromD1(env, requestBody);
   if (!puzzle) {
     return jsonResponse(
       {

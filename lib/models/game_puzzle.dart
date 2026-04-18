@@ -85,9 +85,17 @@ class PuzzleStep {
       PuzzleStep(word: word, options: []);
 
   factory PuzzleStep.fromJson(Map<String, dynamic> json) {
+    final raw =
+        json['word']?.toString() ??
+        json['correctAnswer']?.toString() ??
+        json['answer']?.toString() ??
+        '';
+    final word = raw.trim();
     return PuzzleStep(
-      word: json['word'] ?? '',
-      options: List<String>.from(json['options'] ?? []),
+      word: word,
+      options: List<String>.from(
+        (json['options'] as List?)?.map((o) => o.toString()) ?? const [],
+      ),
       stepQuestion: json['stepQuestion']?.toString(),
     );
   }

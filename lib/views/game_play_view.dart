@@ -24,46 +24,11 @@ class _GamePlayViewState extends State<GamePlayView> {
     final provider = Provider.of<GameProvider>(context);
     final l10n = AppLocalizations.of(context)!;
 
+    // تحميل المرحلة يتم قبل فتح الشاشة؛ يبقى هذا فقط لعمليات نادرة (مثل التحقق من السلسلة).
     if (provider.isLoading) {
-      final loadTotal = provider.levelLoadTarget;
-      final loadDone = provider.levelLoadPrepared;
-      final showProgress = loadTotal > 0;
-      final progress = showProgress ? (loadDone / loadTotal).clamp(0.0, 1.0) : null;
       return Scaffold(
         key: const ValueKey('solo_game_loading'),
-        body: Center(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 32.w),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 20.h),
-                Text(
-                  l10n.generatingPuzzles,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600),
-                ),
-                if (showProgress) ...[
-                  SizedBox(height: 16.h),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8.r),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 8.h,
-                    ),
-                  ),
-                  SizedBox(height: 10.h),
-                  Text(
-                    l10n.generatingLevelProgress(loadDone, loadTotal),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14.sp, color: Colors.white70),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -123,8 +88,7 @@ class _GamePlayViewState extends State<GamePlayView> {
                 child: Text(l10n.exit),
               ),
               TextButton(
-                onPressed: () {
-                  // Retry
+                onPressed: () async {
                   final level = provider.currentLevel;
                   final isArabic =
                       Provider.of<LocaleProvider>(
@@ -133,8 +97,14 @@ class _GamePlayViewState extends State<GamePlayView> {
                       ).locale.languageCode ==
                       'ar';
                   Navigator.pop(context);
-                  _isDialogShown = false; // Reset flag for next time
-                  if (level != null) provider.loadLevel(level, isArabic);
+                  _isDialogShown = false;
+                  if (level != null) {
+                    await provider.loadLevel(
+                      level,
+                      isArabic,
+                      showLoadingUi: false,
+                    );
+                  }
                 },
                 child: Text(l10n.retry),
               ),

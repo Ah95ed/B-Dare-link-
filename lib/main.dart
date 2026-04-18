@@ -100,7 +100,7 @@ class WonderLinkApp extends StatelessWidget {
       designSize: const Size(360, 800),
       minTextAdapt: true,
       splitScreenMode: true,
-      builder: (_, __) => MultiProvider(
+      builder: (context, _) => MultiProvider(
         providers: _buildProviders(),
         child: DeepLinkHandler(
           child: Consumer<LocaleProvider>(

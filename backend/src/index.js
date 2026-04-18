@@ -172,65 +172,26 @@ export default {
         return await generateSpotDiffPuzzle(request, env);
       }
 
-      // ---------- List Available Gemini Models ----------
+      // ---------- List Available Gemini Models (disabled) ----------
       if (
         (path === '/api/list-gemini-models' || path === '/list-gemini-models') &&
         request.method === 'GET'
       ) {
-        const apiKey = env?.GEMINI_API_KEY;
-        if (!apiKey) {
-          return errorResponse('GEMINI_API_KEY not configured', 500);
-        }
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        const textModels = data.models?.filter(m =>
-          m.supportedGenerationMethods?.includes('generateContent')
-        ).map(m => ({
-          name: m.name,
-          displayName: m.displayName,
-          description: m.description
-        })) || [];
-
-        return new Response(JSON.stringify({
-          models: textModels,
-          count: textModels.length
-        }), {
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-        });
+        return errorResponse(
+          'Gemini model listing is disabled on this deployment.',
+          503,
+        );
       }
 
-      // ---------- Test Gemini Text Generation ----------
+      // ---------- Test Gemini Text Generation (disabled) ----------
       if (
         (path === '/api/test-gemini-text' || path === '/test-gemini-text') &&
         request.method === 'GET'
       ) {
-        const apiKey = env?.GEMINI_API_KEY;
-        if (!apiKey) {
-          return errorResponse('GEMINI_API_KEY not configured', 500);
-        }
-
-        const model = 'gemini-2.0-flash';
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const testResponse = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: 'Say hello in Arabic' }] }]
-          })
-        });
-
-        const responseText = await testResponse.text();
-        return new Response(JSON.stringify({
-          model,
-          status: testResponse.status,
-          ok: testResponse.ok,
-          body: responseText
-        }), {
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-        });
+        return errorResponse(
+          'Gemini test endpoint is disabled on this deployment.',
+          503,
+        );
       }
 
       // ---------- Admin ----------

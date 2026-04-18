@@ -56,12 +56,12 @@ class GameModeSelectionView extends StatelessWidget {
     return GestureDetector(
       onTap:
           onTap ??
-          () {
+          () async {
             if (mode == null) return;
             final provider = Provider.of<GameProvider>(context, listen: false);
-            provider.loadLevel(level, isArabic);
+            await provider.loadLevel(level, isArabic, showLoadingUi: false);
             provider.setGameMode(mode);
-
+            if (!context.mounted) return;
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const GamePlayView()),

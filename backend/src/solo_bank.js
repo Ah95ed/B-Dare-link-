@@ -2,6 +2,7 @@
 import { jsonResponse, errorResponse, CORS_HEADERS } from './utils.js';
 import { getUserFromRequest } from './auth.js';
 import { difficultyBandForLevel, insertPuzzleIntoD1 } from './puzzle_db.js';
+import { normalizeChainPuzzleForClient } from './puzzle_normalize.js';
 
 export { difficultyBandForLevel } from './puzzle_db.js';
 
@@ -12,11 +13,38 @@ function buildUserKey(user, guestId) {
   return `g:${g}`;
 }
 
+/** صفّ D1 مناسب لوضع السولو (سلسلة كلمات) — يتجاهل quiz وغيرها. */
+function jsonLooksLikeSoloChainPuzzle(jsonStr) {
+  try {
+    const o = JSON.parse(jsonStr);
+    const ty = String(o.type || 'logical_chain').toLowerCase();
+    if (ty === 'quiz' || ty === 'spot_diff' || ty === 'spotdiff') return false;
+    if (!Array.isArray(o.steps) || o.steps.length === 0) return false;
+    const s = String(o.startWord ?? o.start ?? o.from ?? '').trim();
+    const e = String(o.endWord ?? o.end ?? o.to ?? '').trim();
+    return s.length > 0 && e.length > 0 && s !== e;
+  } catch {
+    return false;
+  }
+}
+
+function dedupePuzzleRowsById(rows) {
+  const out = [];
+  const seen = new Set();
+  for (const r of rows || []) {
+    if (r?.id == null || seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push(r);
+  }
+  return out;
+}
+
 /**
  * Fetch random puzzles for solo. No `difficulty` filter so D1 works before/without migration 0004.
  * If `solo_player_puzzles` is missing, retries without exclude-played subquery.
  */
-async function selectPuzzleRows(env, { language, level, userKey, count, excludePlayed }) {
+async function selectPuzzleRows(env, { language, level, userKey, count, excludePlayed, fetchLimit }) {
+  const lim = Math.min(200, Math.max(1, Number(fetchLimit) || count));
   let sql = `
     SELECT p.id, p.json
     FROM puzzles p
@@ -32,14 +60,21 @@ async function selectPuzzleRows(env, { language, level, userKey, count, excludeP
     binds.push(userKey, level);
   }
   sql += ` ORDER BY RANDOM() LIMIT ?`;
-  binds.push(count);
+  binds.push(lim);
   try {
     const out = await env.DB.prepare(sql).bind(...binds).all();
     return out?.results || [];
   } catch (e) {
     if (excludePlayed) {
       console.warn('selectPuzzleRows: excludePlayed query failed, retrying without history:', e?.message || e);
-      return selectPuzzleRows(env, { language, level, userKey, count, excludePlayed: false });
+      return selectPuzzleRows(env, {
+        language,
+        level,
+        userKey,
+        count,
+        excludePlayed: false,
+        fetchLimit: lim,
+      });
     }
     console.error('selectPuzzleRows failed:', e);
     return [];
@@ -75,6 +110,7 @@ export async function getSoloLevelPack(request, env, headers) {
 
   const band = difficultyBandForLevel(level);
   let reusedHistory = false;
+  const fetchLimit = Math.min(200, Math.max(40, count * 15));
 
   let rows =
     (await selectPuzzleRows(env, {
@@ -83,36 +119,55 @@ export async function getSoloLevelPack(request, env, headers) {
       userKey,
       count,
       excludePlayed: true,
+      fetchLimit,
     })) || [];
 
-  if (rows.length < count) {
-    rows = await selectPuzzleRows(env, {
-      language,
-      level,
-      userKey,
-      count,
-      excludePlayed: false,
-    });
-    reusedHistory = rows.length > 0;
+  if (rows.length < fetchLimit) {
+    const more =
+      (await selectPuzzleRows(env, {
+        language,
+        level,
+        userKey,
+        count,
+        excludePlayed: false,
+        fetchLimit,
+      })) || [];
+    rows = dedupePuzzleRowsById([...rows, ...more]);
+    if (more.length) reusedHistory = true;
   }
 
-  if (rows.length < count) {
+  if (rows.length < fetchLimit) {
     const any = await env.DB
       .prepare(
         `SELECT id, json FROM puzzles WHERE lang = ? ORDER BY RANDOM() LIMIT ?`,
       )
-      .bind(language, count)
+      .bind(language, fetchLimit)
       .all();
-    rows = any?.results || [];
+    rows = dedupePuzzleRowsById([...rows, ...(any?.results || [])]);
     reusedHistory = true;
   }
 
-  if (!rows.length) {
+  let chainRows = rows.filter((r) => r?.json && jsonLooksLikeSoloChainPuzzle(r.json));
+
+  if (chainRows.length < count) {
+    const extra = await env.DB
+      .prepare(
+        `SELECT id, json FROM puzzles WHERE lang = ? AND json LIKE '%"steps"%' ORDER BY RANDOM() LIMIT ?`,
+      )
+      .bind(language, fetchLimit)
+      .all();
+    chainRows = dedupePuzzleRowsById([...chainRows, ...(extra?.results || [])]).filter((r) =>
+      jsonLooksLikeSoloChainPuzzle(r.json),
+    );
+    if ((extra?.results || []).length) reusedHistory = true;
+  }
+
+  if (!chainRows.length) {
     return jsonResponse(
       {
         error: 'EMPTY_BANK',
         reason:
-          'No puzzles in D1. Import rows into the puzzles table or use admin tools to add JSON.',
+          'No chain puzzles in D1. Rows need startWord, endWord, and non-empty steps[]. Quiz JSON is skipped.',
         puzzles: [],
         count: 0,
       },
@@ -121,21 +176,41 @@ export async function getSoloLevelPack(request, env, headers) {
     );
   }
 
-  const puzzles = rows
-    .map((r) => {
-      try {
-        return JSON.parse(r.json);
-      } catch {
-        return null;
+  const paired = [];
+  for (const r of chainRows) {
+    if (paired.length >= count) break;
+    try {
+      const puzzle = normalizeChainPuzzleForClient(JSON.parse(r.json));
+      if (puzzle && Array.isArray(puzzle.steps) && puzzle.steps.length > 0) {
+        paired.push({ row: r, puzzle });
       }
-    })
-    .filter(Boolean);
+    } catch {
+      /* skip */
+    }
+  }
+
+  if (!paired.length) {
+    return jsonResponse(
+      {
+        error: 'EMPTY_BANK',
+        reason:
+          'Chain-shaped rows in D1 could not be parsed. Check JSON syntax in puzzles.json.',
+        puzzles: [],
+        count: 0,
+      },
+      200,
+      { 'X-Solo-Bank': 'empty' },
+    );
+  }
+
+  const puzzles = paired.map((p) => p.puzzle);
+  const rowsForHistory = paired.map((p) => p.row);
 
   try {
     const ins = env.DB.prepare(
       `INSERT OR IGNORE INTO solo_player_puzzles (user_key, puzzle_id, level) VALUES (?, ?, ?)`,
     );
-    for (const r of rows) {
+    for (const r of rowsForHistory) {
       if (r?.id != null) {
         await ins.bind(userKey, r.id, level).run();
       }

@@ -239,6 +239,32 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
         );
       }
 
+      if (provider.totalPuzzles == 0) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.quiz_outlined, color: Colors.amber, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  isArabic
+                      ? 'لا توجد ألغاز في هذه المرحلة.\nافتح Run/Logcat وابحث عن [SoloD1] للتشخيص.'
+                      : 'No puzzles for this level.\nCheck Run/Logcat for [SoloD1] lines.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Colors.white70,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -547,20 +573,29 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
     List<GamePuzzle> puzzlePool,
     bool isArabic,
   ) {
+    final baseSteps = steps.map((s) => s.word.toString().trim()).toList();
+    final poolWords = <String>[
+      ...baseSteps,
+      ...puzzlePool.expand(
+        (puzzle) => isArabic
+            ? puzzle.stepsAr.map((s) => s.word)
+            : puzzle.stepsEn.map((s) => s.word),
+      ),
+    ];
+    final targetFour = _normalizeToFourWords(baseSteps, isArabic, poolWords);
+
     final backendPathOptions = puzzle.pathOptions;
     if (backendPathOptions != null && backendPathOptions.length == 4) {
       final parsed = backendPathOptions
           .map((option) => option.split(RegExp(r'\s+')).toList())
-          .map((words) => _normalizeToFourWords(words, isArabic, const []))
+          .map((words) => _normalizeToFourWords(words, isArabic, poolWords))
           .toList();
 
       if (parsed.length == 4) {
-        final expectedChain = steps.map((step) => step.word.trim()).toList();
+        final targetKey = targetFour.map((w) => w.toLowerCase()).join('|');
         final correctPath = parsed.firstWhere(
           (option) =>
-              option.length == expectedChain.length &&
-              option.map((word) => word.trim().toLowerCase()).join('|') ==
-                  expectedChain.map((word) => word.toLowerCase()).join('|'),
+              option.map((w) => w.toLowerCase()).join('|') == targetKey,
           orElse: () {
             final idx = puzzle.correctPathIndex;
             if (idx != null && idx >= 0 && idx < 4) {
@@ -578,7 +613,9 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
         );
 
         _correctAnswerIndex = shuffled.indexWhere(
-          (option) => option.join('|') == correctPath.join('|'),
+          (option) =>
+              option.map((w) => w.toLowerCase()).join('|') ==
+              correctPath.map((w) => w.toLowerCase()).join('|'),
         );
         if (_correctAnswerIndex < 0) {
           _correctAnswerIndex = 0;
@@ -588,16 +625,7 @@ class _MultipleChoiceGameWidgetState extends State<MultipleChoiceGameWidget> {
       }
     }
 
-    final baseSteps = steps.map((s) => s.word.toString()).toList();
-    final poolWords = <String>[
-      ...baseSteps,
-      ...puzzlePool.expand(
-        (puzzle) => isArabic
-            ? puzzle.stepsAr.map((s) => s.word)
-            : puzzle.stepsEn.map((s) => s.word),
-      ),
-    ];
-    final optionA = _normalizeToFourWords(baseSteps, isArabic, poolWords);
+    final optionA = targetFour;
 
     String keyOf(List<String> list) => list.join('|');
 
