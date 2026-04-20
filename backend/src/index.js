@@ -13,7 +13,13 @@ import {
   soloBankPublicStatus,
 } from './solo_bank.js';
 import { generatePathLevel } from './game_path.js';
-import { listPuzzles, deletePuzzle, regeneratePuzzle, generateBulkPuzzles } from './admin.js';
+import {
+  listPuzzles,
+  deletePuzzle,
+  regeneratePuzzle,
+  generateBulkPuzzles,
+  importPuzzles,
+} from './admin.js';
 import { getDailyChallenge, submitDailyScore, getDailyLeaderboard, getWeeklyStandings } from './tournament.js';
 import { generatePuzzleFromImage } from './vision.js';
 import { generateSpotDiffPuzzle } from './spot_diff.js';
@@ -198,6 +204,9 @@ export default {
       if (path.startsWith('/admin/puzzles')) {
         if (request.method === 'GET') return await listPuzzles(request, env);
         if (request.method === 'DELETE') return await deletePuzzle(request, env);
+        if (request.method === 'POST' && path === '/admin/puzzles') {
+          return await importPuzzles(request, env);
+        }
       }
       if (path === '/admin/puzzles/cleanup' && request.method === 'POST') {
         return await cleanupPuzzlesEndpoint(request, env);

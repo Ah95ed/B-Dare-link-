@@ -1,0 +1,38 @@
+[
+  {
+    "type": "logical_chain",
+    "difficulty": 1,
+    "startWord": "ماء",
+    "endWord": "بخار",
+    "hint": "التغيرات الفيزيائية",
+    "puzzleId": "import-example-1",
+    "steps": [
+      {
+        "word": "حرارة",
+        "options": ["حرارة", "برودة", "رطوبة", "ضغط"]
+      },
+      {
+        "word": "غليان",
+        "options": ["غليان", "تجميد", "ذوبان", "تبخر"]
+      }
+    ]
+  },
+  {
+    "type": "logical_chain",
+    "difficulty": 2,
+    "startWord": "seed",
+    "endWord": "tree",
+    "hint": "Growth",
+    "puzzleId": "import-example-2",
+    "steps": [
+      {
+        "word": "soil",
+        "options": ["soil", "stone", "metal", "plastic"]
+      },
+      {
+        "word": "sprout",
+        "options": ["sprout", "fruit", "leaf", "root"]
+      }
+    ]
+  }
+]

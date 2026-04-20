@@ -45,6 +45,9 @@ SOLO_BANK_CRON_MAX_INSERT = "35"
 SOLO_BANK_REFILL_CHUNK = "12"
 # لغز واحد لكل طلب من صفحة الويب + فجوة GEMINI_MIN_GAP_MS = أقل ضغط على الحصّة المجانية.
 SOLO_BANK_SAFE_AI_CHUNK = "1"
+# AI توليد السولو: إعادة محاولة عند JSON/شكل غير صالح (1–8)، وحرارة النموذج (0.2–1).
+# SOLO_BANK_AI_PARSE_RETRIES = "4"
+# SOLO_BANK_AI_TEMPERATURE = "0.55"
 # Public page /solo-bank-tools + POST /solo-bank/generate: header X-Wonder-Solo-Key (min 16 chars).
 # Prefer secret: npx wrangler secret put SOLO_BANK_WEB_KEY
 # SOLO_BANK_WEB_KEY = "change-me-32-chars-minimum"

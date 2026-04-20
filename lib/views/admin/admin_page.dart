@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +22,7 @@ class _AdminPageState extends State<AdminPage> {
   bool _regenerating = false;
   bool _generatingBulk = false;
   bool _refillingSoloBank = false;
+  bool _importingManualJson = false;
   bool _devMockMode = false;
   String? _status;
   List<dynamic> _puzzles = [];
@@ -338,6 +341,133 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> _openManualJsonImport() async {
+    if (_devMockMode) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اتصل بالخادم أولاً — الإدراج يذهب إلى D1 على الـ Worker'),
+        ),
+      );
+      return;
+    }
+
+    final textController = TextEditingController();
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إدراج ألغاز إلى D1 (JSON)'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'الصيغة: كائن لغز واحد { "type":"logical_chain", "startWord":... } '
+                'أو مصفوفة [ {...}, {...} ]. يُستخدم رقم المستوى واللغة من قسم الفلترة أدناه.',
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textController,
+                maxLines: 14,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                  hintText: '[ { "type": "logical_chain", ... } ]',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('إرسال إلى الخادم'),
+          ),
+        ],
+      ),
+    );
+
+    final raw = textController.text.trim();
+    textController.dispose();
+    if (submitted != true || raw.isEmpty) return;
+    if (!mounted) return;
+
+    final level = int.tryParse(_levelController.text.trim()) ?? 1;
+    final lang = _langFilter == 'all' ? 'ar' : _langFilter;
+
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('JSON غير صالح: $e')),
+      );
+      return;
+    }
+
+    final Map<String, dynamic> body = {
+      'level': level,
+      'language': lang,
+      'source': 'admin_ui',
+    };
+    if (decoded is List) {
+      body['puzzles'] = decoded;
+    } else if (decoded is Map) {
+      body['puzzle'] = decoded;
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب أن يكون الجذر كائنًا أو مصفوفة')),
+      );
+      return;
+    }
+
+    setState(() {
+      _importingManualJson = true;
+      _status = 'جارٍ إدراج الألغاز في D1...';
+    });
+
+    try {
+      final result = await _adminService.importPuzzlesPost(body);
+      if (!mounted) return;
+      final code = result?['_statusCode'] as int?;
+      if (result == null || code == null || code != 200) {
+        final msg = result?['error']?.toString() ?? result?['_raw']?.toString() ?? '';
+        setState(() => _status = 'فشل الإدراج ${code ?? ''} $msg');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل: $code $msg')),
+        );
+        return;
+      }
+      final ins = result['inserted'] ?? 0;
+      final dup = result['duplicates'] ?? 0;
+      final fail = result['failed'] ?? 0;
+      setState(() {
+        _status = 'أُدخل $ins لغزًا، مكرر (تجاهل) $dup، فشل تحقق $fail';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('أُدخل $ins — مكرر $dup — فشل $fail'),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      await _fetchPuzzles();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _status = 'خطأ: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _importingManualJson = false);
+    }
+  }
+
   Future<void> _deletePuzzle(dynamic item) async {
     if (_devMockMode) {
       setState(() {
@@ -476,6 +606,53 @@ class _AdminPageState extends State<AdminPage> {
                     Text(
                       'يستخدم المستوى واللغة من قسم الفلترة أدناه. اختر لغة محددة (ليس «الكل»).',
                       style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              elevation: 2,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'إضافة يدوية إلى جدول puzzles',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'الصيغة نفسها المستخدمة في seed.sql: logical_chain مع startWord وendWord '
+                      'وخطوات steps؛ كل خطوة: word ومصفوفة options بطول 4 وتتضمن word. '
+                      'راجع backend/scripts/solo_chain_import.example.json في المشروع.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: (_importingManualJson || _loading)
+                            ? null
+                            : _openManualJsonImport,
+                        icon: _importingManualJson
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.upload_file),
+                        label: Text(
+                          _importingManualJson
+                              ? 'جارٍ الإدراج...'
+                              : 'لصق JSON وإرساله إلى D1',
+                        ),
+                      ),
                     ),
                   ],
                 ),

@@ -265,6 +265,12 @@ class CloudflareApiService {
     required int count,
     required String guestId,
     String? authToken,
+    int? difficulty,
+    bool strictLevelOnly = false,
+    bool allowHistoryReuse = true,
+    bool includePlayed = false,
+    int? fetchLimit,
+    bool details = false,
   }) async {
     final n = count.clamp(1, 100);
     final headers = <String, String>{
@@ -279,6 +285,12 @@ class CloudflareApiService {
         'level': levelId,
         'count': n,
         'guestId': guestId,
+        if (difficulty != null) 'difficulty': difficulty.clamp(1, 5),
+        'strictLevelOnly': strictLevelOnly,
+        'allowHistoryReuse': allowHistoryReuse,
+        'includePlayed': includePlayed,
+        if (fetchLimit != null) 'fetchLimit': fetchLimit.clamp(20, 400),
+        'details': details,
       };
       if (kDebugMode) {
         debugPrint('[SoloD1] POST $uri');
