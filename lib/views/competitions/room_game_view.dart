@@ -33,7 +33,8 @@ class _RoomGameViewState extends State<RoomGameView> {
     final totalPuzzles = competitionProvider.totalPuzzles;
     final currentIndex = competitionProvider.currentPuzzleIndex + 1;
     final options = List<String>.from(puzzle['options'] ?? []);
-    final isQuizFormat = options.isNotEmpty;
+    final isChainFormat = competitionProvider.isChainPuzzle;
+    final isQuizFormat = !isChainFormat && options.isNotEmpty;
     final playerCount = competitionProvider.roomParticipants.length;
 
     return Scaffold(
@@ -93,9 +94,11 @@ class _RoomGameViewState extends State<RoomGameView> {
       body: Column(
         children: [
           Expanded(
-            child: isQuizFormat
-                ? _buildQuizView(puzzle, competitionProvider)
-                : _buildLegacyView(puzzle, competitionProvider),
+            child: isChainFormat
+                ? _buildChainView(puzzle, competitionProvider)
+                : isQuizFormat
+                    ? _buildQuizView(puzzle, competitionProvider)
+                    : _buildLegacyView(puzzle, competitionProvider),
           ),
         ],
       ),
@@ -293,7 +296,7 @@ class _RoomGameViewState extends State<RoomGameView> {
     }
   }
 
-  Widget _buildLegacyView(
+  Widget _buildChainView(
     Map<String, dynamic> puzzle,
     CompetitionProvider provider,
   ) {
@@ -301,36 +304,115 @@ class _RoomGameViewState extends State<RoomGameView> {
     final startWord = puzzle['startWord']?.toString() ?? '';
     final endWord = puzzle['endWord']?.toString() ?? '';
     final hint = puzzle['hint']?.toString() ?? '';
+    final question = provider.currentChainStepQuestion;
+    final options = provider.currentChainStepOptions;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            l10n.roomStartFrom(startWord),
-            style: TextStyle(
-              color: AppColors.cyan,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+          if (startWord.isNotEmpty || endWord.isNotEmpty) ...[
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  if (startWord.isNotEmpty)
+                    _buildChainWordChip(startWord, AppColors.cyan),
+                  for (final w in provider.completedSteps.skip(
+                    startWord.isNotEmpty ? 1 : 0,
+                  )) ...[
+                    const Icon(Icons.arrow_forward_rounded, size: 18),
+                    _buildChainWordChip(w, AppColors.success),
+                  ],
+                  const Icon(Icons.arrow_forward_rounded, size: 18),
+                  _buildChainWordChip('?', AppColors.magenta),
+                  if (endWord.isNotEmpty) ...[
+                    const Icon(Icons.arrow_forward_rounded, size: 18),
+                    _buildChainWordChip(endWord, AppColors.cyan),
+                  ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            l10n.roomEndAt(endWord),
-            style: TextStyle(
-              color: AppColors.success,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+            const SizedBox(height: 12),
+          ],
+          if (question.isNotEmpty)
+            Text(
+              question,
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                height: 1.4,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          if (hint.isNotEmpty)
+          if (hint.isNotEmpty) ...[
+            const SizedBox(height: 8),
             Text(
               l10n.roomHintLabel(hint),
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
+          ],
+          const SizedBox(height: 12),
+          Expanded(
+            child: ListView.builder(
+              physics: const BouncingScrollPhysics(),
+              itemCount: options.length,
+              itemBuilder: (context, index) {
+                final optionText = options[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: AnswerButton(
+                    answer: optionText,
+                    index: index,
+                    isSelected: false,
+                    isCorrect: false,
+                    isRevealed: false,
+                    onTap: () {
+                      if (_isSubmitting) return;
+                      setState(() => _isSubmitting = true);
+                      provider
+                          .submitChainStepAnswer(optionText)
+                          .whenComplete(() {
+                        if (mounted) {
+                          setState(() => _isSubmitting = false);
+                        }
+                      });
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildChainWordChip(String word, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.45)),
+      ),
+      child: Text(
+        word,
+        style: TextStyle(color: color, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+
+  Widget _buildLegacyView(
+    Map<String, dynamic> puzzle,
+    CompetitionProvider provider,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+    return Center(
+      child: Text(
+        l10n.questionUnavailable,
+        style: TextStyle(color: AppColors.textSecondary),
       ),
     );
   }

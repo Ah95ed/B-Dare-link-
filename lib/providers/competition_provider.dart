@@ -63,6 +63,37 @@ class CompetitionProvider with ChangeNotifier {
   Map<String, dynamic>? get currentRoom => _currentRoom;
   int get currentStepIndex => _currentStepIndex;
   List<String> get completedSteps => _completedSteps;
+
+  bool get isChainPuzzle {
+    final p = _currentPuzzle;
+    if (p == null) return false;
+    final ty = p['type']?.toString().toLowerCase();
+    final steps = p['steps'];
+    return ty == 'logical_chain' && steps is List && steps.isNotEmpty;
+  }
+
+  Map<String, dynamic>? get currentChainStep {
+    if (!isChainPuzzle) return null;
+    final steps = _currentPuzzle!['steps'] as List;
+    if (_currentStepIndex < 0 || _currentStepIndex >= steps.length) return null;
+    final raw = steps[_currentStepIndex];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
+  }
+
+  List<String> get currentChainStepOptions {
+    final step = currentChainStep;
+    if (step == null) return const [];
+    final opts = step['options'];
+    if (opts is! List) return const [];
+    return opts.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+  }
+
+  String get currentChainStepQuestion {
+    final step = currentChainStep;
+    return step?['stepQuestion']?.toString().trim() ?? '';
+  }
   int? get selectedAnswerIndex => _selectedAnswerIndex;
   bool? get lastAnswerCorrect => _lastAnswerCorrect;
   int? get correctAnswerIndex => _correctAnswerIndex;
@@ -675,34 +706,60 @@ class CompetitionProvider with ChangeNotifier {
         }
 
         final normalized = _normalizePuzzle(Map<String, dynamic>.from(puzzle));
-        final opts = (normalized['options'] as List?) ?? const [];
-        final q = normalized['question']?.toString().trim() ?? '';
+        final chainMode = normalized['type']?.toString().toLowerCase() == 'logical_chain' &&
+            (normalized['steps'] as List?)?.isNotEmpty == true;
+        List<String> chainOpts = const [];
+        String chainQ = '';
+        if (chainMode) {
+          final steps = normalized['steps'] as List;
+          final first = steps.isNotEmpty ? steps[0] : null;
+          if (first is Map) {
+            chainQ = first['stepQuestion']?.toString().trim() ?? '';
+            final rawOpts = first['options'];
+            if (rawOpts is List) {
+              chainOpts = rawOpts.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+            }
+          }
+        }
+        final opts = chainMode ? chainOpts : ((normalized['options'] as List?) ?? const []);
+        final q = chainMode ? chainQ : (normalized['question']?.toString().trim() ?? '');
 
         // ✅ LOG PUZZLE CHANGE FOR DEBUGGING
         debugPrint('🔄 PUZZLE REFRESH: Index=$_currentPuzzleIndex');
         debugPrint('📄 Question: $q');
-        debugPrint('📄 Options: ${opts.length}');
+        debugPrint('📄 Options: ${opts.length} chain=$chainMode');
         debugPrint('📄 Puzzle ID: ${normalized['puzzleId'] ?? 'N/A'}');
 
-        // Validate puzzle has valid options
-        if (opts.isEmpty) {
+        // Validate puzzle has playable content
+        if (!chainMode && (normalized['options'] as List?)?.isEmpty != false) {
           debugPrint('⚠️ Received puzzle without options');
           if (_currentPuzzle != null &&
-              (_currentPuzzle!['options'] as List?)?.isNotEmpty == true) {
+              ((_currentPuzzle!['options'] as List?)?.isNotEmpty == true ||
+                  isChainPuzzle)) {
             debugPrint('⚠️ Keeping existing valid puzzle');
             notifyListeners();
             return;
           }
-          // If no valid current puzzle, log and keep trying
           debugPrint('⚠️ No valid puzzle available');
+          notifyListeners();
+          return;
+        }
+        if (chainMode && chainOpts.isEmpty) {
+          debugPrint('⚠️ Chain puzzle without step options');
           notifyListeners();
           return;
         }
 
         // Update puzzle successfully
         _gameStarted = roomStatus == 'active';
-        // _updateGameState reads currentPuzzleIndex from gameState (camelCase) which room doesn't have.
-        // We already set _currentPuzzleIndex above from result['currentPuzzleIndex'].
+        if (chainMode) {
+          _currentStepIndex = 0;
+          _completedSteps = [];
+          final startWord = normalized['startWord']?.toString();
+          if (startWord != null && startWord.isNotEmpty) {
+            _completedSteps.add(startWord);
+          }
+        }
         _updateGameState(
           _currentRoom!,
           puzzle: normalized,
@@ -925,6 +982,77 @@ class CompetitionProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = 'تعذر إرسال الإجابة: $e';
       debugPrint(_errorMessage);
+      notifyListeners();
+    }
+  }
+
+  /// إرسال خطوة واحدة من سلسلة السولو (بنك الألغاز الفردي).
+  Future<void> submitChainStepAnswer(String selectedWord) async {
+    if (_currentRoom == null || _currentPuzzle == null || !isChainPuzzle) return;
+    if (!_ensureAuthenticated()) return;
+
+    final timeTaken = _puzzleStartTime != null
+        ? DateTime.now().difference(_puzzleStartTime!).inMilliseconds
+        : 0;
+    final submissionPuzzleIndex = _currentPuzzleIndex;
+    final stepIndex = _currentStepIndex;
+
+    try {
+      final result = await _service.submitChainStep(
+        roomId: _currentRoom!['id'],
+        puzzleIndex: submissionPuzzleIndex,
+        stepIndex: stepIndex,
+        selectedWord: selectedWord,
+        timeTaken: timeTaken,
+      );
+
+      _lastAnswerCorrect = result['isCorrect'] == true;
+
+      if (result['isStep'] == true && result['isCorrect'] != true) {
+        notifyListeners();
+        return;
+      }
+
+      if (result['isStep'] == true && result['isCorrect'] == true) {
+        if (result['chainCompleted'] != true) {
+          _completedSteps.add(selectedWord);
+          _currentStepIndex += 1;
+          _selectedAnswerIndex = null;
+          _lastAnswerCorrect = null;
+          notifyListeners();
+          return;
+        }
+      }
+
+      if (result['isCorrect'] == true) {
+        _score += result['points'] as int? ?? 0;
+        _puzzlesSolved++;
+      }
+
+      _pendingNextPuzzle = null;
+      _pendingNextPuzzleIndex = null;
+      if (result['nextPuzzle'] != null) {
+        _pendingNextPuzzle = Map<String, dynamic>.from(result['nextPuzzle']);
+        if (result['nextPuzzleIndex'] != null) {
+          _pendingNextPuzzleIndex = int.tryParse(
+            result['nextPuzzleIndex'].toString(),
+          );
+        }
+      }
+
+      if (result['gameFinished'] == true) {
+        _gameFinished = true;
+        _advanceAfterAnswerTimer?.cancel();
+        _isAdvancingToNextPuzzle = false;
+        notifyListeners();
+        await refreshRoomStatus(bypassThrottle: true);
+      } else if (result['chainCompleted'] == true || result['isCorrect'] == true) {
+        _scheduleAdvanceToNextPuzzle();
+      }
+
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'تعذر إرسال خطوة السلسلة: $e';
       notifyListeners();
     }
   }

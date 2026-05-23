@@ -561,3 +561,83 @@ export async function soloBankPublicStatus(request, env) {
   }
   return jsonResponse(out);
 }
+
+/**
+ * POST /solo-bank/clear
+ * Dangerous operation: delete all puzzles (+ optional solo history).
+ * Protected by X-Wonder-Solo-Key and explicit confirmation token in body.
+ */
+export async function soloBankPublicClear(request, env) {
+  if (!env?.DB) {
+    return errorResponse('Database not configured', 500);
+  }
+  const webKey = String(env.SOLO_BANK_WEB_KEY || '').trim();
+  if (webKey.length < 16) {
+    return errorResponse('SOLO_BANK_WEB_KEY not set (min 16 chars)', 503);
+  }
+  const hdr = String(request.headers.get('X-Wonder-Solo-Key') || '').trim();
+  if (hdr !== webKey) {
+    return errorResponse('Forbidden', 403);
+  }
+
+  let body = {};
+  try {
+    body = (await request.json()) || {};
+  } catch {
+    return errorResponse('Invalid JSON body', 400);
+  }
+
+  const confirm = String(body.confirm || '').trim();
+  if (confirm !== 'DELETE_ALL_PUZZLES') {
+    return errorResponse(
+      'Confirmation failed. Send body.confirm = "DELETE_ALL_PUZZLES".',
+      400,
+    );
+  }
+
+  const clearHistory = parseBool(body.clearHistory, true);
+
+  try {
+    const beforePuzzles = await env.DB
+      .prepare(`SELECT COUNT(*) AS c FROM puzzles`)
+      .first();
+    const beforeTotal = Number(beforePuzzles?.c ?? 0);
+
+    let beforeHistoryTotal = 0;
+    if (clearHistory) {
+      try {
+        const beforeHistory = await env.DB
+          .prepare(`SELECT COUNT(*) AS c FROM solo_player_puzzles`)
+          .first();
+        beforeHistoryTotal = Number(beforeHistory?.c ?? 0);
+      } catch {
+        beforeHistoryTotal = 0;
+      }
+    }
+
+    // Important: clear child table first to avoid FK failures on puzzles delete.
+    let historyCleared = 0;
+    if (clearHistory) {
+      try {
+        await env.DB.prepare(`DELETE FROM solo_player_puzzles`).run();
+        historyCleared = beforeHistoryTotal;
+      } catch (e) {
+        console.warn('solo_bank_clear: could not clear solo_player_puzzles:', e?.message || e);
+      }
+    }
+
+    const delRes = await env.DB.prepare(`DELETE FROM puzzles`).run();
+    const deletedPuzzles =
+      Number(delRes?.meta?.changes ?? delRes?.changes ?? beforeTotal);
+
+    return jsonResponse({
+      ok: true,
+      deletedPuzzles,
+      deletedSoloHistory: historyCleared,
+      clearHistory,
+    });
+  } catch (e) {
+    console.error('soloBankPublicClear failed:', e);
+    return errorResponse(`Clear failed: ${String(e?.message || e)}`, 500);
+  }
+}

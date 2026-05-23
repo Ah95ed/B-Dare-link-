@@ -250,6 +250,50 @@ export function validatePuzzle(puzzle, language = 'en', options = {}) {
     };
 }
 
+/** تحقق سلسلة السولو (logical_chain) للغرف الجماعية. */
+export function validateLogicalChainRoom(puzzle, language = 'ar') {
+    const errors = [];
+    if (!puzzle || typeof puzzle !== 'object') {
+        return { valid: false, errors: ['Puzzle is not a valid object'] };
+    }
+    if (String(puzzle.type || '').toLowerCase() !== 'logical_chain') {
+        errors.push('type must be logical_chain');
+    }
+    const start = String(puzzle.startWord ?? '').trim();
+    const end = String(puzzle.endWord ?? '').trim();
+    if (!start || !end || start === end) errors.push('Invalid startWord/endWord');
+    if (!Array.isArray(puzzle.steps) || puzzle.steps.length < 2) {
+        errors.push('steps must have at least 2 items');
+    }
+    const chainWords = new Set();
+    if (start) chainWords.add(start.toLowerCase());
+    if (end) chainWords.add(end.toLowerCase());
+
+    (puzzle.steps || []).forEach((st, i) => {
+        const word = String(st?.word ?? '').trim();
+        const opts = Array.isArray(st?.options) ? st.options.map((o) => String(o).trim()) : [];
+        if (!word) errors.push(`step_${i}_missing_word`);
+        if (opts.length !== 4) errors.push(`step_${i}_need_4_options`);
+        if (word && !opts.includes(word)) errors.push(`step_${i}_word_not_in_options`);
+        const n = word.toLowerCase();
+        if (n && chainWords.has(n)) errors.push(`step_${i}_duplicate_chain_word`);
+        if (n) chainWords.add(n);
+        const q = String(st?.stepQuestion ?? '').trim();
+        if (!q || q.length < 8) errors.push(`step_${i}_weak_question`);
+        for (const o of opts) {
+            const ov = validateLanguage(o, language);
+            if (!ov.valid) errors.push(`step_${i}_option_lang: ${ov.error}`);
+        }
+    });
+
+    if (puzzle.hint) {
+        const hv = validateLanguage(String(puzzle.hint), language);
+        if (!hv.valid) errors.push(`hint: ${hv.error}`);
+    }
+
+    return { valid: errors.length === 0, errors, warnings: [] };
+}
+
 // Sanitize puzzle by cleaning up common issues
 export function sanitizePuzzle(puzzle) {
     if (!puzzle || typeof puzzle !== 'object') {

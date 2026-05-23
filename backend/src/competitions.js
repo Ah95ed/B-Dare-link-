@@ -3,6 +3,13 @@ import { jsonResponse, errorResponse, CORS_HEADERS } from './utils.js';
 import { getUserFromRequest } from './auth.js';
 import { linkChainMinMax } from './prompt.js';
 import { insertPuzzleIntoD1 } from './puzzle_db.js';
+import {
+  jsonLooksLikeLogicalChain,
+  logicalChainPuzzleForClient,
+  logicalChainQuestionHash,
+  normalizeLogicalChainForRoom,
+  shuffleLogicalChainStepOptions,
+} from './puzzle_normalize.js';
 
 // Generate unique room code
 function generateRoomCode() {
@@ -17,9 +24,52 @@ function generateRoomCode() {
 // Public puzzle payloads must not leak the correct answer before a user answers.
 function toPublicPuzzle(puzzle) {
   if (!puzzle || typeof puzzle !== 'object') return puzzle;
+  if (String(puzzle.type || '').toLowerCase() === 'logical_chain') {
+    return logicalChainPuzzleForClient(puzzle);
+  }
   const copy = Array.isArray(puzzle) ? puzzle.slice() : { ...puzzle };
   delete copy.correctIndex;
   return copy;
+}
+
+function isLogicalChainPuzzle(puzzle) {
+  return (
+    puzzle &&
+    typeof puzzle === 'object' &&
+    String(puzzle.type || '').toLowerCase() === 'logical_chain' &&
+    Array.isArray(puzzle.steps) &&
+    puzzle.steps.length > 0
+  );
+}
+
+function validateRoomPuzzle(puzzle, language, validator) {
+  if (isLogicalChainPuzzle(puzzle)) {
+    return validator.validateLogicalChainRoom(puzzle, language);
+  }
+  return validator.validatePuzzle(puzzle, language, { minOptionWords: 1 });
+}
+
+function roomPuzzleQuestionHash(normalized) {
+  if (isLogicalChainPuzzle(normalized)) {
+    return logicalChainQuestionHash(normalized);
+  }
+  return JSON.stringify({
+    q: (normalized?.question || '').trim().toLowerCase(),
+    opts: (normalized?.options || []).map((o) => String(o).trim().toLowerCase()).sort(),
+  });
+}
+
+/** يقبل quiz أو سلسلة السولو (logical_chain) من جدول puzzles. */
+function parseAndNormalizeRoomPuzzle(jsonStr, { puzzleId = null } = {}) {
+  try {
+    const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+    if (jsonLooksLikeLogicalChain(parsed)) {
+      return normalizeLogicalChainForRoom(parsed, { puzzleId });
+    }
+    return normalizeQuizPuzzle(parsed, { puzzleId });
+  } catch (_) {
+    return null;
+  }
 }
 
 // Create a new room
@@ -283,15 +333,6 @@ function normalizeQuizPuzzle(raw, { puzzleId = null } = {}) {
   return p;
 }
 
-function parseAndNormalizeQuizJson(jsonStr, { puzzleId = null } = {}) {
-  try {
-    const parsed = JSON.parse(jsonStr);
-    return normalizeQuizPuzzle(parsed, { puzzleId });
-  } catch (_) {
-    return null;
-  }
-}
-
 function safeParseJsonFromModelOutput(rawText) {
   const cleaned = String(rawText ?? '')
     .replace(/```json/gi, '')
@@ -429,9 +470,11 @@ export async function getRoomStatus(request, env) {
         }
 
         if (puzzleRow) {
-          const normalized = parseAndNormalizeQuizJson(puzzleRow.puzzle_json);
+          const normalized = parseAndNormalizeRoomPuzzle(puzzleRow.puzzle_json);
 
-          const isInvalid = !normalized || !validator.validatePuzzle(normalized, room.language || 'ar').valid;
+          const isInvalid =
+            !normalized ||
+            !validateRoomPuzzle(normalized, room.language || 'ar', validator).valid;
 
           // If we ever end up with a bad puzzle in a room (from old data/fallbacks/mixed scripts), repair in-place.
           if (isInvalid) {
@@ -481,7 +524,7 @@ export async function getRoomStatus(request, env) {
           .bind(roomId, globalCurrentPuzzleIndex)
           .first();
         if (globalRow) {
-          const globalNormalized = parseAndNormalizeQuizJson(globalRow.puzzle_json);
+          const globalNormalized = parseAndNormalizeRoomPuzzle(globalRow.puzzle_json);
           if (globalNormalized) {
             globalCurrentPuzzle = toPublicPuzzle(globalNormalized);
           }
@@ -575,10 +618,7 @@ async function startRoomGame(env, roomId, ctx) {
   const puzzlesData = [];
   const seenQuestions = await getRoomUsedQuestionHashes(env, roomId);
 
-  const questionHashOf = (normalized) => JSON.stringify({
-    q: (normalized?.question || '').trim().toLowerCase(),
-    opts: (normalized?.options || []).map(o => String(o).trim().toLowerCase()).sort(),
-  });
+  const questionHashOf = (normalized) => roomPuzzleQuestionHash(normalized);
 
   const ensurePuzzleId = async (normalized) => {
     if (!normalized || typeof normalized !== 'object') return null;
@@ -602,25 +642,30 @@ async function startRoomGame(env, roomId, ctx) {
   const pushPuzzle = async (normalized, sourceTag) => {
     if (!normalized) return false;
 
-    const validation = validator.validatePuzzle(normalized, language);
+    const validation = validateRoomPuzzle(normalized, language, validator);
     if (!validation.valid) {
       console.log('[SKIP INVALID]', {
         sourceTag,
         errors: validation.errors,
-        q: String(normalized?.question || '').slice(0, 120),
+        q: String(normalized?.question || normalized?.startWord || '').slice(0, 120),
       });
       return false;
     }
 
     const qh = questionHashOf(normalized);
     if (seenQuestions.has(qh)) {
-      console.log('[SKIP DUPLICATE]', { question: normalized.question, sourceTag });
+      console.log('[SKIP DUPLICATE]', {
+        question: normalized.question || `${normalized.startWord}->${normalized.endWord}`,
+        sourceTag,
+      });
       return false;
     }
     seenQuestions.add(qh);
     const withId = await ensurePuzzleId(normalized);
     if (!withId) return false;
-    const shuffled = shufflePuzzleOptions(withId, { enabled: true });
+    const shuffled = isLogicalChainPuzzle(withId)
+      ? shuffleLogicalChainStepOptions(withId)
+      : shufflePuzzleOptions(withId, { enabled: true });
     puzzlesData.push({
       puzzleId: shuffled.puzzleId ?? null,
       puzzleJson: JSON.stringify(shuffled),
@@ -639,7 +684,7 @@ async function startRoomGame(env, roomId, ctx) {
 
     for (const p of puzzles.results || []) {
       if (puzzlesData.length >= limit) break;
-      const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
+      const normalized = parseAndNormalizeRoomPuzzle(p.json, { puzzleId: p.id });
       if (normalized) {
         await pushPuzzle(normalized, sourceTag);
       }
@@ -652,7 +697,7 @@ async function startRoomGame(env, roomId, ctx) {
 
       for (const p of anyFallback.results || []) {
         if (puzzlesData.length >= limit) break;
-        const normalized = parseAndNormalizeQuizJson(p.json, { puzzleId: p.id });
+        const normalized = parseAndNormalizeRoomPuzzle(p.json, { puzzleId: p.id });
         if (normalized) {
           await pushPuzzle(normalized, sourceTag === 'db_primary' ? 'db_any' : sourceTag);
         }
@@ -752,7 +797,7 @@ async function startRoomGame(env, roomId, ctx) {
       for (const r of existingRows.results || []) {
         try {
           const pj = JSON.parse(r.puzzle_json);
-          const normalized = normalizeQuizPuzzle(pj);
+          const normalized = parseAndNormalizeRoomPuzzle(pj);
           if (normalized) {
             seenQuestions.add(questionHashOf(normalized));
           }
@@ -775,7 +820,7 @@ async function startRoomGame(env, roomId, ctx) {
             'SELECT id, json FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT 1'
           ).bind(difficulty, language).first();
           if (dbOne?.json) {
-            normalized = parseAndNormalizeQuizJson(dbOne.json, { puzzleId: dbOne.id });
+            normalized = parseAndNormalizeRoomPuzzle(dbOne.json, { puzzleId: dbOne.id });
           }
         }
         if (!normalized) {
@@ -813,10 +858,7 @@ async function startRoomGame(env, roomId, ctx) {
 }
 
 function computeQuestionHash(normalized) {
-  return JSON.stringify({
-    q: (normalized?.question || '').trim().toLowerCase(),
-    opts: (normalized?.options || []).map(o => String(o).trim().toLowerCase()).sort(),
-  });
+  return roomPuzzleQuestionHash(normalized);
 }
 
 async function ensureRoomPuzzleHistoryTable(env) {
@@ -895,7 +937,7 @@ async function getRoomSeenQuestionHashes(env, roomId) {
     for (const r of rows.results || []) {
       try {
         const pj = JSON.parse(r.puzzle_json);
-        const normalized = normalizeQuizPuzzle(pj);
+        const normalized = parseAndNormalizeRoomPuzzle(pj);
         if (normalized) {
           seen.add(computeQuestionHash(normalized));
         }
@@ -914,15 +956,38 @@ async function generateUniqueRoomPuzzle(env, roomId, language, level, validator,
   const lang = language || 'ar';
   const lvl = Number(level) || 1;
 
+  // Prefer solo logical_chain bank in D1 before AI generation.
+  try {
+    const dbRows = await env.DB.prepare(
+      'SELECT id, json FROM puzzles WHERE level = ? AND lang = ? ORDER BY RANDOM() LIMIT 12',
+    )
+      .bind(lvl, lang)
+      .all();
+    for (const row of dbRows.results || []) {
+      const normalized = parseAndNormalizeRoomPuzzle(row.json, { puzzleId: row.id });
+      if (!normalized) continue;
+      const validation = validateRoomPuzzle(normalized, lang, validator);
+      if (!validation.valid) continue;
+      const h = computeQuestionHash(normalized);
+      if (!seen.has(h)) return normalized;
+    }
+  } catch (e) {
+    console.warn('[DEDUP] DB solo prefetch failed', String(e?.message || e));
+  }
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const raw = await generatePuzzleWithRetry(env, lang, lvl);
     const normalized = normalizeQuizPuzzle(raw, { puzzleId: null });
     if (!normalized) continue;
-    const validation = validator.validatePuzzle(normalized, lang);
+    const validation = validateRoomPuzzle(normalized, lang, validator);
     if (!validation.valid) continue;
     const h = computeQuestionHash(normalized);
     if (seen.has(h)) {
-      console.warn('[DEDUP] Duplicate puzzle generated; retrying', { roomId, attempt, q: normalized.question });
+      console.warn('[DEDUP] Duplicate puzzle generated; retrying', {
+        roomId,
+        attempt,
+        q: normalized.question || `${normalized.startWord}->${normalized.endWord}`,
+      });
       continue;
     }
     return normalized;
@@ -978,10 +1043,10 @@ async function generatePuzzleWithRetry(env, language, level, maxRetries = 2) {
     ).bind(level, language).first();
 
     if (dbOne?.json) {
-      const normalized = parseAndNormalizeQuizJson(dbOne.json, { puzzleId: dbOne.id });
+      const normalized = parseAndNormalizeRoomPuzzle(dbOne.json, { puzzleId: dbOne.id });
       if (normalized) {
         const validator = await import('./puzzle_validator.js');
-        const validation = validator.validatePuzzle(normalized, language);
+        const validation = validateRoomPuzzle(normalized, language, validator);
         if (validation.valid) {
           console.log('[PUZZLE GEN] ✓ Using DB fallback puzzle', {
             level,
@@ -999,10 +1064,10 @@ async function generatePuzzleWithRetry(env, language, level, maxRetries = 2) {
       'SELECT id, json FROM puzzles ORDER BY RANDOM() LIMIT 1'
     ).first();
     if (dbAny?.json) {
-      const normalized = parseAndNormalizeQuizJson(dbAny.json, { puzzleId: dbAny.id });
+      const normalized = parseAndNormalizeRoomPuzzle(dbAny.json, { puzzleId: dbAny.id });
       if (normalized) {
         const validator = await import('./puzzle_validator.js');
-        const validation = validator.validatePuzzle(normalized, language);
+        const validation = validateRoomPuzzle(normalized, language, validator);
         if (validation.valid) {
           console.log('[PUZZLE GEN] ✓ Using DB any-language fallback', { puzzleId: dbAny.id });
           return normalized;
@@ -1512,15 +1577,21 @@ export async function submitAnswer(request, env, ctx) {
   if (!user) return errorResponse('Unauthorized', 401);
 
   const body = await request.json();
-  const { roomId, puzzleIndex, answerIndex, steps, timeTaken } = body;
+  const { roomId, puzzleIndex, answerIndex, steps, timeTaken, stepIndex, selectedWord } = body;
   const safeTimeTaken = Number.isFinite(Number(timeTaken)) ? Number(timeTaken) : 0;
 
-  // Support both formats: answerIndex (new quiz) or steps (legacy)
+  // Support quiz (answerIndex), solo chain step (stepIndex+selectedWord), or legacy full steps array.
   if (!roomId || puzzleIndex === undefined) {
     return errorResponse('Missing required fields', 400);
   }
-  if (answerIndex === undefined && !Array.isArray(steps)) {
-    return errorResponse('Missing answer (answerIndex or steps)', 400);
+  const hasChainStep =
+    stepIndex !== undefined &&
+    stepIndex !== null &&
+    selectedWord !== undefined &&
+    selectedWord !== null &&
+    String(selectedWord).trim().length > 0;
+  if (answerIndex === undefined && !Array.isArray(steps) && !hasChainStep) {
+    return errorResponse('Missing answer (answerIndex, steps, or stepIndex+selectedWord)', 400);
   }
 
   try {
@@ -1581,7 +1652,42 @@ export async function submitAnswer(request, env, ctx) {
       puzzleKeys: Object.keys(puzzle)
     });
 
-    if (answerIndex !== undefined) {
+    if (hasChainStep && Array.isArray(puzzle.steps)) {
+      const si = Number(stepIndex);
+      if (!Number.isFinite(si) || si < 0 || si >= puzzle.steps.length) {
+        return errorResponse('Invalid stepIndex', 400);
+      }
+      const step = puzzle.steps[si];
+      const expected = String(step?.word ?? '').trim();
+      const picked = String(selectedWord).trim();
+      isCorrect = picked.length > 0 && picked === expected;
+      if (!isCorrect) {
+        return jsonResponse({
+          success: true,
+          isCorrect: false,
+          isStep: true,
+          stepIndex: si,
+          chainCompleted: false,
+          isFirstCorrect: false,
+          points: 0,
+          rank: null,
+        });
+      }
+      const isLast = si >= puzzle.steps.length - 1;
+      if (!isLast) {
+        return jsonResponse({
+          success: true,
+          isCorrect: true,
+          isStep: true,
+          stepIndex: si,
+          chainCompleted: false,
+          isFirstCorrect: false,
+          points: 0,
+          rank: null,
+        });
+      }
+      // Last chain step correct: fall through to record full puzzle solve below.
+    } else if (answerIndex !== undefined) {
       if (!normalizedQuiz) {
         console.log('[ERROR] Invalid quiz puzzle format (answerIndex provided)', {
           answerIndex,
@@ -1837,8 +1943,10 @@ export async function submitAnswer(request, env, ctx) {
         } catch (_) {
           parsedNext = null;
         }
-        let normalizedNext = parsedNext ? normalizeQuizPuzzle(parsedNext) : null;
-        const isInvalidNext = !normalizedNext || !validator.validatePuzzle(normalizedNext, room.language || 'ar').valid;
+        let normalizedNext = parsedNext ? parseAndNormalizeRoomPuzzle(parsedNext) : null;
+        const isInvalidNext =
+          !normalizedNext ||
+          !validateRoomPuzzle(normalizedNext, room.language || 'ar', validator).valid;
         if (isInvalidNext) {
           try {
             const repaired = normalizeQuizPuzzle(
@@ -2327,7 +2435,7 @@ export async function forceNextPuzzle(request, env) {
       .bind(nextIdx, roomId)
       .run();
 
-    let nextPuzzle = parseAndNormalizeQuizJson(nextRow.puzzle_json);
+    let nextPuzzle = parseAndNormalizeRoomPuzzle(nextRow.puzzle_json);
     if (!nextPuzzle) {
       console.warn('[REPAIR PUZZLE] Invalid next puzzle; regenerating', {
         roomId,

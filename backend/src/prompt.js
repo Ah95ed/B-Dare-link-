@@ -18,10 +18,13 @@ function stepsMinMax(level) {
 
 export function linkChainMinMax(level) {
   const n = Number(level) || 1;
-  if (n <= 10) return { min: 3, max: 4 };   // Beginner
-  if (n <= 30) return { min: 4, max: 5 };   // Intermediate
-  if (n <= 50) return { min: 5, max: 6 };   // Advanced
-  return { min: 6, max: 7 };                 // Expert+
+  // Actual progression every 4 levels:
+  // 1-4 => 3-4, 5-8 => 4-5, 9-12 => 5-6, 13-16+ => 6-7
+  const band = Math.min(4, Math.max(1, Math.ceil(n / 4)));
+  if (band == 1) return { min: 3, max: 4 };
+  if (band == 2) return { min: 4, max: 5 };
+  if (band == 3) return { min: 5, max: 6 };
+  return { min: 6, max: 7 };
 }
 
 // ============= MAIN PUZZLE GENERATION PROMPTS =============

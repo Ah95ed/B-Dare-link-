@@ -124,6 +124,36 @@ class CompetitionService {
     }
   }
 
+  Future<Map<String, dynamic>> submitChainStep({
+    required int roomId,
+    required int puzzleIndex,
+    required int stepIndex,
+    required String selectedWord,
+    required int timeTaken,
+  }) async {
+    final token = await _getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/rooms/answer'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'roomId': roomId,
+        'puzzleIndex': puzzleIndex,
+        'stepIndex': stepIndex,
+        'selectedWord': selectedWord,
+        'timeTaken': timeTaken,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to submit chain step: ${response.body}');
+    }
+  }
+
   Future<Map<String, dynamic>> submitQuizAnswer({
     required int roomId,
     required int puzzleIndex,

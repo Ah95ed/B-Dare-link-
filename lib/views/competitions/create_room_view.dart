@@ -134,7 +134,7 @@ class _CreateRoomViewState extends State<CreateRoomView> {
               items: const [
                 DropdownMenuItem(
                   value: 'database',
-                  child: Text('قاعدة البيانات (ألغاز جاهزة)'),
+                  child: Text('بنك السولو (ألغاز السلسلة من D1)'),
                 ),
                 DropdownMenuItem(
                   value: 'ai',

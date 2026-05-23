@@ -9,6 +9,7 @@ import {
   getSoloLevelPack,
   refillSoloBank,
   runAutoSoloBankTopUp,
+  soloBankPublicClear,
   soloBankPublicGenerate,
   soloBankPublicStatus,
 } from './solo_bank.js';
@@ -104,6 +105,9 @@ export default {
 
     if (path === '/solo-bank/status' && request.method === 'GET') {
       return await soloBankPublicStatus(request, env);
+    }
+    if (path === '/solo-bank/clear' && request.method === 'POST') {
+      return await soloBankPublicClear(request, env);
     }
 
     try {

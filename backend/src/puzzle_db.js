@@ -3,7 +3,8 @@ import { puzzleJsonToQuestionKey } from './game.js';
 
 export function difficultyBandForLevel(lv) {
   const L = Math.max(1, Number(lv) || 1);
-  return Math.min(5, Math.max(1, Math.ceil(L / 10)));
+  // Stronger progression: increase one difficulty band every 4 levels.
+  return Math.min(5, Math.max(1, Math.ceil(L / 4)));
 }
 
 function normalizeLang(lang) {

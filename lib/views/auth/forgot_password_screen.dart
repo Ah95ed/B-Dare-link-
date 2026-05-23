@@ -25,7 +25,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     EmailOTP.config(
       appName: l10n.appTitle,
       otpType: OTPType.numeric,
+      expiry: 40000,
       emailTheme: EmailTheme.v1,
+      appEmail: 'amhmeed31@gmail.com',
+      otpLength: 6,
+      
+    );
+    EmailOTP.setSMTP(
+      host: 'smtp.gmail.com',
+      emailPort: EmailPort.port587,
+      secureType: SecureType.tls,
+      username: 'amhmeed31@gmail.com',
+
+      /// your google account mail
+      password: 'arhs xupn ktkc ypir',
+
+      /// this password will get while creating app password
     );
   }
 

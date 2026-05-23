@@ -19,6 +19,7 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
     .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
     button { font-size: 0.95rem; padding: 0.7rem 1rem; background: #2563eb; color: #fff; border: none; border-radius: 10px; cursor: pointer; }
     button.secondary { background: #4b5563; }
+    button.danger { background: #b91c1c; }
     button:disabled { opacity: 0.55; cursor: not-allowed; }
     .muted { color: #9ca3af; font-size: 0.82rem; line-height: 1.5; }
     .status { margin-top: 10px; color: #d1d5db; font-size: 0.88rem; }
@@ -79,6 +80,7 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
       <div class="row">
         <button type="button" id="b">ابدأ التوليد</button>
         <button type="button" class="secondary" id="r">تحديث العدد في D1</button>
+        <button type="button" class="danger" id="clr">حذف كل الأسئلة</button>
       </div>
       <div id="s" class="status"></div>
       <div id="m" class="log"></div>
@@ -90,6 +92,7 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
 (function () {
   var b = document.getElementById('b');
   var r = document.getElementById('r');
+  var clr = document.getElementById('clr');
   var m = document.getElementById('m');
   var s = document.getElementById('s');
   var key = document.getElementById('k').value;
@@ -148,11 +151,86 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
     m.textContent = 'المفتاح غير مضبوط على السيرفر (SOLO_BANK_WEB_KEY).';
     b.disabled = true;
     r.disabled = true;
+    clr.disabled = true;
     return;
   }
 
   r.onclick = function () { refreshCount(); };
   refreshCount();
+
+  clr.onclick = function () {
+    var warn1 = confirm(
+      'تحذير: سيتم حذف جميع الأسئلة من جدول D1 (puzzles) دفعة واحدة.\\n' +
+      'هذا الإجراء لا يمكن التراجع عنه. هل تريد المتابعة؟'
+    );
+    if (!warn1) return;
+
+    var warn2 = confirm(
+      'تأكيد أخير: سيؤثر الحذف على جميع المستويات واللغات.\\n' +
+      'اضغط موافق فقط إذا كنت متأكد 100%.'
+    );
+    if (!warn2) return;
+
+    var typed = prompt('للتأكيد النهائي اكتب بالضبط: DELETE');
+    if (typed !== 'DELETE') {
+      m.textContent = 'تم إلغاء الحذف: لم يتم إدخال كلمة التأكيد الصحيحة.';
+      return;
+    }
+
+    b.disabled = true;
+    r.disabled = true;
+    clr.disabled = true;
+    m.textContent = 'جارٍ حذف كل الأسئلة من D1...';
+
+    fetch('/solo-bank/clear', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Wonder-Solo-Key': key
+      },
+      body: JSON.stringify({
+        confirm: 'DELETE_ALL_PUZZLES',
+        clearHistory: true
+      })
+    })
+      .then(function (res) {
+        return res.text().then(function (t) {
+          var j = null;
+          try { j = JSON.parse(t); } catch (_) {}
+          return { res: res, j: j, raw: t };
+        });
+      })
+      .then(function (x) {
+        if (!x.res.ok) {
+          var errMsg = (x.j && x.j.error)
+            ? x.j.error
+            : ((x.raw || '').slice(0, 240) || 'non-json response');
+          m.textContent = 'فشل الحذف HTTP ' + x.res.status + ': ' + errMsg;
+          return;
+        }
+        if (!x.j || x.j.ok !== true) {
+          m.textContent =
+            'فشل الحذف: السيرفر أعاد استجابة غير متوقعة (ليست JSON صحيحة).\\n' +
+            'تحقق من نشر آخر نسخة للـ Worker ثم أعد المحاولة.';
+          return;
+        }
+        var deletedPuzzles = Number(x.j.deletedPuzzles) || 0;
+        var deletedHistory = Number(x.j.deletedSoloHistory) || 0;
+        m.textContent =
+          'تم الحذف بنجاح.\\n' +
+          '- puzzles المحذوفة: ' + deletedPuzzles + '\\n' +
+          '- solo_player_puzzles المحذوفة: ' + deletedHistory;
+        refreshCount();
+      })
+      .catch(function (e) {
+        m.textContent = 'خطأ شبكة أثناء الحذف: ' + (e.message || e);
+      })
+      .finally(function () {
+        b.disabled = false;
+        r.disabled = false;
+        clr.disabled = false;
+      });
+  };
 
   b.onclick = function () {
     var cfg = getCfg();
@@ -163,6 +241,7 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
     var round = 0;
     b.disabled = true;
     r.disabled = true;
+    clr.disabled = true;
 
     function finish() {
       lines.push('— انتهى. محفوظ جديد: ' + totalIns + ' | متجاوز (تكرار): ' + totalSkip);
@@ -170,6 +249,7 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
       refreshCount();
       b.disabled = false;
       r.disabled = false;
+      clr.disabled = false;
     }
 
     function step() {
@@ -204,6 +284,7 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
             refreshCount();
             b.disabled = false;
             r.disabled = false;
+            clr.disabled = false;
             return;
           }
           if (!j.success) {
@@ -212,6 +293,7 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
             refreshCount();
             b.disabled = false;
             r.disabled = false;
+            clr.disabled = false;
             return;
           }
 
@@ -238,6 +320,7 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
             refreshCount();
             b.disabled = false;
             r.disabled = false;
+            clr.disabled = false;
             return;
           }
 
@@ -251,6 +334,7 @@ export const SOLO_BANK_GENERATOR_PAGE_HTML = `<!DOCTYPE html>
           refreshCount();
           b.disabled = false;
           r.disabled = false;
+          clr.disabled = false;
         });
     }
 
